@@ -1,0 +1,30 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+._.*
+.Spotlight-V100
+.Trashes
+*.swp
+*~
+
+# Editor
+.idea/
+.vscode/
+*.sublime-*
+
+# Build
+/target/
+Cargo.lock
+
+# Env
+.env
+.env.local
+synrepo-context/
+
+# Tooling / local state (per-developer; not part of the crate's public surface)
+.claude/
+.synrepo/
+.syntext/
+.mcp.json
