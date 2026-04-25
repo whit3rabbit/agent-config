@@ -8,6 +8,18 @@ description = "Install hooks/integrations into AI coding harnesses (Claude Code,
 repository = "https://github.com/whit3rabbit/ai-hooker"
 keywords = ["ai", "hooks", "claude", "cursor", "cli"]
 categories = ["development-tools", "command-line-utilities"]
+exclude = [
+    ".agents/",
+    ".claude/",
+    ".github/",
+    ".mcp.json",
+    ".synrepo/",
+    ".syntext/",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "repomix-output.xml",
+    "synrepo-context/",
+]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -18,8 +30,6 @@ toml_edit = "0.22"
 thiserror = "1"
 anyhow = "1"
 dirs = "5"
-fs2 = "0.4"
-sha2 = "0.10"
 tempfile = "3"
 yaml_serde = "0.10"
 

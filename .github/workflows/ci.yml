@@ -53,6 +53,21 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --locked
 
+  docs:
+    name: docs and package dry-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --doc --locked
+      - run: cargo doc --locked --no-deps
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+      - run: cargo package --locked --list
+      - run: cargo publish --locked --dry-run
+
   msrv:
     name: msrv build (1.74)
     runs-on: ubuntu-latest

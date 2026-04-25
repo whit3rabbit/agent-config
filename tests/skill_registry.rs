@@ -47,12 +47,11 @@ fn skill_capable_lists_all_native_skill_agents() {
 #[test]
 fn skill_capable_excludes_non_skill_agents() {
     let ids: HashSet<_> = skill_capable().into_iter().map(|i| i.id()).collect();
-    for not_expected in ["roo"] {
-        assert!(
-            !ids.contains(not_expected),
-            "{not_expected} unexpectedly appears in skill_capable"
-        );
-    }
+    let not_expected = "roo";
+    assert!(
+        !ids.contains(not_expected),
+        "{not_expected} unexpectedly appears in skill_capable"
+    );
 }
 
 #[test]

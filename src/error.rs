@@ -6,6 +6,7 @@ use thiserror::Error;
 
 /// All failures returned by `ai-hooker`'s public API.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum HookerError {
     /// Filesystem I/O failed. Wraps [`std::io::Error`] with the path that caused it.
     #[error("io error at {path}: {source}")]

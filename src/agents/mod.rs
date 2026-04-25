@@ -15,7 +15,8 @@ pub mod hermes;
 pub mod kilocode;
 pub mod openclaw;
 pub mod opencode;
-pub mod prompt;
+#[allow(dead_code)]
+mod prompt;
 pub mod roo;
 pub mod windsurf;
 
@@ -30,6 +31,5 @@ pub use hermes::HermesAgent;
 pub use kilocode::KiloCodeAgent;
 pub use openclaw::OpenClawAgent;
 pub use opencode::OpenCodeAgent;
-pub use prompt::PromptAgent;
 pub use roo::RooAgent;
 pub use windsurf::WindsurfAgent;

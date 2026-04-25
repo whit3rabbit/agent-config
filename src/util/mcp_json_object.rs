@@ -19,6 +19,7 @@ use std::path::Path;
 use crate::error::HookerError;
 use crate::integration::{InstallReport, UninstallReport};
 use crate::spec::McpSpec;
+use crate::status::ConfigPresence;
 use crate::util::{mcp_json_map, ownership};
 
 /// Top-level key under which named server entries live for this helper.
@@ -29,6 +30,14 @@ const SERVERS_PATH: &[&str] = &[SERVERS_KEY];
 /// for "is this currently installed by some consumer").
 pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, HookerError> {
     ownership::contains(ledger_path, name)
+}
+
+/// Probe whether `name` is present in the standard `mcpServers` object.
+pub(crate) fn config_presence(
+    config_path: &Path,
+    name: &str,
+) -> Result<ConfigPresence, HookerError> {
+    mcp_json_map::config_presence(config_path, SERVERS_PATH, name, mcp_json_map::ConfigFormat::Json)
 }
 
 /// Install or update an MCP server in the harness config. Records ownership

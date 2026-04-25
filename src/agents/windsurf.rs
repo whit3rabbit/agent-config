@@ -26,6 +26,7 @@ use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, U
 use crate::paths;
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, McpSpec, SkillSpec};
+use crate::status::{ConfigPresence, InstallStatus, PathStatus, PlanTarget, StatusReport};
 use crate::util::{fs_atomic, json_patch, mcp_json_object, ownership, rules_dir, skills_dir};
 
 const RULES_DIR: &str = ".windsurf/rules";
@@ -90,17 +91,64 @@ impl Integration for WindsurfAgent {
         &[ScopeKind::Local]
     }
 
-    fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+        HookSpec::validate_tag(tag)?;
         let root = self.project_root(scope)?;
-        if rules_dir::is_installed(root, RULES_DIR, tag)? {
-            return Ok(true);
-        }
-        let p = self.hooks_path(scope)?;
-        if !p.exists() {
-            return Ok(false);
-        }
-        let v = json_patch::read_or_empty(&p)?;
-        Ok(json_patch::contains_tagged_array_entry_under(&v, &[], tag))
+        let rules_file = rules_dir::target_path(root, RULES_DIR, tag);
+        let rules_exists = rules_file.exists();
+
+        let hooks_file = self.hooks_path(scope)?;
+        let presence = json_patch::tagged_hook_presence(&hooks_file, &[], tag)?;
+
+        let hook_present = matches!(
+            presence,
+            ConfigPresence::Single | ConfigPresence::Duplicate { .. }
+        );
+
+        let status = if rules_exists || hook_present {
+            InstallStatus::InstalledOwned {
+                owner: tag.to_string(),
+            }
+        } else if let ConfigPresence::Invalid { reason } = &presence {
+            InstallStatus::Drifted {
+                issues: vec![crate::status::DriftIssue::InvalidConfig {
+                    path: hooks_file.clone(),
+                    reason: reason.clone(),
+                }],
+            }
+        } else {
+            InstallStatus::Absent
+        };
+
+        let mut files = vec![if rules_exists {
+            PathStatus::Exists {
+                path: rules_file.clone(),
+            }
+        } else {
+            PathStatus::Missing {
+                path: rules_file.clone(),
+            }
+        }];
+        files.push(if hooks_file.exists() {
+            PathStatus::Exists {
+                path: hooks_file.clone(),
+            }
+        } else {
+            PathStatus::Missing {
+                path: hooks_file.clone(),
+            }
+        });
+
+        Ok(StatusReport {
+            target: PlanTarget::Hook {
+                tag: tag.to_string(),
+            },
+            status,
+            config_path: Some(hooks_file),
+            ledger_path: None,
+            files,
+            warnings: Vec::new(),
+        })
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
@@ -193,10 +241,25 @@ impl McpSurface for WindsurfAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn is_mcp_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+    fn mcp_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, HookerError> {
         McpSpec::validate_name(name)?;
-        let ledger = ownership::mcp_ledger_for(&Self::mcp_path(scope)?);
-        mcp_json_object::is_installed(&ledger, name)
+        let cfg = Self::mcp_path(scope)?;
+        let ledger = ownership::mcp_ledger_for(&cfg);
+        let presence = mcp_json_object::config_presence(&cfg, name)?;
+        let recorded = ownership::owner_of(&ledger, name)?;
+        Ok(StatusReport::for_mcp(
+            name,
+            cfg,
+            ledger,
+            presence,
+            expected_owner,
+            recorded,
+        ))
     }
 
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
@@ -229,9 +292,24 @@ impl SkillSurface for WindsurfAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+    fn skill_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, HookerError> {
+        SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
-        skills_dir::is_installed(&root, name)
+        let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
+        let recorded = ownership::owner_of(&ledger, name)?;
+        Ok(StatusReport::for_skill(
+            name,
+            dir,
+            manifest,
+            ledger,
+            expected_owner,
+            recorded,
+        ))
     }
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {

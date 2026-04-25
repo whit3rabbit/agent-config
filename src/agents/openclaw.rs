@@ -22,6 +22,7 @@ use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, U
 use crate::paths;
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{HookSpec, McpSpec, McpTransport, SkillSpec};
+use crate::status::{InstallStatus, PathStatus, PlanTarget, StatusReport};
 use crate::util::{fs_atomic, mcp_json_map, md_block, ownership, skills_dir};
 
 /// OpenClaw file-backed installer.
@@ -33,7 +34,7 @@ impl OpenClawAgent {
         Self
     }
 
-    fn require_local<'a>(scope: &'a Scope) -> Result<&'a Path, HookerError> {
+    fn require_local(scope: &Scope) -> Result<&Path, HookerError> {
         match scope {
             Scope::Local(p) => Ok(p),
             Scope::Global => Err(HookerError::UnsupportedScope {
@@ -128,11 +129,34 @@ impl Integration for OpenClawAgent {
         &[ScopeKind::Local]
     }
 
-    fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
         HookSpec::validate_tag(tag)?;
         let path = Self::prompt_path(scope)?;
         let host = fs_atomic::read_to_string_or_empty(&path)?;
-        Ok(md_block::contains(&host, tag))
+        let block_present = md_block::contains(&host, tag);
+        let exists = path.exists();
+        let files = vec![if exists {
+            PathStatus::Exists { path: path.clone() }
+        } else {
+            PathStatus::Missing { path: path.clone() }
+        }];
+        let status = if block_present {
+            InstallStatus::InstalledOwned {
+                owner: tag.to_string(),
+            }
+        } else {
+            InstallStatus::Absent
+        };
+        Ok(StatusReport {
+            target: PlanTarget::Hook {
+                tag: tag.to_string(),
+            },
+            status,
+            config_path: Some(path),
+            ledger_path: None,
+            files,
+            warnings: Vec::new(),
+        })
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {

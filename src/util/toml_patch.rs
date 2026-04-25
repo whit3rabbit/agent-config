@@ -11,6 +11,7 @@ use std::path::Path;
 use toml_edit::{DocumentMut, Item, Table};
 
 use crate::error::HookerError;
+use crate::status::ConfigPresence;
 
 /// Read a TOML document, returning an empty document when the file is missing.
 ///
@@ -95,6 +96,32 @@ pub(crate) fn contains_named_table(doc: &DocumentMut, parent: &[&str], name: &st
     cur.as_table()
         .map(|t| t.contains_key(name))
         .unwrap_or(false)
+}
+
+/// Probe whether `[parent.<name>]` exists in the TOML file at `config_path`.
+/// Parse failures map to [`ConfigPresence::Invalid`].
+pub(crate) fn config_presence(
+    config_path: &Path,
+    parent: &[&str],
+    name: &str,
+) -> Result<ConfigPresence, HookerError> {
+    if !config_path.exists() {
+        return Ok(ConfigPresence::Absent);
+    }
+    let doc = match read_or_empty(config_path) {
+        Ok(d) => d,
+        Err(HookerError::TomlInvalid { source, .. }) => {
+            return Ok(ConfigPresence::Invalid {
+                reason: source.to_string(),
+            });
+        }
+        Err(e) => return Err(e),
+    };
+    Ok(if contains_named_table(&doc, parent, name) {
+        ConfigPresence::Single
+    } else {
+        ConfigPresence::Absent
+    })
 }
 
 fn ensure_table<'a>(doc: &'a mut DocumentMut, path: &[&str]) -> Result<&'a mut Table, HookerError> {

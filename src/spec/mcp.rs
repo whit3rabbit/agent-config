@@ -61,6 +61,7 @@ impl McpSpec {
 
 /// How an MCP server is reached.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum McpTransport {
     /// Local subprocess launched via stdio (most common). The harness spawns
     /// `command` with `args`, inheriting `env` overrides on top of the harness

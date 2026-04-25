@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 /// Install location for a hook.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum Scope {
     /// User-global: writes to the harness's per-user config dir
     /// (e.g., `~/.claude/`, `~/.cursor/`).
@@ -37,6 +38,7 @@ impl Scope {
 /// [`Integration::supported_scopes`](crate::integration::Integration::supported_scopes)
 /// trait method.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum ScopeKind {
     /// User-global scope.
     Global,

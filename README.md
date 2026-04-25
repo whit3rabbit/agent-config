@@ -147,15 +147,65 @@ MCP uninstall is keyed by server name plus owner tag. If another consumer owns
 the server, or the server was hand-installed and has no ownership ledger entry,
 `uninstall_mcp` returns `HookerError::NotOwnedByCaller`.
 
+```rust
+use ai_hooker::{mcp_by_id, HookerError, Scope};
+
+fn remove_github_mcp() -> ai_hooker::Result<()> {
+    let codex = mcp_by_id("codex").expect("codex supports MCP");
+    match codex.uninstall_mcp(&Scope::Global, "github", "myapp") {
+        Ok(report) if report.not_installed => println!("nothing to remove"),
+        Ok(report) => println!("removed: {:?}", report.removed),
+        Err(HookerError::NotOwnedByCaller { actual, .. }) => {
+            println!("github MCP is owned by {:?}", actual);
+        }
+        Err(err) => return Err(err),
+    }
+    Ok(())
+}
+```
+
+### Install a skill
+
+```rust
+use ai_hooker::{skill_by_id, Scope, SkillSpec};
+
+fn main() -> ai_hooker::Result<()> {
+    let spec = SkillSpec::builder("my-skill")
+        .owner("myapp")
+        .description("Use when my app needs custom repository context.")
+        .body("# My Skill\n\nFollow the local project conventions.")
+        .build();
+
+    let claude = skill_by_id("claude").expect("claude supports skills");
+    claude.install_skill(&Scope::Global, &spec)?;
+    Ok(())
+}
+```
+
+Skill uninstall uses the same ownership model as MCP:
+
+```rust
+let claude = ai_hooker::skill_by_id("claude").unwrap();
+claude.uninstall_skill(&ai_hooker::Scope::Global, "my-skill", "myapp")?;
+```
+
 ### Iterate every supported harness
 
 ```rust
-use ai_hooker::{all, Scope};
+use ai_hooker::{all, mcp_capable, skill_capable, Scope};
 
 for integration in all() {
     if integration.is_installed(&Scope::Global, "myapp")? {
         println!("{} has myapp installed", integration.display_name());
     }
+}
+
+for mcp in mcp_capable() {
+    println!("{} supports MCP", mcp.id());
+}
+
+for skills in skill_capable() {
+    println!("{} supports skills", skills.id());
 }
 ```
 
@@ -172,13 +222,13 @@ Cline hooks are local-only, while Cline MCP is global-only.
 All operations return `Result<T, HookerError>`. Variants worth handling
 explicitly:
 
-- `UnsupportedScope` — the harness does not accept this scope kind.
-- `MissingSpecField` — e.g., Gemini's script delegator requires
+- `UnsupportedScope`: the harness does not accept this scope kind.
+- `MissingSpecField`: e.g., Gemini's script delegator requires
   `HookSpec::script`, prompt-only agents require `HookSpec::rules`.
-- `InvalidTag` — empty or contains characters outside `[A-Za-z0-9_-]`.
-- `BackupExists` — a `<path>.bak` is already present; the library refuses
+- `InvalidTag`: empty or contains characters outside `[A-Za-z0-9_-]`.
+- `BackupExists`: a `<path>.bak` is already present; the library refuses
   to overwrite it. Resolve manually before retrying.
-- `NotOwnedByCaller` — an MCP server or skill is owned by another consumer or
+- `NotOwnedByCaller`: an MCP server or skill is owned by another consumer or
   was hand-installed without an ai-hooker ledger entry.
 - `Io` and `JsonInvalid` carry the offending path.
 

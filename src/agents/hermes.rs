@@ -31,7 +31,7 @@ impl HermesAgent {
         Self
     }
 
-    fn require_local<'a>(scope: &'a Scope) -> Result<&'a Path, HookerError> {
+    fn require_local(scope: &Scope) -> Result<&Path, HookerError> {
         match scope {
             Scope::Local(p) => Ok(p),
             Scope::Global => Err(HookerError::UnsupportedScope {

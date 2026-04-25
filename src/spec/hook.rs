@@ -146,6 +146,7 @@ impl HookSpecBuilder {
 /// example, Claude Code accepts a regex when the matcher contains characters
 /// outside `[A-Za-z0-9_|]`, so [`Matcher::Regex`] passes through verbatim.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum Matcher {
     /// Match any tool call.
     All,
@@ -164,6 +165,7 @@ pub enum Matcher {
 /// own event name (e.g., `PreToolUse` on Claude Code, `BeforeTool` on Gemini,
 /// `tool.execute.before` on OpenCode).
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum Event {
     /// Fire before a tool call is executed (the most common case; lets the
     /// hook modify or block the call).
@@ -184,6 +186,7 @@ pub struct RulesBlock {
 
 /// Optional script body for harnesses that need a shell script or TS plugin.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum ScriptTemplate {
     /// POSIX shell script body. The library adds the shebang if absent and
     /// chmods the file `0755`. A SHA-256 sidecar is written for harnesses

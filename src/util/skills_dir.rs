@@ -43,6 +43,16 @@ pub(crate) fn is_installed(skills_root: &Path, name: &str) -> Result<bool, Hooke
     ownership::contains(&ledger_path(skills_root), name)
 }
 
+/// Probe an installed skill on disk. Returns the directory path, the
+/// expected manifest path, and the ledger path so the caller can assemble
+/// a [`StatusReport`].
+pub(crate) fn paths_for_status(skills_root: &Path, name: &str) -> (PathBuf, PathBuf, PathBuf) {
+    let dir = skill_dir(skills_root, name);
+    let manifest = dir.join(SKILL_MD);
+    let led = ledger_path(skills_root);
+    (dir, manifest, led)
+}
+
 /// Install (or update) a skill under `<skills_root>/<spec.name>/`. Records
 /// ownership in the sidecar ledger.
 pub(crate) fn install(skills_root: &Path, spec: &SkillSpec) -> Result<InstallReport, HookerError> {

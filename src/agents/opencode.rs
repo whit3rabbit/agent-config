@@ -16,6 +16,7 @@ use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, U
 use crate::paths;
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{HookSpec, McpSpec, ScriptTemplate, SkillSpec};
+use crate::status::StatusReport;
 use crate::util::{fs_atomic, mcp_json_map, ownership, skills_dir};
 
 /// OpenCode plugin installer.
@@ -77,8 +78,10 @@ impl Integration for OpenCodeAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError> {
-        Ok(Self::plugin_path(scope, tag)?.exists())
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+        HookSpec::validate_tag(tag)?;
+        let p = Self::plugin_path(scope, tag)?;
+        Ok(StatusReport::for_file_hook(tag, p))
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
@@ -145,10 +148,26 @@ impl McpSurface for OpenCodeAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn is_mcp_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+    fn mcp_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, HookerError> {
         McpSpec::validate_name(name)?;
-        let ledger = ownership::mcp_ledger_for(&Self::config_path(scope)?);
-        mcp_json_map::is_installed(&ledger, name)
+        let cfg = Self::config_path(scope)?;
+        let ledger = ownership::mcp_ledger_for(&cfg);
+        let presence =
+            mcp_json_map::config_presence(&cfg, &["mcp"], name, mcp_json_map::ConfigFormat::Jsonc)?;
+        let recorded = ownership::owner_of(&ledger, name)?;
+        Ok(StatusReport::for_mcp(
+            name,
+            cfg,
+            ledger,
+            presence,
+            expected_owner,
+            recorded,
+        ))
     }
 
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
@@ -196,9 +215,24 @@ impl SkillSurface for OpenCodeAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+    fn skill_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, HookerError> {
+        SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
-        skills_dir::is_installed(&root, name)
+        let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
+        let recorded = ownership::owner_of(&ledger, name)?;
+        Ok(StatusReport::for_skill(
+            name,
+            dir,
+            manifest,
+            ledger,
+            expected_owner,
+            recorded,
+        ))
     }
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {

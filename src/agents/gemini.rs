@@ -31,6 +31,7 @@ use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, U
 use crate::paths;
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
+use crate::status::StatusReport;
 use crate::util::{fs_atomic, json_patch, mcp_json_object, md_block, ownership, skills_dir};
 
 /// Gemini CLI (Google's official Gemini code agent).
@@ -89,14 +90,11 @@ impl Integration for GeminiAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+        HookSpec::validate_tag(tag)?;
         let p = Self::settings_path(scope)?;
-        let root = json_patch::read_or_empty(&p)?;
-        Ok(json_patch::contains_tagged_array_entry_under(
-            &root,
-            &["hooks"],
-            tag,
-        ))
+        let presence = json_patch::tagged_hook_presence(&p, &["hooks"], tag)?;
+        Ok(StatusReport::for_tagged_hook(tag, p, presence))
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
@@ -215,10 +213,25 @@ impl McpSurface for GeminiAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn is_mcp_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+    fn mcp_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, HookerError> {
         McpSpec::validate_name(name)?;
-        let ledger = ownership::mcp_ledger_for(&Self::mcp_path(scope)?);
-        mcp_json_object::is_installed(&ledger, name)
+        let cfg = Self::mcp_path(scope)?;
+        let ledger = ownership::mcp_ledger_for(&cfg);
+        let presence = mcp_json_object::config_presence(&cfg, name)?;
+        let recorded = ownership::owner_of(&ledger, name)?;
+        Ok(StatusReport::for_mcp(
+            name,
+            cfg,
+            ledger,
+            presence,
+            expected_owner,
+            recorded,
+        ))
     }
 
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
@@ -251,9 +264,24 @@ impl SkillSurface for GeminiAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+    fn skill_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, HookerError> {
+        SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
-        skills_dir::is_installed(&root, name)
+        let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
+        let recorded = ownership::owner_of(&ledger, name)?;
+        Ok(StatusReport::for_skill(
+            name,
+            dir,
+            manifest,
+            ledger,
+            expected_owner,
+            recorded,
+        ))
     }
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {

@@ -2,13 +2,12 @@
 //!
 //! There are several distinct **surfaces** an integration may expose:
 //!
-//! - [`Integration`] — the hooks surface (every registered agent implements
-//!   this).
-//! - [`McpSurface`] — MCP server registration (Phase 2; only some agents).
-//! - `SkillSurface` — skill installation (Phase 3; only some agents).
+//! - [`Integration`]: the hooks surface.
+//! - [`McpSurface`]: MCP server registration.
+//! - [`SkillSurface`]: skill installation.
 //!
 //! Each surface is its own trait so callers cannot accidentally call
-//! `install_mcp` on a harness that does not support MCP — the type system
+//! `install_mcp` on a harness that does not support MCP, the type system
 //! forbids it. Use [`crate::registry::mcp_capable`] to enumerate the agents
 //! that implement `McpSurface`.
 
@@ -17,12 +16,12 @@ use std::path::PathBuf;
 use crate::error::HookerError;
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{HookSpec, McpSpec, SkillSpec};
+use crate::status::{InstallStatus, StatusReport};
 
 /// One AI harness's hook installer.
 ///
-/// Implementations live in [`crate::agents`]. The trait is intentionally narrow
-/// so adding a new harness is a small, mechanical exercise: create a new file
-/// in `agents/`, implement `Integration`, and register it in
+/// The trait is intentionally narrow so adding a new harness is a small,
+/// mechanical exercise: implement `Integration`, then register it in
 /// [`crate::registry::all`].
 ///
 /// All operations must be idempotent: calling `install` twice with the same
@@ -40,7 +39,24 @@ pub trait Integration: Send + Sync {
 
     /// Returns true if a hook with this `tag` is currently installed in this
     /// scope. Used by CLI consumers to render install/uninstall state.
-    fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError>;
+    ///
+    /// Default impl matches on the richer [`status`](Integration::status)
+    /// result and treats [`InstallStatus::InstalledOwned`] and
+    /// [`InstallStatus::InstalledOtherOwner`] as installed; agents that have
+    /// already implemented `status` get this for free.
+    fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError> {
+        Ok(matches!(
+            self.status(scope, tag)?.status,
+            InstallStatus::InstalledOwned { .. } | InstallStatus::InstalledOtherOwner { .. }
+        ))
+    }
+
+    /// Detailed installation state for the hook identified by `tag`.
+    ///
+    /// Distinguishes installed-by-us from installed-by-someone-else, surfaces
+    /// drift (parse failures, duplicate entries), and reports any pending
+    /// `.bak` files. See [`StatusReport`] for the full shape.
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError>;
 
     /// Install the hook. Repeated calls with the same `spec.tag` are a no-op
     /// after the first (the on-disk state is reached, then preserved).
@@ -78,7 +94,35 @@ pub trait McpSurface: Send + Sync {
 
     /// Returns true if a server with `name` is currently recorded under any
     /// owner in this scope's ownership ledger.
-    fn is_mcp_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError>;
+    ///
+    /// Default impl folds the richer
+    /// [`mcp_status`](McpSurface::mcp_status) into the historical boolean
+    /// ("under any owner"); concretely, both
+    /// [`InstallStatus::InstalledOwned`] and
+    /// [`InstallStatus::InstalledOtherOwner`] count as installed.
+    fn is_mcp_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+        // Pass the agent's id as the expected owner so any real consumer
+        // owner (e.g. "myapp") routes through `InstalledOtherOwner`. The
+        // boolean fold collapses both arms anyway.
+        Ok(matches!(
+            self.mcp_status(scope, name, self.id())?.status,
+            InstallStatus::InstalledOwned { .. } | InstallStatus::InstalledOtherOwner { .. }
+        ))
+    }
+
+    /// Detailed installation state for the MCP server identified by `name`,
+    /// scored against `expected_owner`.
+    ///
+    /// `expected_owner` is the consumer tag the caller wants to compare
+    /// against — when the ledger records this owner, the report returns
+    /// [`InstallStatus::InstalledOwned`]; anything else recorded becomes
+    /// [`InstallStatus::InstalledOtherOwner`].
+    fn mcp_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, HookerError>;
 
     /// Install (or update) the MCP server. Repeated calls with the same
     /// `spec.name` and same content are a no-op after the first.
@@ -116,7 +160,26 @@ pub trait SkillSurface: Send + Sync {
 
     /// Returns true if a skill named `name` is currently recorded in the
     /// ownership ledger for this scope.
-    fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError>;
+    ///
+    /// Default impl mirrors [`McpSurface::is_mcp_installed`]: both
+    /// [`InstallStatus::InstalledOwned`] and
+    /// [`InstallStatus::InstalledOtherOwner`] count as installed.
+    fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+        Ok(matches!(
+            self.skill_status(scope, name, self.id())?.status,
+            InstallStatus::InstalledOwned { .. } | InstallStatus::InstalledOtherOwner { .. }
+        ))
+    }
+
+    /// Detailed installation state for the skill identified by `name`,
+    /// scored against `expected_owner`. See [`McpSurface::mcp_status`] for
+    /// the owner-comparison semantics.
+    fn skill_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, HookerError>;
 
     /// Install (or update) the skill directory and record ownership.
     /// Repeated calls with byte-identical contents are a no-op after the
@@ -136,6 +199,7 @@ pub trait SkillSurface: Send + Sync {
 
 /// Outcome of a successful [`Integration::install`].
 #[derive(Debug, Default, Clone)]
+#[non_exhaustive]
 pub struct InstallReport {
     /// Files this call created (did not previously exist).
     pub created: Vec<PathBuf>,
@@ -168,6 +232,7 @@ impl InstallReport {
 
 /// Outcome of a successful [`Integration::uninstall`].
 #[derive(Debug, Default, Clone)]
+#[non_exhaustive]
 pub struct UninstallReport {
     /// Files removed entirely.
     pub removed: Vec<PathBuf>,
@@ -195,6 +260,7 @@ impl UninstallReport {
 
 /// Outcome of a successful [`Integration::migrate`].
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum MigrationReport {
     /// Nothing to migrate.
     NoOp,

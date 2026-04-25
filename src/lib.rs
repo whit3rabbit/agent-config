@@ -1,9 +1,9 @@
-//! `ai-hooker` installs hooks and prompt-level integrations into AI coding harnesses.
+//! `ai-hooker` installs hooks, prompt rules, MCP servers, and skills into AI coding harnesses.
 //!
-//! The library knows where each harness keeps its hook configuration and what shape
-//! that configuration takes. Callers supply a [`HookSpec`] describing what command
-//! to run, which event to attach to, and any prompt content to inject. The library
-//! handles atomic writes, backups, and idempotent edits.
+//! The library knows where each harness keeps its configuration and what shape
+//! that configuration takes. Callers supply a [`HookSpec`], [`McpSpec`], or
+//! [`SkillSpec`]. The library handles atomic writes, backups, ownership ledgers,
+//! and idempotent edits.
 //!
 //! # Quick start
 //!
@@ -18,6 +18,52 @@
 //!
 //! let claude = by_id("claude").expect("claude integration registered");
 //! claude.install(&Scope::Global, &spec).unwrap();
+//! ```
+//!
+//! # MCP servers
+//!
+//! ```no_run
+//! use ai_hooker::{mcp_by_id, McpSpec, Scope};
+//!
+//! let spec = McpSpec::builder("github")
+//!     .owner("myapp")
+//!     .stdio("npx", ["-y", "@modelcontextprotocol/server-github"])
+//!     .build();
+//!
+//! let codex = mcp_by_id("codex").expect("codex MCP support registered");
+//! codex.install_mcp(&Scope::Global, &spec).unwrap();
+//! ```
+//!
+//! # Skills
+//!
+//! ```no_run
+//! use ai_hooker::{skill_by_id, Scope, SkillSpec};
+//!
+//! let spec = SkillSpec::builder("my-skill")
+//!     .owner("myapp")
+//!     .description("Use when my app needs custom repository context.")
+//!     .body("# My Skill\n\nFollow the local project conventions.")
+//!     .build();
+//!
+//! let claude = skill_by_id("claude").expect("claude skill support registered");
+//! claude.install_skill(&Scope::Global, &spec).unwrap();
+//! ```
+//!
+//! # Discovery and uninstall
+//!
+//! ```no_run
+//! use ai_hooker::{all, by_id, Scope};
+//!
+//! for integration in all() {
+//!     if integration.supported_scopes().contains(&Scope::Global.kind())
+//!         && integration.is_installed(&Scope::Global, "myapp").unwrap_or(false)
+//!     {
+//!         println!("{} has myapp installed", integration.display_name());
+//!     }
+//! }
+//!
+//! let claude = by_id("claude").expect("claude integration registered");
+//! claude.uninstall(&Scope::Global, "myapp").unwrap();
 //! ```
 //!
 //! # Safety guarantees
@@ -36,9 +82,10 @@ pub mod paths;
 pub mod registry;
 pub mod scope;
 pub mod spec;
-pub mod util;
+pub mod status;
 
-pub mod agents;
+mod agents;
+mod util;
 
 pub use error::HookerError;
 pub use integration::{
@@ -49,6 +96,9 @@ pub use scope::{Scope, ScopeKind};
 pub use spec::{
     Event, HookSpec, HookSpecBuilder, Matcher, McpSpec, McpSpecBuilder, McpTransport, RulesBlock,
     ScriptTemplate, SkillAsset, SkillFrontmatter, SkillSpec, SkillSpecBuilder,
+};
+pub use status::{
+    DriftIssue, InstallStatus, PathStatus, PlanTarget, StatusReport, StatusWarning,
 };
 
 /// Result alias used throughout the crate's public API.

@@ -27,6 +27,7 @@ use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, U
 use crate::paths;
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, McpSpec, ScriptTemplate, SkillSpec};
+use crate::status::{InstallStatus, PathStatus, PlanTarget, StatusReport, StatusWarning};
 use crate::util::{fs_atomic, mcp_json_object, ownership, rules_dir, skills_dir};
 
 const RULES_DIR: &str = ".clinerules";
@@ -107,28 +108,72 @@ impl Integration for ClineAgent {
     /// Reports installed if either the rules file *or* a hook script for the
     /// caller exists. (Tag is the consumer ID; hooks are keyed by event name
     /// and recorded by tag in the ledger.)
-    fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+        HookSpec::validate_tag(tag)?;
         let root = self.project_root(scope)?;
-        if rules_dir::is_installed(root, RULES_DIR, tag)? {
-            return Ok(true);
-        }
-        // Tag-owned hook entries in the ledger?
+        let rules_file = rules_dir::target_path(root, RULES_DIR, tag);
+        let rules_exists = rules_file.exists();
+
         let ledger = self.ledger_path(scope)?;
-        if !ledger.exists() {
-            return Ok(false);
+        let owned_hook_count = if ledger.exists() {
+            let v = crate::util::json_patch::read_or_empty(&ledger)?;
+            v.get("entries")
+                .and_then(|e| e.as_object())
+                .map(|m| {
+                    m.values()
+                        .filter(|entry| entry.get("owner").and_then(|o| o.as_str()) == Some(tag))
+                        .count()
+                })
+                .unwrap_or(0)
+        } else {
+            0
+        };
+
+        let mut files = vec![if rules_exists {
+            PathStatus::Exists {
+                path: rules_file.clone(),
+            }
+        } else {
+            PathStatus::Missing {
+                path: rules_file.clone(),
+            }
+        }];
+        if ledger.exists() {
+            files.push(PathStatus::Exists {
+                path: ledger.clone(),
+            });
         }
-        // Iterate ledger entries; if any owner == tag, we count as installed.
-        let v = crate::util::json_patch::read_or_empty(&ledger)?;
-        let owned_count = v
-            .get("entries")
-            .and_then(|e| e.as_object())
-            .map(|m| {
-                m.values()
-                    .filter(|entry| entry.get("owner").and_then(|o| o.as_str()) == Some(tag))
-                    .count()
-            })
-            .unwrap_or(0);
-        Ok(owned_count > 0)
+
+        let mut warnings = Vec::new();
+        let status = if rules_exists || owned_hook_count > 0 {
+            InstallStatus::InstalledOwned {
+                owner: tag.to_string(),
+            }
+        } else {
+            // Surface a backup file if it exists for the rules markdown.
+            let mut bak = rules_file.clone();
+            if let Some(name) = bak.file_name().map(|n| n.to_os_string()) {
+                if let Ok(mut s) = name.into_string() {
+                    s.push_str(".bak");
+                    bak.set_file_name(s);
+                    if bak.exists() {
+                        warnings.push(StatusWarning::BackupExists { path: bak });
+                    }
+                }
+            }
+            InstallStatus::Absent
+        };
+
+        Ok(StatusReport {
+            target: PlanTarget::Hook {
+                tag: tag.to_string(),
+            },
+            status,
+            config_path: Some(rules_file),
+            ledger_path: Some(ledger),
+            files,
+            warnings,
+        })
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
@@ -248,10 +293,25 @@ impl McpSurface for ClineAgent {
         &[ScopeKind::Global]
     }
 
-    fn is_mcp_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+    fn mcp_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, HookerError> {
         McpSpec::validate_name(name)?;
-        let ledger = ownership::mcp_ledger_for(&Self::mcp_path(scope)?);
-        mcp_json_object::is_installed(&ledger, name)
+        let cfg = Self::mcp_path(scope)?;
+        let ledger = ownership::mcp_ledger_for(&cfg);
+        let presence = mcp_json_object::config_presence(&cfg, name)?;
+        let recorded = ownership::owner_of(&ledger, name)?;
+        Ok(StatusReport::for_mcp(
+            name,
+            cfg,
+            ledger,
+            presence,
+            expected_owner,
+            recorded,
+        ))
     }
 
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
@@ -284,9 +344,24 @@ impl SkillSurface for ClineAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+    fn skill_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, HookerError> {
+        SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
-        skills_dir::is_installed(&root, name)
+        let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
+        let recorded = ownership::owner_of(&ledger, name)?;
+        Ok(StatusReport::for_skill(
+            name,
+            dir,
+            manifest,
+            ledger,
+            expected_owner,
+            recorded,
+        ))
     }
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {

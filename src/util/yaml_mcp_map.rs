@@ -11,6 +11,7 @@ use serde_json::{Map, Value};
 use crate::error::HookerError;
 use crate::integration::{InstallReport, UninstallReport};
 use crate::spec::McpSpec;
+use crate::status::ConfigPresence;
 use crate::util::{fs_atomic, json_patch, ownership};
 
 /// Builder for one YAML server entry under the chosen object key.
@@ -19,6 +20,32 @@ pub(crate) type ServerBuilder = fn(&McpSpec) -> Value;
 /// Returns true if `name` exists in the MCP ownership ledger.
 pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, HookerError> {
     ownership::contains(ledger_path, name)
+}
+
+/// Probe whether `name` is present in the named YAML object at `config_path`.
+/// Parse failures map to [`ConfigPresence::Invalid`] for drift reporting.
+pub(crate) fn config_presence(
+    config_path: &Path,
+    servers_path: &[&str],
+    name: &str,
+) -> Result<ConfigPresence, HookerError> {
+    if !config_path.exists() {
+        return Ok(ConfigPresence::Absent);
+    }
+    let root = match read_or_empty(config_path) {
+        Ok(v) => v,
+        Err(HookerError::Other(e)) => {
+            return Ok(ConfigPresence::Invalid {
+                reason: e.to_string(),
+            });
+        }
+        Err(e) => return Err(e),
+    };
+    Ok(if json_patch::contains_named(&root, servers_path, name) {
+        ConfigPresence::Single
+    } else {
+        ConfigPresence::Absent
+    })
 }
 
 /// Install or update an MCP server in a named YAML object.
