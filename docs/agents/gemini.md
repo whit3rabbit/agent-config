@@ -126,6 +126,16 @@ Supports both stdio (command/args) and remote (url) servers.
 
 Interpolation via `$GEMINI_PROJECT_DIR` and `$GEMINI_PLANS_DIR` environment variables.
 
+## Skills
+
+| Scope | Path |
+| --- | --- |
+| User | `~/.gemini/skills/<name>/` |
+| Project | `.gemini/skills/<name>/` |
+
+Gemini CLI also discovers `.agents/skills`, but `ai-hooker` writes the native
+Gemini path for this integration.
+
 ## References
 
 - <https://geminicli.com/docs/hooks/>

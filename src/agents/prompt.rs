@@ -1,7 +1,8 @@
 //! Generic implementation for harnesses that only read project-local rules
 //! markdown files and have no other surface (no hooks, no MCP, no skills).
 //!
-//! Currently serves Roo Code and Kilo Code.
+//! Kept for prompt-only agents; Roo Code and Kilo Code now have dedicated
+//! modules because they also expose MCP.
 
 use std::path::Path;
 

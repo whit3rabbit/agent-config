@@ -55,14 +55,19 @@ pub fn openclaw_home() -> Result<PathBuf, HookerError> {
     Ok(home_dir()?.join(".openclaw"))
 }
 
+/// `~/.hermes` (all platforms).
+pub fn hermes_home() -> Result<PathBuf, HookerError> {
+    Ok(home_dir()?.join(".hermes"))
+}
+
 /// OpenCode forces its plugin directory under `~/.config/opencode/plugins`
 /// regardless of platform conventions. Returns that path.
 pub fn opencode_plugins_dir() -> Result<PathBuf, HookerError> {
     Ok(home_dir()?.join(".config").join("opencode").join("plugins"))
 }
 
-/// `~/.config/opencode/opencode.json` — OpenCode's main config (where the
-/// `mcp` array lives).
+/// `~/.config/opencode/opencode.json` — OpenCode's main config, where the
+/// object-based `mcp` map lives.
 pub fn opencode_config_file() -> Result<PathBuf, HookerError> {
     Ok(home_dir()?
         .join(".config")
@@ -70,19 +75,56 @@ pub fn opencode_config_file() -> Result<PathBuf, HookerError> {
         .join("opencode.json"))
 }
 
-/// `~/.claude/mcp.json` — the dedicated MCP user-config file.
-///
-/// Note: Anthropic's CLI also writes a `~/.claude.json` that contains
-/// conversation transcripts plus arbitrary metadata; this library deliberately
-/// keeps MCP config in the dedicated `mcp.json` file and does **not** touch
-/// `~/.claude.json`.
+/// `~/.config/kilo/kilo.jsonc` — Kilo Code's global JSONC config.
+pub fn kilo_config_file() -> Result<PathBuf, HookerError> {
+    Ok(home_dir()?.join(".config").join("kilo").join("kilo.jsonc"))
+}
+
+/// `~/.claude.json` — Claude Code's user/local MCP config file.
 pub fn claude_mcp_user_file() -> Result<PathBuf, HookerError> {
-    Ok(claude_home()?.join("mcp.json"))
+    Ok(home_dir()?.join(".claude.json"))
 }
 
 /// `~/.cursor/mcp.json` — Cursor's MCP user-config file.
 pub fn cursor_mcp_user_file() -> Result<PathBuf, HookerError> {
     Ok(cursor_home()?.join("mcp.json"))
+}
+
+/// VS Code globalStorage directory for an extension in the stable `Code`
+/// profile.
+pub fn vscode_global_storage(extension_id: &str) -> Result<PathBuf, HookerError> {
+    Ok(config_dir()?
+        .join("Code")
+        .join("User")
+        .join("globalStorage")
+        .join(extension_id))
+}
+
+/// Cline's global MCP settings file inside VS Code globalStorage.
+pub fn cline_mcp_global_file() -> Result<PathBuf, HookerError> {
+    Ok(vscode_global_storage("saoudrizwan.claude-dev")?
+        .join("settings")
+        .join("cline_mcp_settings.json"))
+}
+
+/// Roo Code's global MCP settings file inside VS Code globalStorage.
+pub fn roo_mcp_global_file() -> Result<PathBuf, HookerError> {
+    Ok(vscode_global_storage("rooveterinaryinc.roo-cline")?
+        .join("settings")
+        .join("mcp_settings.json"))
+}
+
+/// `~/.gemini/antigravity/mcp_config.json` — Antigravity's global MCP config.
+pub fn antigravity_mcp_global_file() -> Result<PathBuf, HookerError> {
+    Ok(gemini_home()?.join("antigravity").join("mcp_config.json"))
+}
+
+/// `~/.codeium/windsurf/mcp_config.json` — Windsurf's global MCP config.
+pub fn windsurf_mcp_global_file() -> Result<PathBuf, HookerError> {
+    Ok(home_dir()?
+        .join(".codeium")
+        .join("windsurf")
+        .join("mcp_config.json"))
 }
 
 #[cfg(test)]
@@ -111,6 +153,7 @@ mod tests {
             (cursor_home(), ".cursor"),
             (gemini_home(), ".gemini"),
             (openclaw_home(), ".openclaw"),
+            (hermes_home(), ".hermes"),
         ];
         for (path, suffix) in cases {
             let p = path.expect("path resolved");
@@ -125,5 +168,34 @@ mod tests {
     fn opencode_plugins_dir_ends_correctly() {
         let p = opencode_plugins_dir().expect("path resolved");
         assert!(p.to_string_lossy().ends_with(".config/opencode/plugins"));
+    }
+
+    #[test]
+    fn mcp_paths_end_correctly() {
+        assert!(claude_mcp_user_file()
+            .unwrap()
+            .to_string_lossy()
+            .ends_with(".claude.json"));
+        assert!(kilo_config_file()
+            .unwrap()
+            .to_string_lossy()
+            .ends_with(".config/kilo/kilo.jsonc"));
+        assert!(cline_mcp_global_file()
+            .unwrap()
+            .to_string_lossy()
+            .ends_with(
+                "Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+            ));
+        assert!(roo_mcp_global_file().unwrap().to_string_lossy().ends_with(
+            "Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json"
+        ));
+        assert!(antigravity_mcp_global_file()
+            .unwrap()
+            .to_string_lossy()
+            .ends_with(".gemini/antigravity/mcp_config.json"));
+        assert!(windsurf_mcp_global_file()
+            .unwrap()
+            .to_string_lossy()
+            .ends_with(".codeium/windsurf/mcp_config.json"));
     }
 }

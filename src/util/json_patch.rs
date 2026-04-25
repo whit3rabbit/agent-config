@@ -152,11 +152,62 @@ pub(crate) fn remove_tagged_array_entry(
 }
 
 /// True if an entry with `_ai_hooker_tag == tag` exists at `path`.
+#[allow(dead_code)]
 pub(crate) fn contains_tagged(root: &Value, path: &[&str], tag: &str) -> bool {
     let Some(arr) = traverse_array(root, path) else {
         return false;
     };
     arr.iter().any(|v| matches_tag(v, tag))
+}
+
+/// True if any array directly under `parent_path` contains a tagged entry.
+///
+/// This is used for hook configs where callers may install custom event names,
+/// so uninstall/detection cannot be limited to the built-in event keys.
+pub(crate) fn contains_tagged_array_entry_under(
+    root: &Value,
+    parent_path: &[&str],
+    tag: &str,
+) -> bool {
+    let Some(parent) = traverse_object(root, parent_path) else {
+        return false;
+    };
+    parent.values().any(|v| {
+        v.as_array()
+            .is_some_and(|arr| arr.iter().any(|entry| matches_tag(entry, tag)))
+    })
+}
+
+/// Remove tagged entries from every array directly under `parent_path`.
+/// Returns true if any entry was removed.
+pub(crate) fn remove_tagged_array_entries_under(
+    root: &mut Value,
+    parent_path: &[&str],
+    tag: &str,
+) -> Result<bool, HookerError> {
+    let Some(parent) = traverse_object(root, parent_path) else {
+        return Ok(false);
+    };
+    let keys: Vec<String> = parent
+        .iter()
+        .filter_map(|(key, value)| {
+            value.as_array().and_then(|arr| {
+                arr.iter()
+                    .any(|entry| matches_tag(entry, tag))
+                    .then(|| key.clone())
+            })
+        })
+        .collect();
+
+    let mut changed = false;
+    for key in keys {
+        let mut path = parent_path.to_vec();
+        path.push(key.as_str());
+        if remove_tagged_array_entry(root, &path, tag)? {
+            changed = true;
+        }
+    }
+    Ok(changed)
 }
 
 /// Insert or replace a value under a named key inside an object at `path`.
@@ -209,11 +260,11 @@ pub(crate) fn contains_named(root: &Value, path: &[&str], name: &str) -> bool {
     cur.get(name).is_some()
 }
 
-/// Insert/replace an entry inside a JSON array, keyed by a string field
-/// (`name` for OpenCode's `mcp` array). Returns `true` if the array changed.
+/// Insert/replace an entry inside a JSON array, keyed by a string field.
 ///
 /// Unlike [`upsert_tagged_array_entry`], no marker is added — the entry's own
-/// `name` field is the identity, since the harness loads MCPs by name.
+/// `name` field is the identity, since the harness loads entries by name.
+#[allow(dead_code)]
 pub(crate) fn upsert_named_array_entry(
     root: &mut Value,
     path: &[&str],
@@ -243,6 +294,7 @@ pub(crate) fn upsert_named_array_entry(
 
 /// Remove the array entry whose `name_field` matches `name`. Returns `true`
 /// if removed; prunes empty parent containers.
+#[allow(dead_code)]
 pub(crate) fn remove_named_array_entry(
     root: &mut Value,
     path: &[&str],
@@ -266,6 +318,7 @@ pub(crate) fn remove_named_array_entry(
 }
 
 /// Returns true if any array entry under `path` matches `name_field == name`.
+#[allow(dead_code)]
 pub(crate) fn contains_in_named_array(
     root: &Value,
     path: &[&str],
@@ -300,6 +353,14 @@ fn traverse_array<'a>(root: &'a Value, path: &[&str]) -> Option<&'a Vec<Value>> 
         cur = cur.get(*key)?;
     }
     cur.as_array()
+}
+
+fn traverse_object<'a>(root: &'a Value, path: &[&str]) -> Option<&'a Map<String, Value>> {
+    let mut cur = root;
+    for key in path {
+        cur = cur.get(*key)?;
+    }
+    cur.as_object()
 }
 
 fn traverse_array_mut<'a>(root: &'a mut Value, path: &[&str]) -> Option<&'a mut Vec<Value>> {
@@ -482,6 +543,46 @@ mod tests {
         assert!(contains_tagged(&root, &["hooks", "PreToolUse"], "alpha"));
         assert!(!contains_tagged(&root, &["hooks", "PreToolUse"], "beta"));
         assert!(!contains_tagged(&root, &["hooks", "missing"], "alpha"));
+    }
+
+    #[test]
+    fn contains_tagged_under_finds_custom_event() {
+        let root = json!({
+            "version": 1,
+            "hooks": {
+                "customEvent": [{ "_ai_hooker_tag": "alpha" }],
+                "preToolUse": []
+            }
+        });
+        assert!(contains_tagged_array_entry_under(
+            &root,
+            &["hooks"],
+            "alpha"
+        ));
+        assert!(!contains_tagged_array_entry_under(
+            &root,
+            &["hooks"],
+            "beta"
+        ));
+    }
+
+    #[test]
+    fn remove_tagged_under_prunes_custom_event_but_keeps_siblings() {
+        let mut root = json!({
+            "version": 1,
+            "hooks": {
+                "customEvent": [{ "_ai_hooker_tag": "alpha" }],
+                "preToolUse": [{ "_ai_hooker_tag": "beta" }]
+            }
+        });
+        let changed = remove_tagged_array_entries_under(&mut root, &["hooks"], "alpha").unwrap();
+        assert!(changed);
+        assert_eq!(root["version"], json!(1));
+        assert!(root["hooks"]["customEvent"].is_null());
+        assert_eq!(
+            root["hooks"]["preToolUse"][0]["_ai_hooker_tag"],
+            json!("beta")
+        );
     }
 
     #[test]

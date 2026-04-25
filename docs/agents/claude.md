@@ -80,9 +80,9 @@ fenced span in place.
 
 | | |
 | --- | --- |
-| File | `~/.claude.json` or `~/.claude/mcp.json` |
+| File | `~/.claude.json` |
 | Format | JSON |
-| Mechanism | Server config with stdio/SSE/http options |
+| Mechanism | Server config under the current project's entry for local/user scoped servers |
 
 ### Project scope (`Scope::Local(<root>)`)
 
@@ -92,8 +92,9 @@ fenced span in place.
 | Format | JSON |
 | Mechanism | Server config (version-controlled) |
 
-**Important:** Do not use `settings.json` for MCP servers. Claude Code reads MCP config only from
-`~/.claude.json` (user) or `.mcp.json` (project).
+**Important:** Do not use `settings.json` for MCP servers. This integration
+writes user/local MCP to `~/.claude.json` and project-shared MCP to
+`<root>/.mcp.json`.
 
 ### Example
 
@@ -162,9 +163,6 @@ Usage examples.
 ## Constraints
 Limitations or edge cases.
 ```
-
-**Note:** Skills are planned for Phase 3 and not yet implemented in `ai-hooker`.
-See [`CLAUDE.md`](../../CLAUDE.md) for current roadmap.
 
 ## References
 

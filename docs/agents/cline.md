@@ -84,16 +84,49 @@ Uninstall removes the file and prunes empty parent directories.
 > writes. Rules can include YAML frontmatter for conditional activation;
 > consumers may pass that as part of `RulesBlock::content`.
 
-## MCP servers — Not supported
+## MCP servers
 
-Cline does not support MCP servers. Planned for Phase 2.
+### User scope (`Scope::Global`)
 
-## Skills — Not supported
+| | |
+| --- | --- |
+| File | `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` on macOS |
+| Format | JSON |
+| Key | `mcpServers` |
 
-Cline does not support skills. Planned for Phase 3.
+### Project scope (`Scope::Local(<root>)`)
+
+Not supported. Cline's documented MCP settings file is global to the VS Code
+extension.
+
+### Configuration
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "@example/server"]
+    }
+  }
+}
+```
+
+## Skills
+
+| Scope | Path |
+| --- | --- |
+| User | `~/.cline/skills/<name>/` |
+| Project | `.cline/skills/<name>/` |
+
+Each skill is a directory containing `SKILL.md`. Cline also supports
+`.clinerules/skills` and `.claude/skills` project locations, but `ai-hooker`
+writes the native `.cline/skills` path.
 
 ## References
 
 - <https://docs.cline.bot/customization/cline-rules>
 - <https://docs.cline.bot/customization/hooks>
-- <https://cline.bot/blog/cline-v3-36-hooks
+- <https://docs.cline.bot/customization/skills>
+- <https://docs.cline.bot/mcp/adding-and-configuring-servers>
+- <https://cline.bot/blog/cline-v3-36-hooks>

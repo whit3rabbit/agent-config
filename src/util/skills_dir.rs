@@ -39,6 +39,7 @@ fn skill_dir(skills_root: &Path, name: &str) -> PathBuf {
 
 /// Returns true if the ledger has an entry for `name`.
 pub(crate) fn is_installed(skills_root: &Path, name: &str) -> Result<bool, HookerError> {
+    SkillSpec::validate_name(name)?;
     ownership::contains(&ledger_path(skills_root), name)
 }
 
@@ -52,6 +53,9 @@ pub(crate) fn install(skills_root: &Path, spec: &SkillSpec) -> Result<InstallRep
 
     let mut report = InstallReport::default();
     let dir = skill_dir(skills_root, &spec.name);
+    let led = ledger_path(skills_root);
+
+    ownership::require_owner(&led, &spec.name, &spec.owner_tag, KIND, dir.exists())?;
 
     let skill_md_path = dir.join(SKILL_MD);
     let skill_md = render_skill_md(&spec.frontmatter, &spec.body);
@@ -67,7 +71,6 @@ pub(crate) fn install(skills_root: &Path, spec: &SkillSpec) -> Result<InstallRep
         record_outcome(&mut report, outcome);
     }
 
-    let led = ledger_path(skills_root);
     let prior = ownership::owner_of(&led, &spec.name)?;
     let owner_changed = prior.as_deref() != Some(spec.owner_tag.as_str());
 
@@ -334,6 +337,27 @@ mod tests {
         let err = uninstall(dir.path(), "alpha", "appB").unwrap_err();
         assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
         assert!(dir.path().join("alpha").exists());
+    }
+
+    #[test]
+    fn install_owner_mismatch_refused() {
+        let dir = tempdir().unwrap();
+        install(dir.path(), &basic_spec("alpha", "appA")).unwrap();
+        let err = install(dir.path(), &basic_spec("alpha", "appB")).unwrap_err();
+        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+    }
+
+    #[test]
+    fn install_user_installed_skill_refused() {
+        let dir = tempdir().unwrap();
+        let user_skill = dir.path().join("user-skill");
+        fs::create_dir_all(&user_skill).unwrap();
+        fs::write(user_skill.join("SKILL.md"), "---\nname: user-skill\n---\n").unwrap();
+        let err = install(dir.path(), &basic_spec("user-skill", "myapp")).unwrap_err();
+        assert!(matches!(
+            err,
+            HookerError::NotOwnedByCaller { actual: None, .. }
+        ));
     }
 
     #[test]

@@ -110,9 +110,19 @@ API_KEY = "secret"
 
 Supports both stdio (command/args) and http (url/bearer_token_env_var) transports.
 
+## Skills
+
+| Scope | Path |
+| --- | --- |
+| User | `~/.agents/skills/<name>/` |
+| Project | `.agents/skills/<name>/` |
+
+Codex treats `.agents/skills` as its native repository and user skill location.
+
 ## References
 
 - <https://developers.openai.com/codex/hooks>
 - <https://developers.openai.com/codex/guides/agents-md>
 - <https://developers.openai.com/codex/config-basic>
 - <https://developers.openai.com/codex/mcp>
+- <https://developers.openai.com/codex/skills>

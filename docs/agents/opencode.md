@@ -77,41 +77,46 @@ integration to write that file.
 | --- | --- |
 | File | `~/.config/opencode/opencode.json` |
 | Key | `mcp` |
-| Format | JSON |
+| Format | JSONC accepted, written as JSON |
 
 ### Project scope (`Scope::Local(<root>)`)
 
 | | |
 | --- | --- |
-| File | `.opencode/opencode.json` or `.opencode/config.json` |
-| Format | JSONC (JSON with Comments) |
-| Key | `mcp` (array) |
+| File | `<root>/opencode.json` |
+| Format | JSONC accepted, written as JSON |
+| Key | `mcp` (object keyed by server name) |
 
 ### Configuration
 
 ```json
 {
-  "mcp": [
-    {
-      "name": "my-server",
-      "command": "node",
-      "args": ["/path/to/server.js"]
+  "mcp": {
+    "my-server": {
+      "type": "local",
+      "command": ["node", "/path/to/server.js"]
     }
-  ]
+  }
 }
 ```
 
 OpenCode automatically handles OAuth for remote servers and supports both local
-(command/args) and remote (url) transports.
+(command array) and remote (url) transports.
 
-## Skills — Plugin-based
+## Skills
 
-OpenCode does not have a dedicated skills system. Functionality is provided
-through the plugin system.
+| Scope | Path |
+| --- | --- |
+| User | `~/.config/opencode/skills/<name>/` |
+| Project | `.opencode/skills/<name>/` |
+
+OpenCode also scans Claude-compatible and `.agents/skills` locations, but
+`ai-hooker` writes the native OpenCode path for this integration.
 
 ## References
 
 - <https://opencode.ai/docs/plugins/>
 - <https://opencode.ai/docs/config/>
 - <https://opencode.ai/docs/mcp-servers/>
+- <https://opencode.ai/docs/skills>
 - <https://github.com/sst/opencode>

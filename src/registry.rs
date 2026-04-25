@@ -15,19 +15,22 @@ use crate::integration::{Integration, McpSurface, SkillSurface};
 pub fn all() -> Vec<Box<dyn Integration>> {
     use crate::agents::{
         AntigravityAgent, ClaudeAgent, ClineAgent, CodexAgent, CopilotAgent, CursorAgent,
-        GeminiAgent, OpenCodeAgent, PromptAgent, WindsurfAgent,
+        GeminiAgent, HermesAgent, KiloCodeAgent, OpenClawAgent, OpenCodeAgent, RooAgent,
+        WindsurfAgent,
     };
     vec![
         Box::new(ClaudeAgent::new()),
         Box::new(CursorAgent::new()),
         Box::new(GeminiAgent::new()),
+        Box::new(OpenClawAgent::new()),
+        Box::new(HermesAgent::new()),
         Box::new(CodexAgent::new()),
         Box::new(CopilotAgent::new()),
         Box::new(OpenCodeAgent::new()),
         Box::new(ClineAgent::new()),
-        Box::new(PromptAgent::roo()),
+        Box::new(RooAgent::new()),
         Box::new(WindsurfAgent::new()),
-        Box::new(PromptAgent::kilocode()),
+        Box::new(KiloCodeAgent::new()),
         Box::new(AntigravityAgent::new()),
     ]
 }
@@ -40,18 +43,28 @@ pub fn by_id(id: &str) -> Option<Box<dyn Integration>> {
 /// Returns a fresh `Box` per [`McpSurface`]-capable agent. Adding a new MCP
 /// integration means adding one line here.
 ///
-/// Currently: Claude, Cursor, Gemini, Codex, OpenCode, Windsurf.
+/// Currently: Claude, Cursor, Gemini, OpenClaw, Hermes, Codex, Copilot,
+/// OpenCode, Cline, Roo, Windsurf, Kilo Code, Antigravity.
 pub fn mcp_capable() -> Vec<Box<dyn McpSurface>> {
     use crate::agents::{
-        ClaudeAgent, CodexAgent, CursorAgent, GeminiAgent, OpenCodeAgent, WindsurfAgent,
+        AntigravityAgent, ClaudeAgent, ClineAgent, CodexAgent, CopilotAgent, CursorAgent,
+        GeminiAgent, HermesAgent, KiloCodeAgent, OpenClawAgent, OpenCodeAgent, RooAgent,
+        WindsurfAgent,
     };
     vec![
         Box::new(ClaudeAgent::new()),
         Box::new(CursorAgent::new()),
         Box::new(GeminiAgent::new()),
+        Box::new(OpenClawAgent::new()),
+        Box::new(HermesAgent::new()),
         Box::new(CodexAgent::new()),
+        Box::new(CopilotAgent::new()),
         Box::new(OpenCodeAgent::new()),
+        Box::new(ClineAgent::new()),
+        Box::new(RooAgent::new()),
         Box::new(WindsurfAgent::new()),
+        Box::new(KiloCodeAgent::new()),
+        Box::new(AntigravityAgent::new()),
     ]
 }
 
@@ -64,11 +77,25 @@ pub fn mcp_by_id(id: &str) -> Option<Box<dyn McpSurface>> {
 /// Returns a fresh `Box` per [`SkillSurface`]-capable agent. Adding a new
 /// skill integration means adding one line here.
 ///
-/// Currently: Claude, Antigravity.
+/// Currently: Claude, Cursor, Gemini, OpenClaw, Hermes, Codex, Copilot,
+/// OpenCode, Cline, Windsurf, Kilo Code, Antigravity.
 pub fn skill_capable() -> Vec<Box<dyn SkillSurface>> {
-    use crate::agents::{AntigravityAgent, ClaudeAgent};
+    use crate::agents::{
+        AntigravityAgent, ClaudeAgent, ClineAgent, CodexAgent, CopilotAgent, CursorAgent,
+        GeminiAgent, HermesAgent, KiloCodeAgent, OpenClawAgent, OpenCodeAgent, WindsurfAgent,
+    };
     vec![
         Box::new(ClaudeAgent::new()),
+        Box::new(CursorAgent::new()),
+        Box::new(GeminiAgent::new()),
+        Box::new(OpenClawAgent::new()),
+        Box::new(HermesAgent::new()),
+        Box::new(CodexAgent::new()),
+        Box::new(CopilotAgent::new()),
+        Box::new(OpenCodeAgent::new()),
+        Box::new(ClineAgent::new()),
+        Box::new(WindsurfAgent::new()),
+        Box::new(KiloCodeAgent::new()),
         Box::new(AntigravityAgent::new()),
     ]
 }

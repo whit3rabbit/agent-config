@@ -9,22 +9,24 @@
 //!    of `{ "bash": "...", "_ai_hooker_tag": "..." }` entries; multiple
 //!    consumers coexist via the standard tagged-array helper.
 //!
-//! 3. **MCP servers** — JSON config at `.windsurf/mcp_config.json` keyed by
-//!    server name under `mcpServers`. Same shape as Claude/Cursor; reuses
+//! 3. **MCP servers** — JSON config at `.windsurf/mcp_config.json` (Local) or
+//!    `~/.codeium/windsurf/mcp_config.json` (Global), keyed by server name
+//!    under `mcpServers`. Same shape as Claude/Cursor; reuses
 //!    `util::mcp_json_object`.
 //!
-//! Windsurf does not yet expose a skills surface, so this agent does not
-//! implement [`SkillSurface`](crate::SkillSurface).
+//! 4. **Skills** — directory-scoped skills at `.windsurf/skills/<name>/`
+//!    (Local) or `~/.codeium/windsurf/skills/<name>/` (Global).
 
 use std::path::PathBuf;
 
 use serde_json::json;
 
 use crate::error::HookerError;
-use crate::integration::{InstallReport, Integration, McpSurface, UninstallReport};
+use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
+use crate::paths;
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{Event, HookSpec, McpSpec};
-use crate::util::{fs_atomic, json_patch, mcp_json_object, ownership, rules_dir};
+use crate::spec::{Event, HookSpec, McpSpec, SkillSpec};
+use crate::util::{fs_atomic, json_patch, mcp_json_object, ownership, rules_dir, skills_dir};
 
 const RULES_DIR: &str = ".windsurf/rules";
 
@@ -51,8 +53,21 @@ impl WindsurfAgent {
         Ok(self.project_root(scope)?.join(".windsurf/hooks.json"))
     }
 
-    fn mcp_path(&self, scope: &Scope) -> Result<PathBuf, HookerError> {
-        Ok(self.project_root(scope)?.join(".windsurf/mcp_config.json"))
+    fn mcp_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+        Ok(match scope {
+            Scope::Global => paths::windsurf_mcp_global_file()?,
+            Scope::Local(p) => p.join(".windsurf/mcp_config.json"),
+        })
+    }
+
+    fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
+        Ok(match scope {
+            Scope::Global => paths::home_dir()?
+                .join(".codeium")
+                .join("windsurf")
+                .join("skills"),
+            Scope::Local(p) => p.join(".windsurf").join("skills"),
+        })
     }
 }
 
@@ -85,13 +100,7 @@ impl Integration for WindsurfAgent {
             return Ok(false);
         }
         let v = json_patch::read_or_empty(&p)?;
-        // Walk every event array and look for our tag.
-        for event_key in known_event_keys() {
-            if json_patch::contains_tagged(&v, &[event_key], tag) {
-                return Ok(true);
-            }
-        }
-        Ok(false)
+        Ok(json_patch::contains_tagged_array_entry_under(&v, &[], tag))
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
@@ -150,12 +159,7 @@ impl Integration for WindsurfAgent {
         let p = self.hooks_path(scope)?;
         if p.exists() {
             let mut doc = json_patch::read_or_empty(&p)?;
-            let mut changed = false;
-            for event_key in known_event_keys() {
-                if json_patch::remove_tagged_array_entry(&mut doc, &[event_key], tag)? {
-                    changed = true;
-                }
-            }
+            let changed = json_patch::remove_tagged_array_entries_under(&mut doc, &[], tag)?;
             if changed {
                 let now_empty = doc.as_object().map(|o| o.is_empty()).unwrap_or(true);
                 if now_empty {
@@ -186,18 +190,18 @@ impl McpSurface for WindsurfAgent {
     }
 
     fn supported_mcp_scopes(&self) -> &'static [ScopeKind] {
-        &[ScopeKind::Local]
+        &[ScopeKind::Global, ScopeKind::Local]
     }
 
     fn is_mcp_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
         McpSpec::validate_name(name)?;
-        let ledger = ownership::mcp_ledger_for(&self.mcp_path(scope)?);
+        let ledger = ownership::mcp_ledger_for(&Self::mcp_path(scope)?);
         mcp_json_object::is_installed(&ledger, name)
     }
 
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
-        let cfg = self.mcp_path(scope)?;
+        let cfg = Self::mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::install(&cfg, &ledger, spec)
     }
@@ -210,9 +214,39 @@ impl McpSurface for WindsurfAgent {
     ) -> Result<UninstallReport, HookerError> {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
-        let cfg = self.mcp_path(scope)?;
+        let cfg = Self::mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::uninstall(&cfg, &ledger, name, owner_tag, "mcp server")
+    }
+}
+
+impl SkillSurface for WindsurfAgent {
+    fn id(&self) -> &'static str {
+        "windsurf"
+    }
+
+    fn supported_skill_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Global, ScopeKind::Local]
+    }
+
+    fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+        let root = Self::skills_root(scope)?;
+        skills_dir::is_installed(&root, name)
+    }
+
+    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+        let root = Self::skills_root(scope)?;
+        skills_dir::install(&root, spec)
+    }
+
+    fn uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, HookerError> {
+        let root = Self::skills_root(scope)?;
+        skills_dir::uninstall(&root, name, owner_tag)
     }
 }
 
@@ -228,12 +262,9 @@ fn event_to_windsurf(event: &Event) -> String {
     }
 }
 
-/// Event keys we recognise during uninstall scanning. Custom keys we wrote
-/// during install will not appear here; users who attach to a custom event
-/// must uninstall via the corresponding Custom event being present in the
-/// hooks file (the `remove_tagged_array_entry` walk would still need to
-/// know the key). We therefore also iterate every top-level array key on
-/// the document below — see `uninstall`.
+/// Event keys documented by Windsurf. Kept for tests and documentation; hook
+/// detection/removal scans all top-level arrays so custom events are covered.
+#[cfg(test)]
 fn known_event_keys() -> &'static [&'static str] {
     &[
         "pre_user_prompt",
@@ -350,6 +381,28 @@ mod tests {
             .unwrap();
         assert!(dir.path().join(".windsurf/mcp_config.json").exists());
         assert!(dir.path().join(".windsurf/hooks.json").exists());
+    }
+
+    #[test]
+    fn mcp_supports_global_and_local_scopes() {
+        let agent = WindsurfAgent::new();
+        let scopes = agent.supported_mcp_scopes();
+        assert!(scopes.contains(&ScopeKind::Global));
+        assert!(scopes.contains(&ScopeKind::Local));
+    }
+
+    #[test]
+    fn uninstall_mcp_owner_mismatch_refused() {
+        let dir = tempdir().unwrap();
+        let agent = WindsurfAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let spec = McpSpec::builder("github")
+            .owner("appA")
+            .stdio("npx", ["@example/server"])
+            .build();
+        agent.install_mcp(&scope, &spec).unwrap();
+        let err = agent.uninstall_mcp(&scope, "github", "appB").unwrap_err();
+        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
     }
 
     #[test]

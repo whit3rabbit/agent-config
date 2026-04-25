@@ -109,12 +109,19 @@ frontmatter). Calling with `Scope::Global` returns
 Supports stdio, Streamable HTTP, and SSE transports. Variable interpolation via
 `${env:VAR_NAME}` and `${file:/path/to/file}`. Maximum 100 tools across all MCPs.
 
-## Skills — Not supported
+## Skills
 
-Windsurf does not support a dedicated skills system.
+| Scope | Path |
+| --- | --- |
+| User | `~/.codeium/windsurf/skills/<name>/` |
+| Project | `.windsurf/skills/<name>/` |
+
+Windsurf also discovers `.agents/skills`; `ai-hooker` writes the native
+Windsurf path for this integration.
 
 ## References
 
 - <https://docs.windsurf.com/windsurf/cascade/memories>
 - <https://docs.windsurf.com/windsurf/cascade/hooks>
 - <https://docs.windsurf.com/windsurf/cascade/mcp>
+- <https://docs.windsurf.com/windsurf/cascade/skills>

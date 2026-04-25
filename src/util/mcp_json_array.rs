@@ -1,6 +1,7 @@
-//! Shared MCP installer for harnesses that store servers as a JSON array
-//! (OpenCode, where the `mcp` key in `opencode.json` is an array of objects
-//! each with a `name` field).
+//! Legacy MCP installer for harnesses that store servers as a JSON array.
+//!
+//! No registered agent currently uses this shape, but the helper is retained
+//! for future array-backed configs where entries carry a `name` field.
 //!
 //! Mirrors [`super::mcp_json_object`] but keys entries by the `name` field
 //! within array members instead of by object key.
@@ -15,11 +16,10 @@ use crate::integration::{InstallReport, UninstallReport};
 use crate::spec::{McpSpec, McpTransport};
 use crate::util::{fs_atomic, json_patch, ownership};
 
-/// Default array key — OpenCode uses `"mcp"`.
+/// Default array key for array-backed MCP configs.
 pub(crate) const ARRAY_KEY: &str = "mcp";
 
-/// Field within each array entry that uniquely identifies the server. OpenCode
-/// uses `"name"`.
+/// Field within each array entry that uniquely identifies the server.
 pub(crate) const NAME_FIELD: &str = "name";
 
 /// Returns true if `name` is present in the ledger.
@@ -36,6 +36,15 @@ pub(crate) fn install(
 ) -> Result<InstallReport, HookerError> {
     let mut report = InstallReport::default();
     let mut root = json_patch::read_or_empty(config_path)?;
+    let in_config =
+        json_patch::contains_in_named_array(&root, &[ARRAY_KEY], NAME_FIELD, &spec.name);
+    ownership::require_owner(
+        ledger_path,
+        &spec.name,
+        &spec.owner_tag,
+        "mcp server",
+        in_config,
+    )?;
 
     let value = build_array_entry(spec);
     let changed = json_patch::upsert_named_array_entry(
@@ -166,7 +175,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn paths(dir: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
-        (dir.join("opencode.json"), dir.join(".ai-hooker-mcp.json"))
+        (dir.join("config.json"), dir.join(".ai-hooker-mcp.json"))
     }
 
     fn stdio_spec(name: &str, owner: &str) -> McpSpec {
@@ -212,7 +221,32 @@ mod tests {
         let v: Value = serde_json::from_slice(&std::fs::read(&cfg).unwrap()).unwrap();
         let arr = v["mcp"].as_array().unwrap();
         assert_eq!(arr.len(), 2);
-        assert!(dir.path().join("opencode.json.bak").exists());
+        assert!(dir.path().join("config.json.bak").exists());
+    }
+
+    #[test]
+    fn install_refuses_other_owner() {
+        let dir = tempdir().unwrap();
+        let (cfg, led) = paths(dir.path());
+        install(&cfg, &led, &stdio_spec("github", "appA")).unwrap();
+        let err = install(&cfg, &led, &stdio_spec("github", "appB")).unwrap_err();
+        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+    }
+
+    #[test]
+    fn install_refuses_user_installed_same_name() {
+        let dir = tempdir().unwrap();
+        let (cfg, led) = paths(dir.path());
+        std::fs::write(
+            &cfg,
+            r#"{ "mcp": [ { "name": "github", "command": "user-cmd" } ] }"#,
+        )
+        .unwrap();
+        let err = install(&cfg, &led, &stdio_spec("github", "myapp")).unwrap_err();
+        assert!(matches!(
+            err,
+            HookerError::NotOwnedByCaller { actual: None, .. }
+        ));
     }
 
     #[test]

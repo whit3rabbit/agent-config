@@ -80,17 +80,55 @@ Copilot also reads `<root>/.github/instructions/*.instructions.md` (path-scoped
 via frontmatter) and project-root `AGENTS.md`. Use the Codex integration to
 write `AGENTS.md`.
 
-## MCP servers — Not supported
+## MCP servers
 
-Copilot does not have documented MCP server support. MCP integration is
-handled through hook mechanisms when available.
+### User scope (`Scope::Global`)
 
-## Skills — Not supported
+| | |
+| --- | --- |
+| File | `~/.copilot/mcp-config.json` |
+| Format | JSON |
+| Key | `mcpServers` |
 
-Copilot does not have a dedicated skills system.
+### Project scope (`Scope::Local(<root>)`)
+
+| | |
+| --- | --- |
+| File | `<root>/.mcp.json` |
+| Format | JSON |
+| Key | `mcpServers` |
+
+### Configuration
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "@example/server"]
+    }
+  }
+}
+```
+
+VS Code Copilot can also read `<root>/.vscode/mcp.json` with a `servers`
+object. `ai-hooker` targets the Copilot CLI/cloud-agent contract here.
+
+## Skills
+
+| Scope | Path |
+| --- | --- |
+| User | `~/.copilot/skills/<name>/` |
+| Project | `.github/skills/<name>/` |
+
+Each skill is a directory containing `SKILL.md` with required `name` and
+`description` frontmatter. Copilot also supports `allowed-tools`,
+`user-invocable`, and `disable-model-invocation` frontmatter, but `ai-hooker`
+only renders the shared fields exposed by `SkillSpec`.
 
 ## References
 
 - <https://docs.github.com/en/copilot/reference/hooks-configuration>
 - <https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/use-hooks>
 - <https://code.visualstudio.com/docs/copilot/customization/hooks>
+- <https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference>

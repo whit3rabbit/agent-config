@@ -12,11 +12,11 @@
 use std::path::PathBuf;
 
 use crate::error::HookerError;
-use crate::integration::{InstallReport, Integration, McpSurface, UninstallReport};
+use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{HookSpec, McpSpec, ScriptTemplate};
-use crate::util::{fs_atomic, mcp_json_array, ownership};
+use crate::spec::{HookSpec, McpSpec, ScriptTemplate, SkillSpec};
+use crate::util::{fs_atomic, mcp_json_map, ownership, skills_dir};
 
 /// OpenCode plugin installer.
 pub struct OpenCodeAgent;
@@ -38,12 +38,22 @@ impl OpenCodeAgent {
     }
 
     /// `~/.config/opencode/opencode.json` (Global) or
-    /// `<root>/.opencode/opencode.json` (Local). MCP servers live in the
-    /// `mcp` array.
+    /// `<root>/opencode.json` (Local). MCP servers live in the object-based
+    /// `mcp` key.
     fn config_path(scope: &Scope) -> Result<PathBuf, HookerError> {
         Ok(match scope {
             Scope::Global => paths::opencode_config_file()?,
-            Scope::Local(p) => p.join(".opencode").join("opencode.json"),
+            Scope::Local(p) => p.join("opencode.json"),
+        })
+    }
+
+    fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
+        Ok(match scope {
+            Scope::Global => paths::home_dir()?
+                .join(".config")
+                .join("opencode")
+                .join("skills"),
+            Scope::Local(p) => p.join(".opencode").join("skills"),
         })
     }
 }
@@ -138,14 +148,21 @@ impl McpSurface for OpenCodeAgent {
     fn is_mcp_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
         McpSpec::validate_name(name)?;
         let ledger = ownership::mcp_ledger_for(&Self::config_path(scope)?);
-        mcp_json_array::is_installed(&ledger, name)
+        mcp_json_map::is_installed(&ledger, name)
     }
 
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::config_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
-        mcp_json_array::install(&cfg, &ledger, spec)
+        mcp_json_map::install(
+            &cfg,
+            &ledger,
+            spec,
+            &["mcp"],
+            mcp_json_map::command_array_value,
+            mcp_json_map::ConfigFormat::Jsonc,
+        )
     }
 
     fn uninstall_mcp(
@@ -158,7 +175,45 @@ impl McpSurface for OpenCodeAgent {
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::config_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
-        mcp_json_array::uninstall(&cfg, &ledger, name, owner_tag, "mcp server")
+        mcp_json_map::uninstall(
+            &cfg,
+            &ledger,
+            name,
+            owner_tag,
+            "mcp server",
+            &["mcp"],
+            mcp_json_map::ConfigFormat::Jsonc,
+        )
+    }
+}
+
+impl SkillSurface for OpenCodeAgent {
+    fn id(&self) -> &'static str {
+        "opencode"
+    }
+
+    fn supported_skill_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Global, ScopeKind::Local]
+    }
+
+    fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+        let root = Self::skills_root(scope)?;
+        skills_dir::is_installed(&root, name)
+    }
+
+    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+        let root = Self::skills_root(scope)?;
+        skills_dir::install(&root, spec)
+    }
+
+    fn uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, HookerError> {
+        let root = Self::skills_root(scope)?;
+        skills_dir::uninstall(&root, name, owner_tag)
     }
 }
 
@@ -273,29 +328,30 @@ mod tests {
     }
 
     #[test]
-    fn install_mcp_appends_to_mcp_array() {
+    fn install_mcp_writes_object_based_mcp() {
         let dir = tempdir().unwrap();
         let agent = OpenCodeAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         agent
             .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
             .unwrap();
-        let cfg = dir.path().join(".opencode/opencode.json");
+        let cfg = dir.path().join("opencode.json");
         assert!(cfg.exists());
         let v = read_json(&cfg);
-        let arr = v["mcp"].as_array().unwrap();
-        assert_eq!(arr.len(), 1);
-        assert_eq!(arr[0]["name"], serde_json::json!("github"));
+        assert_eq!(v["mcp"]["github"]["type"], serde_json::json!("local"));
+        assert_eq!(
+            v["mcp"]["github"]["command"],
+            serde_json::json!(["npx", "-y", "@example/server"])
+        );
     }
 
     #[test]
     fn install_mcp_coexists_with_user_mcp_entries() {
         let dir = tempdir().unwrap();
-        let cfg = dir.path().join(".opencode/opencode.json");
-        std::fs::create_dir_all(cfg.parent().unwrap()).unwrap();
+        let cfg = dir.path().join("opencode.json");
         std::fs::write(
             &cfg,
-            r#"{ "mcp": [ { "name": "user", "command": "user-cmd" } ] }"#,
+            r#"{ "mcp": { "user": { "type": "local", "command": ["user-cmd"] } } }"#,
         )
         .unwrap();
         let agent = OpenCodeAgent::new();
@@ -304,8 +360,39 @@ mod tests {
             .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
             .unwrap();
         let v = read_json(&cfg);
-        let arr = v["mcp"].as_array().unwrap();
-        assert_eq!(arr.len(), 2);
+        assert_eq!(v["mcp"]["user"]["command"], serde_json::json!(["user-cmd"]));
+        assert_eq!(v["mcp"]["github"]["type"], serde_json::json!("local"));
+    }
+
+    #[test]
+    fn install_mcp_reads_jsonc_with_comments_and_trailing_commas() {
+        let dir = tempdir().unwrap();
+        let cfg = dir.path().join("opencode.json");
+        std::fs::write(
+            &cfg,
+            r#"{
+  // existing OpenCode config
+  "mcp": {
+    "user": {
+      "type": "remote",
+      "url": "https://example.com/mcp",
+    },
+  },
+}
+"#,
+        )
+        .unwrap();
+        let agent = OpenCodeAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
+        let v = read_json(&cfg);
+        assert_eq!(
+            v["mcp"]["user"]["url"],
+            serde_json::json!("https://example.com/mcp")
+        );
+        assert_eq!(v["mcp"]["github"]["type"], serde_json::json!("local"));
     }
 
     #[test]
@@ -331,7 +418,7 @@ mod tests {
             .unwrap();
         // Plugin file and MCP config are separate.
         assert!(dir.path().join(".opencode/plugins/alpha.ts").exists());
-        assert!(dir.path().join(".opencode/opencode.json").exists());
+        assert!(dir.path().join("opencode.json").exists());
     }
 
     #[test]
@@ -356,6 +443,6 @@ mod tests {
             .unwrap();
         agent.uninstall_mcp(&scope, "github", "myapp").unwrap();
         // Empty config gets removed.
-        assert!(!dir.path().join(".opencode/opencode.json").exists());
+        assert!(!dir.path().join("opencode.json").exists());
     }
 }

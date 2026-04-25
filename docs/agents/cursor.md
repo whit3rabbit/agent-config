@@ -105,9 +105,16 @@ integration, which Cursor also reads.
 
 **Important:** Changes to MCP config require restarting Cursor to take effect.
 
-## Skills — Not yet implemented
+## Skills
 
-Cursor supports Agent Skills in nightly builds only. Not yet wired up in `ai-hooker`.
+| Scope | Path |
+| --- | --- |
+| User | `~/.cursor/skills/<name>/` |
+| Project | `.cursor/skills/<name>/` |
+
+Each skill is a directory containing `SKILL.md` with required `name` and
+`description` frontmatter, plus optional `scripts/`, `references/`, and
+`assets/` subdirectories.
 
 ## References
 

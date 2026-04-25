@@ -88,9 +88,23 @@ against the current task.
 Antigravity has a dedicated `<root>/.agent/workflows/` directory. Not yet
 wired up. See [`CLAUDE.md`](../../CLAUDE.md).
 
-## MCP servers — Not applicable
+## MCP servers
 
-MCP servers are not a separate configuration surface for Antigravity.
+### User scope (`Scope::Global`)
+
+| | |
+| --- | --- |
+| File | `~/.gemini/antigravity/mcp_config.json` |
+| Format | JSON |
+| Key | `mcpServers` |
+
+### Project scope (`Scope::Local(<root>)`)
+
+| | |
+| --- | --- |
+| File | `<root>/.agent/mcp_config.json` |
+| Format | JSON |
+| Key | `mcpServers` |
 
 ## References
 
@@ -98,3 +112,4 @@ MCP servers are not a separate configuration surface for Antigravity.
 - <https://antigravity.google/docs/skills>
 - <https://codelabs.developers.google.com/getting-started-with-antigravity-skills>
 - <https://codelabs.developers.google.com/getting-started-google-antigravity>
+- <https://www.devopness.com/docsmcp/antigravity/>

@@ -55,8 +55,7 @@ impl ClaudeAgent {
 
     /// Path to the MCP config file for the given scope.
     ///
-    /// Global → `~/.claude/mcp.json`. We deliberately avoid `~/.claude.json`,
-    /// which is the conversation transcript file.
+    /// Global → `~/.claude.json`.
     ///
     /// Local → `<root>/.mcp.json` (the canonical project-shared MCP file
     /// Anthropic's own CLI writes; *not* under `.claude/`).
@@ -98,9 +97,9 @@ impl Integration for ClaudeAgent {
     fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError> {
         let settings = Self::settings_path(scope)?;
         let root = json_patch::read_or_empty(&settings)?;
-        Ok(json_patch::contains_tagged(
+        Ok(json_patch::contains_tagged_array_entry_under(
             &root,
-            &["hooks", "PreToolUse"],
+            &["hooks"],
             tag,
         ))
     }
@@ -170,12 +169,8 @@ impl Integration for ClaudeAgent {
         let settings = Self::settings_path(scope)?;
         if settings.exists() {
             let mut root = json_patch::read_or_empty(&settings)?;
-            let mut changed = false;
-            for event_key in ["PreToolUse", "PostToolUse"] {
-                if json_patch::remove_tagged_array_entry(&mut root, &["hooks", event_key], tag)? {
-                    changed = true;
-                }
-            }
+            let changed =
+                json_patch::remove_tagged_array_entries_under(&mut root, &["hooks"], tag)?;
             if changed {
                 let is_now_empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
                 if is_now_empty && fs_atomic::restore_backup(&settings)? {

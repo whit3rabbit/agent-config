@@ -1,26 +1,29 @@
 //! Public-API smoke test for the MCP surface — parallel to `tests/registry.rs`.
 
-use ai_hooker::{mcp_by_id, mcp_capable, McpSpec, Scope};
+use ai_hooker::{mcp_by_id, mcp_capable, McpSpec, Scope, ScopeKind};
 use std::collections::HashSet;
 
 #[test]
-fn mcp_capable_includes_every_pr1_agent() {
+fn mcp_capable_includes_every_file_backed_agent() {
     let ids: HashSet<_> = mcp_capable().into_iter().map(|i| i.id()).collect();
-    for expected in ["claude", "cursor", "gemini", "codex", "opencode"] {
+    for expected in [
+        "claude",
+        "cursor",
+        "gemini",
+        "openclaw",
+        "hermes",
+        "codex",
+        "copilot",
+        "opencode",
+        "cline",
+        "roo",
+        "windsurf",
+        "kilocode",
+        "antigravity",
+    ] {
         assert!(
             ids.contains(expected),
             "missing MCP-capable integration: {expected}"
-        );
-    }
-}
-
-#[test]
-fn mcp_capable_excludes_prompt_only_agents() {
-    let ids: HashSet<_> = mcp_capable().into_iter().map(|i| i.id()).collect();
-    for not_expected in ["copilot", "cline", "roo", "kilocode", "antigravity"] {
-        assert!(
-            !ids.contains(not_expected),
-            "{not_expected} unexpectedly appears in mcp_capable"
         );
     }
 }
@@ -40,7 +43,21 @@ fn mcp_capable_subset_of_all_integrations() {
 
 #[test]
 fn mcp_by_id_returns_each_agent() {
-    for id in ["claude", "cursor", "gemini", "codex", "opencode"] {
+    for id in [
+        "claude",
+        "cursor",
+        "gemini",
+        "openclaw",
+        "hermes",
+        "codex",
+        "copilot",
+        "opencode",
+        "cline",
+        "roo",
+        "windsurf",
+        "kilocode",
+        "antigravity",
+    ] {
         let agent = mcp_by_id(id).expect(id);
         assert_eq!(agent.id(), id);
     }
@@ -48,11 +65,6 @@ fn mcp_by_id_returns_each_agent() {
 
 #[test]
 fn mcp_by_id_returns_none_for_unsupported() {
-    // Cline doesn't implement MCP.
-    assert!(mcp_by_id("cline").is_none());
-    // Copilot doesn't implement MCP.
-    assert!(mcp_by_id("copilot").is_none());
-    // Bogus id.
     assert!(mcp_by_id("does-not-exist").is_none());
 }
 
@@ -67,7 +79,18 @@ fn full_mcp_round_trip_per_agent() {
         .env("FOO", "bar")
         .build();
 
-    for id in ["claude", "cursor", "gemini", "codex", "opencode"] {
+    for id in [
+        "claude",
+        "cursor",
+        "gemini",
+        "codex",
+        "copilot",
+        "opencode",
+        "roo",
+        "windsurf",
+        "kilocode",
+        "antigravity",
+    ] {
         let agent = mcp_by_id(id).expect(id);
 
         // First install.
@@ -104,6 +127,58 @@ fn full_mcp_round_trip_per_agent() {
             "{id} should not detect uninstalled server"
         );
     }
+}
+
+#[test]
+fn mcp_scope_sets_match_agent_contracts() {
+    let cline = mcp_by_id("cline").unwrap();
+    assert_eq!(cline.supported_mcp_scopes(), &[ScopeKind::Global]);
+
+    for id in ["openclaw", "hermes"] {
+        let agent = mcp_by_id(id).unwrap();
+        assert_eq!(agent.supported_mcp_scopes(), &[ScopeKind::Global], "{id}");
+    }
+
+    let copilot = mcp_by_id("copilot").unwrap();
+    assert!(copilot.supported_mcp_scopes().contains(&ScopeKind::Global));
+    assert!(copilot.supported_mcp_scopes().contains(&ScopeKind::Local));
+
+    for id in ["roo", "kilocode", "antigravity", "windsurf"] {
+        let agent = mcp_by_id(id).unwrap();
+        let scopes = agent.supported_mcp_scopes();
+        assert!(scopes.contains(&ScopeKind::Global), "{id}");
+        assert!(scopes.contains(&ScopeKind::Local), "{id}");
+    }
+}
+
+#[test]
+fn mcp_install_rejects_unsupported_scope() {
+    let dir = tempfile::tempdir().unwrap();
+    let local = Scope::Local(dir.path().to_path_buf());
+    let spec = McpSpec::builder("smoketest-server")
+        .owner("smoketest-app")
+        .stdio("npx", ["-y", "@example/server"])
+        .build();
+
+    for id in ["cline", "openclaw", "hermes"] {
+        let agent = mcp_by_id(id).unwrap();
+        let err = agent.install_mcp(&local, &spec).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ai_hooker::HookerError::UnsupportedScope {
+                    scope: ScopeKind::Local,
+                    ..
+                }
+            ),
+            "{id} should reject local MCP install"
+        );
+    }
+
+    assert!(mcp_by_id("copilot")
+        .unwrap()
+        .supported_mcp_scopes()
+        .contains(&ScopeKind::Global));
 }
 
 #[test]

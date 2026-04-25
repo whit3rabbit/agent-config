@@ -1,124 +1,71 @@
-# OpenClaw — STUB
+# OpenClaw
 
-**Status:** deferred from v0.1. Not registered with `ai_hooker::by_id`.
+**ID:** `openclaw`
 
-## Why deferred
+**Status:** registered. Native OpenClaw plugin and hook-pack installation is
+deferred because upstream documents it as `openclaw plugins install` lifecycle
+work, not a stable file-backed hook contract.
 
-OpenClaw's plugin contract differs structurally from every other harness in
-this crate:
+## Prompt
 
-1. **Manifest required.** A plugin needs `openclaw.plugin.json` with `id` and
-   `configSchema` (a JSON Schema). Optional fields include `kind`, `channels`,
-   `providers`, `skills`, plus ~25 others.
-2. **Entry registered via `package.json`.** The TS entry is declared under
-   `"openclaw": { "extensions": ["./index.ts"] }` in `package.json`, not
-   the manifest.
-3. **CLI install step.** Plugins are normally installed via
-   `openclaw plugins install <pkg>` (resolves through ClawHub or npm),
-   not by dropping a file into a directory.
-4. **Different hook semantics.** `before_tool_call` returns
-   `{ block, requireApproval }`, not a generic mutate-args hook like
-   OpenCode's `tool.execute.before`.
+OpenClaw project instructions use the workspace `AGENTS.md` file.
 
-A correct integration likely shells out to `openclaw plugins install`, not
-the file-drop pattern this library otherwise uses.
-
-## Plugin structure
-
-A complete OpenClaw plugin requires three files:
-
-### openclaw.plugin.json
-
-```json
-{
-  "id": "myorg.myplugin",
-  "name": "My Plugin",
-  "description": "Plugin description",
-  "version": "1.0.0",
-  "configSchema": {
-    "type": "object",
-    "properties": {}
-  },
-  "channels": ["..."],
-  "providers": ["..."],
-  "skills": ["..."],
-  "kind": "..."
-}
-```
-
-**Required fields:**
-
-- `id`: Canonical plugin identifier (reverse domain notation)
-- `configSchema`: JSON Schema object (may be empty: `{}`)
-
-**Optional fields:**
-
-- `name`, `description`, `version`
-- `channels`: Communication channels (Slack, Teams, Discord, etc.)
-- `providers`: AI/capability providers (speech, transcription, voice, media understanding, image generation, video generation, web fetch, web search, etc.)
-- `skills`: Custom agent skills
-- Additional metadata and capability contracts
-
-### package.json
-
-```json
-{
-  "name": "myorg-myplugin",
-  "version": "1.0.0",
-  "main": "dist/index.js",
-  "openclaw": {
-    "extensions": ["./index.ts"]
-  }
-}
-```
-
-Entry points declared under `"openclaw": { "extensions": [...] }`.
-
-### index.ts
-
-TypeScript plugin implementation with hook subscriptions.
-
-## Installation model
-
-Plugins are installed via the CLI, **not** file-drop:
-
-```bash
-openclaw plugins install <package-name>
-openclaw plugins uninstall <package-name>
-```
-
-Plugins resolve through **ClawHub** (OpenClaw marketplace) or **npm**.
-
-## Hook semantics
-
-OpenClaw hooks differ from other harnesses:
-
-```typescript
-before_tool_call: {
-  block: boolean,
-  requireApproval: boolean
-}
-```
-
-Not a generic mutate-args model; instead a blocking/approval contract.
-
-## Planned shape (if file-drop implemented)
-
-If/when `ai-hooker` adds OpenClaw support via file-drop (instead of CLI):
-
-| | |
+| Scope | File |
 | --- | --- |
-| User scope | `~/.openclaw/<plugin-root>/<tag>/` |
-| Project scope | `<root>/.openclaw/<plugin-root>/<tag>/` |
+| Local | `<root>/AGENTS.md` |
 
-The exact `<plugin-root>` segment is configurable in OpenClaw's settings.
+`ai-hooker` inserts a fenced markdown block keyed by the consumer tag. Global
+prompt install is unsupported.
 
-**Note:** File-drop approach would need to generate `package.json`, `openclaw.plugin.json`,
-and plugin source, then trigger or assume a separate `openclaw plugins install` step.
+## MCP
+
+OpenClaw stores outbound MCP server definitions in its JSON5 config under
+`mcp.servers`.
+
+| Scope | File | Shape |
+| --- | --- | --- |
+| Global | `~/.openclaw/openclaw.json` | `mcp.servers.<name>` |
+
+MCP is global-only in this crate. Local MCP install returns
+`HookerError::UnsupportedScope`.
+
+Transport mapping:
+
+- `Stdio`: `command`, `args`, optional `env`
+- `Http`: `url`, optional `headers`, `transport: "streamable-http"`
+- `Sse`: `url`, optional `headers`, `transport: "sse"`
+
+OpenClaw also has `openclaw mcp set/unset`; this crate writes the documented
+config shape directly and records ownership in `.ai-hooker-mcp.json` beside
+the config.
+
+## Skills
+
+OpenClaw loads AgentSkills-compatible skill folders from several roots. The
+crate writes these roots:
+
+| Scope | Root |
+| --- | --- |
+| Global | `~/.openclaw/skills/<name>/` |
+| Local | `<root>/.agents/skills/<name>/` |
+
+Each skill directory contains `SKILL.md` plus optional caller-supplied
+`scripts/`, `references/`, and `assets/`.
+
+## Deferred Hooks And Plugins
+
+OpenClaw native plugins require `openclaw.plugin.json`, `package.json`, and a
+runtime entrypoint, and are normally installed with `openclaw plugins install`.
+Hook packs participate in that plugin install surface. `ai-hooker` does not
+shell out to the OpenClaw CLI in this pass.
 
 ## References
 
-- <https://docs.openclaw.ai/plugins/>
+- <https://docs.openclaw.ai/tools/plugin>
 - <https://docs.openclaw.ai/plugins/manifest>
-- <https://docs.openclaw.ai/plugins/before-tool-call>
-- <https://github.com/openclaw/openclaw>
+- <https://docs.openclaw.ai/cli/mcp>
+- <https://docs.openclaw.ai/tools/skills>
+- <https://docs.openclaw.ai/tools/creating-skills>
+- <https://docs.openclaw.ai/reference/templates/AGENTS>
+
+Accessed: 2026-04-25.

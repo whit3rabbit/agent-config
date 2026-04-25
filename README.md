@@ -1,13 +1,12 @@
 # ai-hooker
 
-A Rust library that installs hooks and prompt-level integrations into AI
-coding harnesses (Claude Code, Cursor, Gemini CLI, Codex, Copilot, OpenCode,
-Cline, Roo, Windsurf, Kilo Code, Antigravity).
+A Rust library that installs hooks, prompt rules, MCP servers, and skills into
+AI coding harnesses (Claude Code, Cursor, Gemini CLI, OpenClaw, Hermes Agent,
+Codex, Copilot, OpenCode, Cline, Roo, Windsurf, Kilo Code, Antigravity).
 
-You supply a `HookSpec` describing the command to run, the event to attach
-to, and any rules markdown to inject. The library knows where each harness
-keeps its config, what shape that config takes, and how to write to it
-safely.
+You supply a `HookSpec`, `McpSpec`, or `SkillSpec`. The library knows where
+each harness keeps its config, what shape that config takes, and how to write
+to it safely.
 
 ## What this is
 
@@ -24,31 +23,34 @@ Safety guarantees that apply to every integration:
   `<path>.bak` sibling. If a `.bak` already exists we refuse to clobber it.
 - **Idempotent.** Calling `install` twice with the same spec is a no-op
   after the first.
-- **Reversible.** `uninstall` removes only the tagged content. JSON entries
-  carry an `_ai_hooker_tag` marker; markdown blocks are wrapped in
+- **Reversible.** `uninstall` removes only the tagged content. Hook JSON
+  entries carry an `_ai_hooker_tag` marker; markdown blocks are wrapped in
   `<!-- BEGIN AI-HOOKER:<tag> --> ... <!-- END AI-HOOKER:<tag> -->`
-  fences. Multiple consumers coexist without stepping on each other.
+  fences. MCP servers and skills use sidecar ledgers. Multiple consumers
+  coexist without stepping on each other.
 
 ## What is supported
 
 | Harness                | ID            | Hooks              | Prompt rules | MCP    | Skills |
 | ---------------------- | ------------- | ------------------ | ------------ | ------ | ------ |
-| Claude Code            | `claude`      | Global + Local     | yes          | TODO   | TODO   |
-| Cursor                 | `cursor`      | Global + Local     | -            | TODO   | -      |
-| Gemini CLI             | `gemini`      | Global + Local     | yes          | TODO   | -      |
-| Codex CLI              | `codex`       | Global + Local     | yes          | TODO   | -      |
-| GitHub Copilot         | `copilot`     | Local              | yes          | -      | -      |
-| OpenCode               | `opencode`    | Global + Local     | yes          | TODO   | -      |
-| Cline                  | `cline`       | -                  | yes          | -      | -      |
-| Roo Code               | `roo`         | -                  | yes          | -      | -      |
-| Windsurf               | `windsurf`    | -                  | yes          | -      | -      |
-| Kilo Code              | `kilocode`    | -                  | yes          | -      | -      |
-| Google Antigravity     | `antigravity` | -                  | yes          | -      | TODO   |
+| Claude Code            | `claude`      | Global + Local     | yes          | Global + Local | Global + Local |
+| Cursor                 | `cursor`      | Global + Local     | -            | Global + Local | Global + Local |
+| Gemini CLI             | `gemini`      | Global + Local     | yes          | Global + Local | Global + Local |
+| OpenClaw               | `openclaw`    | -                  | yes (Local)  | Global | Global + Local |
+| Hermes Agent           | `hermes`      | -                  | yes (Local)  | Global | Global |
+| Codex CLI              | `codex`       | Global + Local     | yes          | Global + Local | Global + Local |
+| GitHub Copilot         | `copilot`     | Local              | yes          | Global + Local | Global + Local |
+| OpenCode               | `opencode`    | Global + Local     | -            | Global + Local | Global + Local |
+| Cline                  | `cline`       | Local              | yes          | Global | Global + Local |
+| Roo Code               | `roo`         | -                  | yes          | Global + Local | -      |
+| Windsurf               | `windsurf`    | Local              | yes          | Global + Local | Global + Local |
+| Kilo Code              | `kilocode`    | -                  | yes          | Global + Local | Global + Local |
+| Google Antigravity     | `antigravity` | -                  | yes          | Global + Local | Global + Local |
 
 Per-harness install paths, JSON shapes, and event/matcher mappings are
-documented in [`docs/agents/`](docs/agents/README.md). MCP server
-registration and skill installation are confirmed but not yet implemented;
-see [`CLAUDE.md`](CLAUDE.md) for the roadmap.
+documented in [`docs/agents/`](docs/agents/README.md). Native OpenClaw
+hook/plugin installation is still deferred because upstream exposes that as a
+CLI-managed plugin lifecycle rather than a stable file-backed hook contract.
 
 ## How to use it in your Rust app
 
@@ -123,6 +125,28 @@ if report.not_installed {
 Uninstall is keyed only on the tag, so callers do not need to remember
 the original `HookSpec`.
 
+### Install an MCP server
+
+```rust
+use ai_hooker::{mcp_by_id, McpSpec, Scope};
+
+fn main() -> ai_hooker::Result<()> {
+    let spec = McpSpec::builder("github")
+        .owner("myapp")
+        .stdio("npx", ["-y", "@modelcontextprotocol/server-github"])
+        .env("GITHUB_TOKEN", "secret")
+        .build();
+
+    let codex = mcp_by_id("codex").expect("codex supports MCP");
+    codex.install_mcp(&Scope::Global, &spec)?;
+    Ok(())
+}
+```
+
+MCP uninstall is keyed by server name plus owner tag. If another consumer owns
+the server, or the server was hand-installed and has no ownership ledger entry,
+`uninstall_mcp` returns `HookerError::NotOwnedByCaller`.
+
 ### Iterate every supported harness
 
 ```rust
@@ -139,6 +163,10 @@ for integration in all() {
 accepts. Copilot, for example, is `Local` only; calling `install` on it
 with `Scope::Global` returns `HookerError::UnsupportedScope`.
 
+Use `mcp_capable()` / `mcp_by_id()` for MCP support and `skill_capable()` /
+`skill_by_id()` for skills. Their scope sets can differ from hook support:
+Cline hooks are local-only, while Cline MCP is global-only.
+
 ### Errors
 
 All operations return `Result<T, HookerError>`. Variants worth handling
@@ -150,6 +178,8 @@ explicitly:
 - `InvalidTag` — empty or contains characters outside `[A-Za-z0-9_-]`.
 - `BackupExists` — a `<path>.bak` is already present; the library refuses
   to overwrite it. Resolve manually before retrying.
+- `NotOwnedByCaller` — an MCP server or skill is owned by another consumer or
+  was hand-installed without an ai-hooker ledger entry.
 - `Io` and `JsonInvalid` carry the offending path.
 
 ## License

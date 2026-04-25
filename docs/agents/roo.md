@@ -42,15 +42,33 @@ takes precedence in case of conflicts).
 | Format | Standard Markdown |
 | Enable/disable | `"roo-cline.useAgentRules": false` in settings |
 
-## MCP servers — Not supported
+## MCP servers
 
-Roo Code does not support MCP servers.
+### User scope (`Scope::Global`)
 
-## Skills — Not supported
+| | |
+| --- | --- |
+| File | `~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json` on macOS |
+| Format | JSON |
+| Key | `mcpServers` |
 
-Roo Code does not support skills.
+### Project scope (`Scope::Local(<root>)`)
+
+| | |
+| --- | --- |
+| File | `<root>/.roo/mcp.json` |
+| Format | JSON |
+| Key | `mcpServers` |
+
+## Skills — Not registered
+
+No official Roo Code skill path has been identified, so Roo is intentionally
+left out of `SkillSurface`. Roo's own docs also describe a product sunset on
+May 15, 2026, which makes new surface work lower priority than registered,
+actively documented skill harnesses.
 
 ## References
 
 - <https://docs.roocode.com/features/custom-instructions>
+- <https://docs.roocode.com/features/mcp/using-mcp-in-roo>
 - <https://docs.roocode.com/update-notes/v3.47.0>

@@ -27,11 +27,11 @@ use serde_json::json;
 use toml_edit::{value, Array, InlineTable, Table};
 
 use crate::error::HookerError;
-use crate::integration::{InstallReport, Integration, McpSurface, UninstallReport};
+use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{Event, HookSpec, Matcher, McpSpec, McpTransport};
-use crate::util::{fs_atomic, json_patch, md_block, ownership, toml_patch};
+use crate::spec::{Event, HookSpec, Matcher, McpSpec, McpTransport, SkillSpec};
+use crate::util::{fs_atomic, json_patch, md_block, ownership, skills_dir, toml_patch};
 
 /// Codex CLI.
 pub struct CodexAgent;
@@ -64,6 +64,13 @@ impl CodexAgent {
             Scope::Local(p) => p.join(".codex").join("config.toml"),
         })
     }
+
+    fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
+        Ok(match scope {
+            Scope::Global => paths::home_dir()?.join(".agents").join("skills"),
+            Scope::Local(p) => p.join(".agents").join("skills"),
+        })
+    }
 }
 
 impl Default for CodexAgent {
@@ -88,9 +95,9 @@ impl Integration for CodexAgent {
     fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError> {
         let p = Self::hooks_path(scope)?;
         let root = json_patch::read_or_empty(&p)?;
-        Ok(json_patch::contains_tagged(
+        Ok(json_patch::contains_tagged_array_entry_under(
             &root,
-            &["hooks", "PreToolUse"],
+            &["hooks"],
             tag,
         ))
     }
@@ -159,12 +166,8 @@ impl Integration for CodexAgent {
         let p = Self::hooks_path(scope)?;
         if p.exists() {
             let mut root = json_patch::read_or_empty(&p)?;
-            let mut changed = false;
-            for event_key in ["PreToolUse", "PostToolUse"] {
-                if json_patch::remove_tagged_array_entry(&mut root, &["hooks", event_key], tag)? {
-                    changed = true;
-                }
-            }
+            let changed =
+                json_patch::remove_tagged_array_entries_under(&mut root, &["hooks"], tag)?;
             if changed {
                 let empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
                 if empty && fs_atomic::restore_backup(&p)? {
@@ -226,6 +229,15 @@ impl McpSurface for CodexAgent {
         let ledger = ownership::mcp_ledger_for(&cfg);
 
         let mut doc = toml_patch::read_or_empty(&cfg)?;
+        let in_config = toml_patch::contains_named_table(&doc, &["mcp_servers"], &spec.name);
+        ownership::require_owner(
+            &ledger,
+            &spec.name,
+            &spec.owner_tag,
+            "mcp server",
+            in_config,
+        )?;
+
         let table = build_mcp_table(spec);
         let changed =
             toml_patch::upsert_named_table(&mut doc, &["mcp_servers"], &spec.name, table)?;
@@ -302,6 +314,36 @@ impl McpSurface for CodexAgent {
             report.not_installed = true;
         }
         Ok(report)
+    }
+}
+
+impl SkillSurface for CodexAgent {
+    fn id(&self) -> &'static str {
+        "codex"
+    }
+
+    fn supported_skill_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Global, ScopeKind::Local]
+    }
+
+    fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+        let root = Self::skills_root(scope)?;
+        skills_dir::is_installed(&root, name)
+    }
+
+    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+        let root = Self::skills_root(scope)?;
+        skills_dir::install(&root, spec)
+    }
+
+    fn uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, HookerError> {
+        let root = Self::skills_root(scope)?;
+        skills_dir::uninstall(&root, name, owner_tag)
     }
 }
 
@@ -528,6 +570,40 @@ mod tests {
         agent.install_mcp(&scope, &s).unwrap();
         let r = agent.install_mcp(&scope, &s).unwrap();
         assert!(r.already_installed);
+    }
+
+    #[test]
+    fn install_mcp_owner_mismatch_refused() {
+        let dir = tempdir().unwrap();
+        let agent = CodexAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "appA"))
+            .unwrap();
+        let err = agent
+            .install_mcp(&scope, &local_mcp_spec("github", "appB"))
+            .unwrap_err();
+        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+    }
+
+    #[test]
+    fn install_mcp_refuses_hand_installed_same_name() {
+        let dir = tempdir().unwrap();
+        let cfg = dir.path().join(".codex/config.toml");
+        std::fs::create_dir_all(cfg.parent().unwrap()).unwrap();
+        std::fs::write(&cfg, "[mcp_servers.github]\ncommand = \"user-cmd\"\n").unwrap();
+
+        let agent = CodexAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let err = agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            HookerError::NotOwnedByCaller { actual: None, .. }
+        ));
+        let s = read_toml(&cfg);
+        assert!(s.contains("user-cmd"));
     }
 
     #[test]

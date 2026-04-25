@@ -19,11 +19,11 @@ use std::path::PathBuf;
 use serde_json::{json, Value};
 
 use crate::error::HookerError;
-use crate::integration::{InstallReport, Integration, McpSurface, UninstallReport};
+use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{Event, HookSpec, Matcher, McpSpec};
-use crate::util::{fs_atomic, json_patch, mcp_json_object, ownership};
+use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
+use crate::util::{fs_atomic, json_patch, mcp_json_object, ownership, skills_dir};
 
 /// Cursor (the AI editor and CLI).
 pub struct CursorAgent;
@@ -45,6 +45,13 @@ impl CursorAgent {
         Ok(match scope {
             Scope::Global => paths::cursor_mcp_user_file()?,
             Scope::Local(p) => p.join(".cursor").join("mcp.json"),
+        })
+    }
+
+    fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
+        Ok(match scope {
+            Scope::Global => paths::cursor_home()?.join("skills"),
+            Scope::Local(p) => p.join(".cursor").join("skills"),
         })
     }
 }
@@ -71,9 +78,9 @@ impl Integration for CursorAgent {
     fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError> {
         let p = Self::hooks_path(scope)?;
         let root = json_patch::read_or_empty(&p)?;
-        Ok(json_patch::contains_tagged(
+        Ok(json_patch::contains_tagged_array_entry_under(
             &root,
-            &["hooks", "preToolUse"],
+            &["hooks"],
             tag,
         ))
     }
@@ -136,12 +143,7 @@ impl Integration for CursorAgent {
         }
 
         let mut root = json_patch::read_or_empty(&p)?;
-        let mut changed = false;
-        for event_key in ["preToolUse", "postToolUse"] {
-            if json_patch::remove_tagged_array_entry(&mut root, &["hooks", event_key], tag)? {
-                changed = true;
-            }
-        }
+        let changed = json_patch::remove_tagged_array_entries_under(&mut root, &["hooks"], tag)?;
 
         if !changed {
             report.not_installed = true;
@@ -198,6 +200,36 @@ impl McpSurface for CursorAgent {
         let cfg = Self::mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::uninstall(&cfg, &ledger, name, owner_tag, "mcp server")
+    }
+}
+
+impl SkillSurface for CursorAgent {
+    fn id(&self) -> &'static str {
+        "cursor"
+    }
+
+    fn supported_skill_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Global, ScopeKind::Local]
+    }
+
+    fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+        let root = Self::skills_root(scope)?;
+        skills_dir::is_installed(&root, name)
+    }
+
+    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+        let root = Self::skills_root(scope)?;
+        skills_dir::install(&root, spec)
+    }
+
+    fn uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, HookerError> {
+        let root = Self::skills_root(scope)?;
+        skills_dir::uninstall(&root, name, owner_tag)
     }
 }
 

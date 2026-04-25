@@ -1,5 +1,5 @@
 //! Shared MCP installer for harnesses that key servers by name in a JSON
-//! object (Claude, Cursor, Gemini, Windsurf).
+//! object (Claude, Cursor, Gemini, Cline, Roo, Windsurf, Antigravity).
 //!
 //! Each harness has its own config-file path, but the on-disk shape is
 //! identical:
@@ -16,15 +16,12 @@
 
 use std::path::Path;
 
-use serde_json::{Map, Value};
-
 use crate::error::HookerError;
 use crate::integration::{InstallReport, UninstallReport};
-use crate::spec::{McpSpec, McpTransport};
-use crate::util::{fs_atomic, json_patch, ownership};
+use crate::spec::McpSpec;
+use crate::util::{mcp_json_map, ownership};
 
-/// Top-level key under which named server entries live. Every supported
-/// harness uses `mcpServers`.
+/// Top-level key under which named server entries live for this helper.
 const SERVERS_KEY: &str = "mcpServers";
 const SERVERS_PATH: &[&str] = &[SERVERS_KEY];
 
@@ -41,37 +38,14 @@ pub(crate) fn install(
     ledger_path: &Path,
     spec: &McpSpec,
 ) -> Result<InstallReport, HookerError> {
-    let mut report = InstallReport::default();
-
-    let mut root = json_patch::read_or_empty(config_path)?;
-    let value = build_server_value(spec);
-    let changed =
-        json_patch::upsert_named_object_entry(&mut root, SERVERS_PATH, &spec.name, value)?;
-
-    let prior_owner = ownership::owner_of(ledger_path, &spec.name)?;
-    let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
-
-    if changed {
-        let bytes = json_patch::to_pretty(&root);
-        let outcome = fs_atomic::write_atomic(config_path, &bytes, true)?;
-        if outcome.existed {
-            report.patched.push(outcome.path.clone());
-        } else {
-            report.created.push(outcome.path.clone());
-        }
-        if let Some(b) = outcome.backup {
-            report.backed_up.push(b);
-        }
-    }
-
-    if changed || owner_changed {
-        ownership::record_install(ledger_path, &spec.name, &spec.owner_tag)?;
-    }
-
-    if !changed && !owner_changed {
-        report.already_installed = true;
-    }
-    Ok(report)
+    mcp_json_map::install(
+        config_path,
+        ledger_path,
+        spec,
+        SERVERS_PATH,
+        mcp_json_map::mcp_servers_value,
+        mcp_json_map::ConfigFormat::Json,
+    )
 }
 
 /// Uninstall the server identified by `name`. Refuses if the recorded owner
@@ -84,96 +58,22 @@ pub(crate) fn uninstall(
     owner_tag: &str,
     kind: &'static str,
 ) -> Result<UninstallReport, HookerError> {
-    let mut report = UninstallReport::default();
-
-    let mut root = json_patch::read_or_empty(config_path)?;
-    let in_config = json_patch::contains_named(&root, SERVERS_PATH, name);
-    let in_ledger = ownership::contains(ledger_path, name)?;
-
-    if !in_config && !in_ledger {
-        report.not_installed = true;
-        return Ok(report);
-    }
-
-    ownership::require_owner(ledger_path, name, owner_tag, kind, in_config)?;
-
-    if in_config {
-        let removed = json_patch::remove_named_object_entry(&mut root, SERVERS_PATH, name)?;
-        debug_assert!(removed);
-
-        let now_empty = root.as_object().map(Map::is_empty).unwrap_or(true);
-        if now_empty && fs_atomic::restore_backup(config_path)? {
-            report.restored.push(config_path.to_path_buf());
-        } else if now_empty {
-            fs_atomic::remove_if_exists(config_path)?;
-            report.removed.push(config_path.to_path_buf());
-        } else {
-            let bytes = json_patch::to_pretty(&root);
-            fs_atomic::write_atomic(config_path, &bytes, false)?;
-            report.patched.push(config_path.to_path_buf());
-        }
-    }
-
-    ownership::record_uninstall(ledger_path, name)?;
-
-    if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
-        report.not_installed = true;
-    }
-    Ok(report)
-}
-
-/// Translate an [`McpSpec`] into the harness's JSON server-entry shape.
-fn build_server_value(spec: &McpSpec) -> Value {
-    match &spec.transport {
-        McpTransport::Stdio { command, args, env } => {
-            let mut obj = Map::new();
-            obj.insert("command".into(), Value::String(command.clone()));
-            obj.insert(
-                "args".into(),
-                Value::Array(args.iter().cloned().map(Value::String).collect()),
-            );
-            if !env.is_empty() {
-                let mut env_obj = Map::new();
-                for (k, v) in env {
-                    env_obj.insert(k.clone(), Value::String(v.clone()));
-                }
-                obj.insert("env".into(), Value::Object(env_obj));
-            }
-            Value::Object(obj)
-        }
-        McpTransport::Http { url, headers } => {
-            let mut obj = Map::new();
-            obj.insert("type".into(), Value::String("http".into()));
-            obj.insert("url".into(), Value::String(url.clone()));
-            if !headers.is_empty() {
-                obj.insert("headers".into(), headers_value(headers));
-            }
-            Value::Object(obj)
-        }
-        McpTransport::Sse { url, headers } => {
-            let mut obj = Map::new();
-            obj.insert("type".into(), Value::String("sse".into()));
-            obj.insert("url".into(), Value::String(url.clone()));
-            if !headers.is_empty() {
-                obj.insert("headers".into(), headers_value(headers));
-            }
-            Value::Object(obj)
-        }
-    }
-}
-
-fn headers_value(headers: &std::collections::BTreeMap<String, String>) -> Value {
-    let mut h = Map::new();
-    for (k, v) in headers {
-        h.insert(k.clone(), Value::String(v.clone()));
-    }
-    Value::Object(h)
+    mcp_json_map::uninstall(
+        config_path,
+        ledger_path,
+        name,
+        owner_tag,
+        kind,
+        SERVERS_PATH,
+        mcp_json_map::ConfigFormat::Json,
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use crate::spec::McpTransport;
+    use serde_json::{json, Value};
     use std::collections::BTreeMap;
     use tempfile::tempdir;
 
@@ -226,18 +126,34 @@ mod tests {
     }
 
     #[test]
-    fn install_replaces_owner_on_change() {
+    fn install_refuses_other_owner() {
         let dir = tempdir().unwrap();
         let (cfg, led) = paths(dir.path());
         install(&cfg, &led, &stdio_spec("github", "appA")).unwrap();
-        let r2 = install(&cfg, &led, &stdio_spec("github", "appB")).unwrap();
-        // owner changed, content same: server payload didn't change but ledger
-        // was updated, so we report it as not-already-installed.
-        assert!(!r2.already_installed);
+        let err = install(&cfg, &led, &stdio_spec("github", "appB")).unwrap_err();
+        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
         assert_eq!(
             ownership::owner_of(&led, "github").unwrap().as_deref(),
-            Some("appB")
+            Some("appA")
         );
+    }
+
+    #[test]
+    fn install_refuses_user_installed_same_name() {
+        let dir = tempdir().unwrap();
+        let (cfg, led) = paths(dir.path());
+        std::fs::write(
+            &cfg,
+            r#"{ "mcpServers": { "github": { "command": "user-cmd" } } }"#,
+        )
+        .unwrap();
+        let err = install(&cfg, &led, &stdio_spec("github", "myapp")).unwrap_err();
+        assert!(matches!(
+            err,
+            HookerError::NotOwnedByCaller { actual: None, .. }
+        ));
+        let v: Value = serde_json::from_slice(&std::fs::read(&cfg).unwrap()).unwrap();
+        assert_eq!(v["mcpServers"]["github"]["command"], json!("user-cmd"));
     }
 
     #[test]

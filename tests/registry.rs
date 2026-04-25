@@ -11,6 +11,8 @@ fn registry_exposes_every_supported_integration() {
         "claude",
         "cursor",
         "gemini",
+        "openclaw",
+        "hermes",
         "codex",
         "copilot",
         "opencode",
@@ -26,7 +28,21 @@ fn registry_exposes_every_supported_integration() {
 
 #[test]
 fn by_id_returns_each_registered_integration() {
-    for id in ["claude", "cursor", "gemini", "codex", "copilot", "opencode"] {
+    for id in [
+        "claude",
+        "cursor",
+        "gemini",
+        "openclaw",
+        "hermes",
+        "codex",
+        "copilot",
+        "opencode",
+        "cline",
+        "roo",
+        "windsurf",
+        "kilocode",
+        "antigravity",
+    ] {
         let agent = by_id(id).expect(id);
         assert_eq!(agent.id(), id);
         assert!(!agent.display_name().is_empty());
@@ -77,6 +93,37 @@ fn full_round_trip_against_a_local_project_for_three_agents() {
 
         // No longer detected.
         assert!(!agent.is_installed(&scope, "smoketest").unwrap(), "{id}");
+    }
+}
+
+#[test]
+fn custom_event_hooks_round_trip_for_json_hook_agents() {
+    let dir = tempfile::tempdir().unwrap();
+    let scope = Scope::Local(dir.path().to_path_buf());
+
+    for id in ["claude", "cursor", "gemini", "codex", "windsurf"] {
+        let agent = by_id(id).expect(id);
+        let spec = HookSpec::builder("customtest")
+            .command("customtest hook")
+            .matcher(Matcher::Bash)
+            .event(Event::Custom("customEvent".into()))
+            .build();
+
+        agent.install(&scope, &spec).unwrap();
+        assert!(
+            agent.is_installed(&scope, "customtest").unwrap(),
+            "{id} should detect custom-event hook"
+        );
+
+        let report = agent.uninstall(&scope, "customtest").unwrap();
+        assert!(
+            !report.removed.is_empty() || !report.patched.is_empty() || !report.restored.is_empty(),
+            "{id} uninstall should remove custom-event hook"
+        );
+        assert!(
+            !agent.is_installed(&scope, "customtest").unwrap(),
+            "{id} should not detect removed custom-event hook"
+        );
     }
 }
 

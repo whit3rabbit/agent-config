@@ -70,9 +70,9 @@ pub(crate) enum IdentifierKind {
     SkillName,
 }
 
-/// Shared identifier validator: must be non-empty and contain only ASCII
-/// alphanumerics, `_`, or `-`. Reasons are static strings so callers preserve
-/// the existing [`HookerError::InvalidTag`] shape.
+/// Shared identifier validator. Hook tags, owner tags, and MCP names allow
+/// ASCII alphanumerics, `_`, and `-`; skill names follow the stricter Agent
+/// Skills kebab-case contract.
 pub(crate) fn validate_identifier(value: &str, kind: IdentifierKind) -> Result<(), HookerError> {
     let (empty, illegal) = match kind {
         IdentifierKind::Tag => (
@@ -89,7 +89,7 @@ pub(crate) fn validate_identifier(value: &str, kind: IdentifierKind) -> Result<(
         ),
         IdentifierKind::SkillName => (
             "skill name must not be empty",
-            "skill name may only contain ASCII letters, digits, '_' and '-'",
+            "skill name must be lowercase ASCII letters/digits with single '-' separators",
         ),
     };
     if value.is_empty() {
@@ -98,6 +98,9 @@ pub(crate) fn validate_identifier(value: &str, kind: IdentifierKind) -> Result<(
             reason: empty,
         });
     }
+    if matches!(kind, IdentifierKind::SkillName) {
+        return validate_skill_name(value);
+    }
     let ok = value
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
@@ -105,6 +108,45 @@ pub(crate) fn validate_identifier(value: &str, kind: IdentifierKind) -> Result<(
         return Err(HookerError::InvalidTag {
             tag: value.into(),
             reason: illegal,
+        });
+    }
+    Ok(())
+}
+
+fn validate_skill_name(name: &str) -> Result<(), HookerError> {
+    const ILLEGAL: &str =
+        "skill name must be lowercase ASCII letters/digits with single '-' separators";
+    if name.len() > 64 {
+        return Err(HookerError::InvalidTag {
+            tag: name.into(),
+            reason: "skill name must be 64 characters or fewer",
+        });
+    }
+    let mut prev_hyphen = false;
+    for (i, c) in name.chars().enumerate() {
+        let ok = c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-';
+        if !ok {
+            return Err(HookerError::InvalidTag {
+                tag: name.into(),
+                reason: ILLEGAL,
+            });
+        }
+        if c == '-' {
+            if i == 0 || prev_hyphen {
+                return Err(HookerError::InvalidTag {
+                    tag: name.into(),
+                    reason: ILLEGAL,
+                });
+            }
+            prev_hyphen = true;
+        } else {
+            prev_hyphen = false;
+        }
+    }
+    if prev_hyphen {
+        return Err(HookerError::InvalidTag {
+            tag: name.into(),
+            reason: ILLEGAL,
         });
     }
     Ok(())
@@ -257,9 +299,9 @@ pub enum ScriptTemplate {
 #[derive(Debug, Clone)]
 pub struct McpSpec {
     /// Server name. Becomes the key in `mcpServers` (Claude/Cursor/Gemini/
-    /// Windsurf), the `name` field within the `mcp` array (OpenCode), or the
-    /// table name `[mcp_servers.<name>]` (Codex). ASCII alnum/`_`/`-`,
-    /// non-empty.
+    /// Windsurf), the `servers` key (Copilot), the object-based `mcp` map
+    /// (OpenCode/Kilo), or the table name `[mcp_servers.<name>]` (Codex).
+    /// ASCII alnum/`_`/`-`, non-empty.
     pub name: String,
 
     /// The consumer of this library that owns the server, recorded in the
@@ -444,8 +486,7 @@ impl McpSpecBuilder {
 #[derive(Debug, Clone)]
 pub struct SkillSpec {
     /// Skill directory name. Becomes the folder under the harness's
-    /// `skills/` root. ASCII alnum/`_`/`-`, non-empty. Conventionally
-    /// kebab-case (e.g., `git-commit-formatter`).
+    /// `skills/` root. Must be lowercase kebab-case, max 64 chars.
     pub name: String,
 
     /// The consumer of this library that owns the skill. Recorded in the

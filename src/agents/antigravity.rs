@@ -9,18 +9,21 @@
 //!    or `~/.gemini/antigravity/skills/<name>/` (Global). Each skill is a
 //!    folder with `SKILL.md` plus optional `scripts/`/`references/`/`assets/`.
 //!
-//! Antigravity does not yet expose a hooks or MCP surface in the
-//! way other harnesses do; this agent does not implement
-//! [`McpSurface`](crate::McpSurface).
+//! 3. **MCP servers** — JSON config at `.agent/mcp_config.json` (Local) or
+//!    `~/.gemini/antigravity/mcp_config.json` (Global), keyed by server name
+//!    under `mcpServers`.
+//!
+//! Antigravity does not yet expose a hooks surface in the way other harnesses
+//! do.
 
 use std::path::PathBuf;
 
 use crate::error::HookerError;
-use crate::integration::{InstallReport, Integration, SkillSurface, UninstallReport};
+use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{HookSpec, SkillSpec};
-use crate::util::{rules_dir, skills_dir};
+use crate::spec::{HookSpec, McpSpec, SkillSpec};
+use crate::util::{mcp_json_object, ownership, rules_dir, skills_dir};
 
 const RULES_DIR: &str = ".agent/rules";
 
@@ -50,6 +53,13 @@ impl AntigravityAgent {
         Ok(match scope {
             Scope::Global => paths::gemini_home()?.join("antigravity").join("skills"),
             Scope::Local(p) => p.join(".agent").join("skills"),
+        })
+    }
+
+    fn mcp_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+        Ok(match scope {
+            Scope::Global => paths::antigravity_mcp_global_file()?,
+            Scope::Local(p) => p.join(".agent").join("mcp_config.json"),
         })
     }
 }
@@ -92,6 +102,42 @@ impl Integration for AntigravityAgent {
         HookSpec::validate_tag(tag)?;
         let root = self.project_root(scope)?;
         rules_dir::uninstall(root, RULES_DIR, tag)
+    }
+}
+
+impl McpSurface for AntigravityAgent {
+    fn id(&self) -> &'static str {
+        "antigravity"
+    }
+
+    fn supported_mcp_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Global, ScopeKind::Local]
+    }
+
+    fn is_mcp_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+        McpSpec::validate_name(name)?;
+        let ledger = ownership::mcp_ledger_for(&Self::mcp_path(scope)?);
+        mcp_json_object::is_installed(&ledger, name)
+    }
+
+    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
+        spec.validate()?;
+        let cfg = Self::mcp_path(scope)?;
+        let ledger = ownership::mcp_ledger_for(&cfg);
+        mcp_json_object::install(&cfg, &ledger, spec)
+    }
+
+    fn uninstall_mcp(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, HookerError> {
+        McpSpec::validate_name(name)?;
+        HookSpec::validate_tag(owner_tag)?;
+        let cfg = Self::mcp_path(scope)?;
+        let ledger = ownership::mcp_ledger_for(&cfg);
+        mcp_json_object::uninstall(&cfg, &ledger, name, owner_tag, "mcp server")
     }
 }
 
@@ -144,6 +190,13 @@ mod tests {
             .owner(owner)
             .description("Format Git commits.")
             .body("## Goal\nFormat them.\n")
+            .build()
+    }
+
+    fn mcp_spec(name: &str, owner: &str) -> McpSpec {
+        McpSpec::builder(name)
+            .owner(owner)
+            .stdio("npx", ["-y", "@example/server"])
             .build()
     }
 
@@ -236,5 +289,33 @@ mod tests {
             err,
             HookerError::MissingSpecField { field: "rules", .. }
         ));
+    }
+
+    #[test]
+    fn install_mcp_writes_dot_agent_mcp_config() {
+        let dir = tempdir().unwrap();
+        let agent = AntigravityAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        agent
+            .install_mcp(&scope, &mcp_spec("github", "myapp"))
+            .unwrap();
+        let cfg = dir.path().join(".agent/mcp_config.json");
+        let v: serde_json::Value = serde_json::from_slice(&fs::read(cfg).unwrap()).unwrap();
+        assert_eq!(
+            v["mcpServers"]["github"]["command"],
+            serde_json::json!("npx")
+        );
+    }
+
+    #[test]
+    fn uninstall_mcp_owner_mismatch_refused() {
+        let dir = tempdir().unwrap();
+        let agent = AntigravityAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        agent
+            .install_mcp(&scope, &mcp_spec("github", "appA"))
+            .unwrap();
+        let err = agent.uninstall_mcp(&scope, "github", "appB").unwrap_err();
+        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
     }
 }

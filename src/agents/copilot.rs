@@ -27,10 +27,11 @@ use std::path::PathBuf;
 use serde_json::json;
 
 use crate::error::HookerError;
-use crate::integration::{InstallReport, Integration, UninstallReport};
+use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
+use crate::paths;
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{Event, HookSpec, Matcher};
-use crate::util::{fs_atomic, md_block};
+use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
+use crate::util::{fs_atomic, mcp_json_map, md_block, ownership, skills_dir};
 
 /// GitHub Copilot.
 pub struct CopilotAgent;
@@ -58,16 +59,27 @@ impl CopilotAgent {
     }
 
     fn instructions_path(scope: &Scope) -> Result<PathBuf, HookerError> {
-        let root = match scope {
-            Scope::Local(p) => p,
-            Scope::Global => {
-                return Err(HookerError::UnsupportedScope {
-                    id: "copilot",
-                    scope: ScopeKind::Global,
-                });
-            }
+        let Scope::Local(root) = scope else {
+            return Err(HookerError::UnsupportedScope {
+                id: "copilot",
+                scope: ScopeKind::Global,
+            });
         };
         Ok(root.join(".github").join("copilot-instructions.md"))
+    }
+
+    fn mcp_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+        Ok(match scope {
+            Scope::Global => paths::home_dir()?.join(".copilot").join("mcp-config.json"),
+            Scope::Local(root) => root.join(".mcp.json"),
+        })
+    }
+
+    fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
+        Ok(match scope {
+            Scope::Global => paths::home_dir()?.join(".copilot").join("skills"),
+            Scope::Local(root) => root.join(".github").join("skills"),
+        })
     }
 }
 
@@ -194,6 +206,87 @@ impl Integration for CopilotAgent {
     }
 }
 
+impl McpSurface for CopilotAgent {
+    fn id(&self) -> &'static str {
+        "copilot"
+    }
+
+    fn supported_mcp_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Global, ScopeKind::Local]
+    }
+
+    fn is_mcp_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+        McpSpec::validate_name(name)?;
+        let ledger = ownership::mcp_ledger_for(&Self::mcp_path(scope)?);
+        mcp_json_map::is_installed(&ledger, name)
+    }
+
+    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
+        spec.validate()?;
+        let cfg = Self::mcp_path(scope)?;
+        let ledger = ownership::mcp_ledger_for(&cfg);
+        mcp_json_map::install(
+            &cfg,
+            &ledger,
+            spec,
+            &["mcpServers"],
+            mcp_json_map::mcp_servers_value,
+            mcp_json_map::ConfigFormat::Json,
+        )
+    }
+
+    fn uninstall_mcp(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, HookerError> {
+        McpSpec::validate_name(name)?;
+        HookSpec::validate_tag(owner_tag)?;
+        let cfg = Self::mcp_path(scope)?;
+        let ledger = ownership::mcp_ledger_for(&cfg);
+        mcp_json_map::uninstall(
+            &cfg,
+            &ledger,
+            name,
+            owner_tag,
+            "mcp server",
+            &["mcpServers"],
+            mcp_json_map::ConfigFormat::Json,
+        )
+    }
+}
+
+impl SkillSurface for CopilotAgent {
+    fn id(&self) -> &'static str {
+        "copilot"
+    }
+
+    fn supported_skill_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Global, ScopeKind::Local]
+    }
+
+    fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+        let root = Self::skills_root(scope)?;
+        skills_dir::is_installed(&root, name)
+    }
+
+    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+        let root = Self::skills_root(scope)?;
+        skills_dir::install(&root, spec)
+    }
+
+    fn uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, HookerError> {
+        let root = Self::skills_root(scope)?;
+        skills_dir::uninstall(&root, name, owner_tag)
+    }
+}
+
 fn matcher_to_copilot(m: &Matcher) -> String {
     // Same family as Cursor: lowerCamelCase events, PascalCase tool names.
     match m {
@@ -224,6 +317,13 @@ mod tests {
             .command("myapp hook")
             .matcher(Matcher::Bash)
             .event(Event::PreToolUse)
+            .build()
+    }
+
+    fn mcp_spec(name: &str, owner: &str) -> McpSpec {
+        McpSpec::builder(name)
+            .owner(owner)
+            .stdio("npx", ["-y", "@example/server"])
             .build()
     }
 
@@ -274,5 +374,42 @@ mod tests {
         let agent = CopilotAgent::new();
         let err = agent.is_installed(&Scope::Global, "alpha").unwrap_err();
         assert!(matches!(err, HookerError::UnsupportedScope { .. }));
+    }
+
+    #[test]
+    fn install_mcp_writes_cli_workspace_file() {
+        let dir = tempdir().unwrap();
+        let agent = CopilotAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        agent
+            .install_mcp(&scope, &mcp_spec("memory", "myapp"))
+            .unwrap();
+
+        let p = dir.path().join(".mcp.json");
+        let v = read_json(&p);
+        assert_eq!(v["mcpServers"]["memory"]["command"], json!("npx"));
+    }
+
+    #[test]
+    fn install_mcp_idempotent() {
+        let dir = tempdir().unwrap();
+        let agent = CopilotAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let s = mcp_spec("memory", "myapp");
+        agent.install_mcp(&scope, &s).unwrap();
+        let r = agent.install_mcp(&scope, &s).unwrap();
+        assert!(r.already_installed);
+    }
+
+    #[test]
+    fn uninstall_mcp_owner_mismatch_refused() {
+        let dir = tempdir().unwrap();
+        let agent = CopilotAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        agent
+            .install_mcp(&scope, &mcp_spec("memory", "appA"))
+            .unwrap();
+        let err = agent.uninstall_mcp(&scope, "memory", "appB").unwrap_err();
+        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
     }
 }

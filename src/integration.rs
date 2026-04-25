@@ -60,10 +60,10 @@ pub trait Integration: Send + Sync {
 
 /// One AI harness's MCP-server installer.
 ///
-/// Implemented by harnesses that load MCP server configs from a known file
-/// (Claude, Cursor, Gemini, Codex, OpenCode, Windsurf). Harnesses without
-/// upstream MCP support (Cline, Roo, Kilo, Antigravity, Copilot) do not
-/// implement this trait — the resulting compile error tells callers up-front.
+/// Implemented by harnesses that load MCP server configs from a known file.
+/// Harnesses without a confirmed file-backed MCP contract do not implement
+/// this trait, so callers discover that at compile time or through
+/// [`crate::registry::mcp_capable`].
 ///
 /// All operations must be idempotent: installing the same [`McpSpec`] twice
 /// reaches and preserves a single on-disk state. Uninstalls refuse to remove
@@ -73,8 +73,7 @@ pub trait McpSurface: Send + Sync {
     /// agent (e.g., `"claude"`).
     fn id(&self) -> &'static str;
 
-    /// Which scopes this MCP installer accepts. Most agents support both
-    /// Global and Local; OpenCode and Codex may differ.
+    /// Which scopes this MCP installer accepts.
     fn supported_mcp_scopes(&self) -> &'static [ScopeKind];
 
     /// Returns true if a server with `name` is currently recorded under any
@@ -103,7 +102,7 @@ pub trait McpSurface: Send + Sync {
 /// Skills are directory-scoped: each one is a folder under the harness's
 /// `skills/` root containing a `SKILL.md` plus optional `scripts/`,
 /// `references/`, and `assets/` subdirectories. Implemented by harnesses with
-/// upstream skills support (Claude Code, Google Antigravity).
+/// upstream Agent Skills support.
 ///
 /// Like [`McpSurface`], ownership is tracked via a sidecar ledger so multiple
 /// consumers can coexist and uninstall is refused on owner mismatch.
