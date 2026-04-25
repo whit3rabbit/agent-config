@@ -16,7 +16,6 @@
 
 # Build
 /target/
-Cargo.lock
 
 # Env
 .env
