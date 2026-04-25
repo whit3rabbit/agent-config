@@ -103,9 +103,7 @@ impl Integration for ClineAgent {
             .and_then(|e| e.as_object())
             .map(|m| {
                 m.values()
-                    .filter(|entry| {
-                        entry.get("owner").and_then(|o| o.as_str()) == Some(tag)
-                    })
+                    .filter(|entry| entry.get("owner").and_then(|o| o.as_str()) == Some(tag))
                     .count()
             })
             .unwrap_or(0);
@@ -117,18 +115,16 @@ impl Integration for ClineAgent {
         let root = self.project_root(scope)?;
         let mut report = InstallReport::default();
 
-        // Surface 1: rules markdown (legacy + still primary use case).
         if let Some(rules) = &spec.rules {
             let r = rules_dir::install(root, RULES_DIR, &spec.tag, &rules.content)?;
-            merge_install(&mut report, r);
+            report.merge(r);
         }
 
-        // Surface 2: hook script. Triggered when caller supplies a script
-        // body (or, by convention, when they want a default wrapper for
-        // `spec.command`).
         if spec.script.is_some() || spec.rules.is_none() {
             let body = match &spec.script {
-                Some(ScriptTemplate::Shell(s)) => ensure_trailing_newline(&prefix_shebang(s)),
+                Some(ScriptTemplate::Shell(s)) => {
+                    fs_atomic::ensure_trailing_newline(&prefix_shebang(s))
+                }
                 Some(ScriptTemplate::TypeScript(_)) => {
                     return Err(HookerError::MissingSpecField {
                         id: "cline",
@@ -175,9 +171,8 @@ impl Integration for ClineAgent {
         let root = self.project_root(scope)?;
         let mut report = UninstallReport::default();
 
-        // Rules file (per-tag, owned outright).
         let r = rules_dir::uninstall(root, RULES_DIR, tag)?;
-        merge_uninstall(&mut report, r);
+        report.merge(r);
 
         // Any hook scripts owned by this tag.
         let ledger = self.ledger_path(scope)?;
@@ -223,27 +218,6 @@ impl Integration for ClineAgent {
     }
 }
 
-fn merge_install(into: &mut InstallReport, from: InstallReport) {
-    if !from.already_installed {
-        into.already_installed = false;
-    } else if into.created.is_empty() && into.patched.is_empty() {
-        into.already_installed = true;
-    }
-    into.created.extend(from.created);
-    into.patched.extend(from.patched);
-    into.backed_up.extend(from.backed_up);
-}
-
-fn merge_uninstall(into: &mut UninstallReport, from: UninstallReport) {
-    into.not_installed = from.not_installed
-        && into.removed.is_empty()
-        && into.patched.is_empty()
-        && into.restored.is_empty();
-    into.removed.extend(from.removed);
-    into.patched.extend(from.patched);
-    into.restored.extend(from.restored);
-}
-
 /// Map [`Event`] to Cline's filename convention. Cline v3.36+ recognizes
 /// these eight event types; arbitrary `Event::Custom` values pass through.
 fn event_to_filename(event: &Event) -> String {
@@ -259,14 +233,6 @@ fn prefix_shebang(s: &str) -> String {
         s.to_string()
     } else {
         format!("#!/usr/bin/env bash\n{s}")
-    }
-}
-
-fn ensure_trailing_newline(s: &str) -> String {
-    if s.ends_with('\n') {
-        s.to_string()
-    } else {
-        format!("{s}\n")
     }
 }
 
@@ -296,7 +262,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = ClineAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install(&scope, &rules_spec("alpha", "rule body")).unwrap();
+        agent
+            .install(&scope, &rules_spec("alpha", "rule body"))
+            .unwrap();
         let p = dir.path().join(".clinerules/alpha.md");
         assert!(p.exists());
         assert_eq!(fs::read_to_string(&p).unwrap(), "rule body\n");
@@ -349,17 +317,14 @@ mod tests {
         let agent = ClineAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         agent
-            .install(
-                &scope,
-                &hook_spec("myapp", Event::PreToolUse, "noop"),
-            )
+            .install(&scope, &hook_spec("myapp", Event::PreToolUse, "noop"))
             .unwrap();
         let ledger = dir.path().join(".clinerules/hooks/.ai-hooker-hooks.json");
         assert!(ledger.exists());
-        let v: serde_json::Value =
-            serde_json::from_slice(&fs::read(&ledger).unwrap()).unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&fs::read(&ledger).unwrap()).unwrap();
         assert_eq!(
-            v["entries"]["PreToolUse"]["owner"], serde_json::json!("myapp")
+            v["entries"]["PreToolUse"]["owner"],
+            serde_json::json!("myapp")
         );
     }
 

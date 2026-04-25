@@ -30,10 +30,7 @@ const SERVERS_PATH: &[&str] = &[SERVERS_KEY];
 
 /// Returns true if `name` exists in the ledger sidecar (single source of truth
 /// for "is this currently installed by some consumer").
-pub(crate) fn is_installed(
-    ledger_path: &Path,
-    name: &str,
-) -> Result<bool, HookerError> {
+pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, HookerError> {
     ownership::contains(ledger_path, name)
 }
 
@@ -104,10 +101,7 @@ pub(crate) fn uninstall(
         let removed = json_patch::remove_named_object_entry(&mut root, SERVERS_PATH, name)?;
         debug_assert!(removed);
 
-        let now_empty = root
-            .as_object()
-            .map(Map::is_empty)
-            .unwrap_or(true);
+        let now_empty = root.as_object().map(Map::is_empty).unwrap_or(true);
         if now_empty && fs_atomic::restore_backup(config_path)? {
             report.restored.push(config_path.to_path_buf());
         } else if now_empty {
@@ -184,10 +178,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn paths(dir: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
-        (
-            dir.join("mcp.json"),
-            dir.join(".ai-hooker-mcp.json"),
-        )
+        (dir.join("mcp.json"), dir.join(".ai-hooker-mcp.json"))
     }
 
     fn stdio_spec(name: &str, owner: &str) -> McpSpec {
@@ -216,19 +207,12 @@ mod tests {
     fn install_creates_config_and_ledger() {
         let dir = tempdir().unwrap();
         let (cfg, led) = paths(dir.path());
-        let report = install(&cfg, &led, &stdio_spec("github", "myapp"))
-            .unwrap();
+        let report = install(&cfg, &led, &stdio_spec("github", "myapp")).unwrap();
         assert!(report.created.contains(&cfg));
         assert!(led.exists(), "ledger created");
         let v: Value = serde_json::from_slice(&std::fs::read(&cfg).unwrap()).unwrap();
-        assert_eq!(
-            v["mcpServers"]["github"]["command"],
-            json!("npx")
-        );
-        assert_eq!(
-            v["mcpServers"]["github"]["env"]["FOO"],
-            json!("bar")
-        );
+        assert_eq!(v["mcpServers"]["github"]["command"], json!("npx"));
+        assert_eq!(v["mcpServers"]["github"]["env"]["FOO"], json!("bar"));
     }
 
     #[test]
@@ -246,8 +230,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let (cfg, led) = paths(dir.path());
         install(&cfg, &led, &stdio_spec("github", "appA")).unwrap();
-        let r2 =
-            install(&cfg, &led, &stdio_spec("github", "appB")).unwrap();
+        let r2 = install(&cfg, &led, &stdio_spec("github", "appB")).unwrap();
         // owner changed, content same: server payload didn't change but ledger
         // was updated, so we report it as not-already-installed.
         assert!(!r2.already_installed);
@@ -263,7 +246,10 @@ mod tests {
         let (cfg, led) = paths(dir.path());
         install(&cfg, &led, &http_spec("remote", "myapp")).unwrap();
         let v: Value = serde_json::from_slice(&std::fs::read(&cfg).unwrap()).unwrap();
-        assert_eq!(v["mcpServers"]["remote"]["url"], json!("https://example.com/mcp"));
+        assert_eq!(
+            v["mcpServers"]["remote"]["url"],
+            json!("https://example.com/mcp")
+        );
         assert_eq!(v["mcpServers"]["remote"]["type"], json!("http"));
         assert_eq!(
             v["mcpServers"]["remote"]["headers"]["Authorization"],
@@ -293,14 +279,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let (cfg, led) = paths(dir.path());
         install(&cfg, &led, &stdio_spec("github", "myapp")).unwrap();
-        let r = uninstall(
-            &cfg,
-            &led,
-            "github",
-            "myapp",
-            "mcp server",
-        )
-        .unwrap();
+        let r = uninstall(&cfg, &led, "github", "myapp", "mcp server").unwrap();
         assert!(r.removed.contains(&cfg) || r.restored.contains(&cfg));
         assert!(!led.exists(), "empty ledger removed");
         assert!(ownership::owner_of(&led, "github").unwrap().is_none());
@@ -311,15 +290,14 @@ mod tests {
         let dir = tempdir().unwrap();
         let (cfg, led) = paths(dir.path());
         install(&cfg, &led, &stdio_spec("github", "appA")).unwrap();
-        let err = uninstall(
-            &cfg,
-            &led,
-            "github",
-            "appB",
-            "mcp server",
-        )
-        .unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { actual: Some(_), .. }));
+        let err = uninstall(&cfg, &led, "github", "appB", "mcp server").unwrap_err();
+        assert!(matches!(
+            err,
+            HookerError::NotOwnedByCaller {
+                actual: Some(_),
+                ..
+            }
+        ));
         // Config and ledger untouched.
         let v: Value = serde_json::from_slice(&std::fs::read(&cfg).unwrap()).unwrap();
         assert!(v["mcpServers"]["github"].is_object());
@@ -335,23 +313,18 @@ mod tests {
             r#"{ "mcpServers": { "user-thing": { "command": "user-cmd" } } }"#,
         )
         .unwrap();
-        let err = uninstall(
-            &cfg,
-            &led,
-            "user-thing",
-            "myapp",
-            "mcp server",
-        )
-        .unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { actual: None, .. }));
+        let err = uninstall(&cfg, &led, "user-thing", "myapp", "mcp server").unwrap_err();
+        assert!(matches!(
+            err,
+            HookerError::NotOwnedByCaller { actual: None, .. }
+        ));
     }
 
     #[test]
     fn uninstall_unknown_entry_is_noop() {
         let dir = tempdir().unwrap();
         let (cfg, led) = paths(dir.path());
-        let r = uninstall(&cfg, &led, "ghost", "myapp", "mcp server")
-            .unwrap();
+        let r = uninstall(&cfg, &led, "ghost", "myapp", "mcp server").unwrap();
         assert!(r.not_installed);
     }
 

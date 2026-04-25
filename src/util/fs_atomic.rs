@@ -119,11 +119,7 @@ fn create_backup(path: &Path) -> Result<PathBuf, HookerError> {
 }
 
 /// Set Unix mode on a file. No-op on non-Unix platforms.
-///
-/// Currently used for shell-script delegators (Gemini's optional shell-wrapper
-/// path); kept available for future agent additions.
 #[cfg(unix)]
-#[allow(dead_code)]
 pub(crate) fn chmod(path: &Path, mode: u32) -> Result<(), HookerError> {
     use std::os::unix::fs::PermissionsExt;
     let mut p = fs::metadata(path)
@@ -136,7 +132,6 @@ pub(crate) fn chmod(path: &Path, mode: u32) -> Result<(), HookerError> {
 
 /// No-op on Windows.
 #[cfg(not(unix))]
-#[allow(dead_code)]
 pub(crate) fn chmod(_path: &Path, _mode: u32) -> Result<(), HookerError> {
     Ok(())
 }
@@ -162,14 +157,33 @@ pub(crate) fn read_to_string_or_empty(path: &Path) -> Result<String, HookerError
 
 /// Restore `<path>.bak` over `path`, then remove the `.bak`. No-op if no backup.
 pub(crate) fn restore_backup(path: &Path) -> Result<bool, HookerError> {
-    let mut bak = path.as_os_str().to_owned();
-    bak.push(".bak");
-    let bak = PathBuf::from(bak);
+    let bak = backup_path(path);
     if !bak.exists() {
         return Ok(false);
     }
     fs::rename(&bak, path).map_err(|e| HookerError::io(&bak, e))?;
     Ok(true)
+}
+
+/// `<path>.bak`, the path [`write_atomic`] uses for first-touch backups.
+pub(crate) fn backup_path(path: &Path) -> PathBuf {
+    let mut bak = path.as_os_str().to_owned();
+    bak.push(".bak");
+    PathBuf::from(bak)
+}
+
+/// Remove `<path>.bak` if it exists. Returns true if a file was actually removed.
+pub(crate) fn remove_backup_if_exists(path: &Path) -> Result<bool, HookerError> {
+    remove_if_exists(&backup_path(path))
+}
+
+/// Append a newline if `s` does not already end with one.
+pub(crate) fn ensure_trailing_newline(s: &str) -> String {
+    if s.ends_with('\n') {
+        s.to_string()
+    } else {
+        format!("{s}\n")
+    }
 }
 
 #[cfg(test)]
@@ -209,18 +223,14 @@ mod tests {
         let out = write_atomic(&path, b"same", true).unwrap();
         assert!(out.no_change);
         assert!(out.backup.is_none());
-        let mut bak = path.as_os_str().to_owned();
-        bak.push(".bak");
-        assert!(!PathBuf::from(bak).exists(), "no backup on no-op");
+        assert!(!backup_path(&path).exists(), "no backup on no-op");
     }
 
     #[test]
     fn refuses_to_clobber_existing_backup() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("config.json");
-        let mut bak = path.as_os_str().to_owned();
-        bak.push(".bak");
-        let bak = PathBuf::from(bak);
+        let bak = backup_path(&path);
 
         fs::write(&path, b"original").unwrap();
         fs::write(&bak, b"important-old-backup").unwrap();
@@ -247,9 +257,7 @@ mod tests {
         write_atomic(&path, b"v2", true).unwrap();
         assert!(restore_backup(&path).unwrap());
         assert_eq!(fs::read(&path).unwrap(), b"v1");
-        let mut bak = path.as_os_str().to_owned();
-        bak.push(".bak");
-        assert!(!PathBuf::from(bak).exists());
+        assert!(!backup_path(&path).exists());
     }
 
     #[test]

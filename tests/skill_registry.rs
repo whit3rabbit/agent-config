@@ -18,7 +18,9 @@ fn skill_capable_lists_claude_and_antigravity() {
 #[test]
 fn skill_capable_excludes_non_skill_agents() {
     let ids: HashSet<_> = skill_capable().into_iter().map(|i| i.id()).collect();
-    for not_expected in ["cursor", "gemini", "codex", "copilot", "opencode", "cline", "roo", "kilocode", "windsurf"] {
+    for not_expected in [
+        "cursor", "gemini", "codex", "copilot", "opencode", "cline", "roo", "kilocode", "windsurf",
+    ] {
         assert!(
             !ids.contains(not_expected),
             "{not_expected} unexpectedly appears in skill_capable"

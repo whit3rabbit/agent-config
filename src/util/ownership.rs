@@ -83,10 +83,7 @@ pub(crate) fn record_uninstall(
 }
 
 /// Look up the owner of `name` without mutating the ledger.
-pub(crate) fn owner_of(
-    ledger_path: &Path,
-    name: &str,
-) -> Result<Option<String>, HookerError> {
+pub(crate) fn owner_of(ledger_path: &Path, name: &str) -> Result<Option<String>, HookerError> {
     let root = json_patch::read_or_empty(ledger_path)?;
     Ok(root
         .get(ENTRIES_KEY)

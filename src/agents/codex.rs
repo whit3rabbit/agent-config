@@ -88,7 +88,11 @@ impl Integration for CodexAgent {
     fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError> {
         let p = Self::hooks_path(scope)?;
         let root = json_patch::read_or_empty(&p)?;
-        Ok(json_patch::contains_tagged(&root, &["hooks", "PreToolUse"], tag))
+        Ok(json_patch::contains_tagged(
+            &root,
+            &["hooks", "PreToolUse"],
+            tag,
+        ))
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
@@ -193,10 +197,7 @@ impl Integration for CodexAgent {
             }
         }
 
-        if report.removed.is_empty()
-            && report.patched.is_empty()
-            && report.restored.is_empty()
-        {
+        if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
             report.not_installed = true;
         }
         Ok(report)
@@ -218,11 +219,7 @@ impl McpSurface for CodexAgent {
         ownership::contains(&ledger, name)
     }
 
-    fn install_mcp(
-        &self,
-        scope: &Scope,
-        spec: &McpSpec,
-    ) -> Result<InstallReport, HookerError> {
+    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let mut report = InstallReport::default();
         let cfg = Self::config_toml_path(scope)?;
@@ -230,7 +227,8 @@ impl McpSurface for CodexAgent {
 
         let mut doc = toml_patch::read_or_empty(&cfg)?;
         let table = build_mcp_table(spec);
-        let changed = toml_patch::upsert_named_table(&mut doc, &["mcp_servers"], &spec.name, table)?;
+        let changed =
+            toml_patch::upsert_named_table(&mut doc, &["mcp_servers"], &spec.name, table)?;
 
         let prior_owner = ownership::owner_of(&ledger, &spec.name)?;
         let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
@@ -419,10 +417,7 @@ mod tests {
         assert_eq!(matcher_to_codex(&Matcher::Bash), "shell");
         assert_eq!(matcher_to_codex(&Matcher::Exact("Edit".into())), "Edit");
         assert_eq!(
-            matcher_to_codex(&Matcher::AnyOf(vec![
-                "Read".into(),
-                "Write".into()
-            ])),
+            matcher_to_codex(&Matcher::AnyOf(vec!["Read".into(), "Write".into()])),
             "Read|Write"
         );
         assert_eq!(
@@ -487,7 +482,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = CodexAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
         let cfg = dir.path().join(".codex/config.toml");
         assert!(cfg.exists());
         let s = read_toml(&cfg);
@@ -501,15 +498,21 @@ mod tests {
         let dir = tempdir().unwrap();
         let cfg = dir.path().join(".codex/config.toml");
         std::fs::create_dir_all(cfg.parent().unwrap()).unwrap();
-        let original = "# Codex configuration\n# Hand-authored.\n\n[some.section]\nkey = \"value\"\n";
+        let original =
+            "# Codex configuration\n# Hand-authored.\n\n[some.section]\nkey = \"value\"\n";
         std::fs::write(&cfg, original).unwrap();
 
         let agent = CodexAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
 
         let s = read_toml(&cfg);
-        assert!(s.contains("# Codex configuration"), "comment lost. got:\n{s}");
+        assert!(
+            s.contains("# Codex configuration"),
+            "comment lost. got:\n{s}"
+        );
         assert!(s.contains("[some.section]"), "user section lost");
         assert!(s.contains("[mcp_servers.github]"));
         // .bak made when we modified an existing file.
@@ -533,7 +536,9 @@ mod tests {
         let agent = CodexAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         agent.install(&scope, &local_spec("alpha")).unwrap();
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
         // Hooks use a separate file; both must exist.
         assert!(dir.path().join(".codex/hooks.json").exists());
         assert!(dir.path().join(".codex/config.toml").exists());
@@ -544,7 +549,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = CodexAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "appA")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "appA"))
+            .unwrap();
         let err = agent.uninstall_mcp(&scope, "github", "appB").unwrap_err();
         assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
     }
@@ -554,7 +561,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = CodexAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
         agent.uninstall_mcp(&scope, "github", "myapp").unwrap();
         let cfg = dir.path().join(".codex/config.toml");
         // Empty doc: the file is removed entirely.
@@ -570,7 +579,9 @@ mod tests {
         std::fs::write(&cfg, original).unwrap();
         let agent = CodexAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
         agent.uninstall_mcp(&scope, "github", "myapp").unwrap();
         let s = read_toml(&cfg);
         assert!(s.contains("[other]"), "got:\n{s}");

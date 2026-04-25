@@ -1,9 +1,7 @@
 //! Generic implementation for harnesses that only read project-local rules
 //! markdown files and have no other surface (no hooks, no MCP, no skills).
 //!
-//! Currently serves Roo Code and Kilo Code. Cline, Windsurf, and Antigravity
-//! used to share this struct but have since been promoted to dedicated
-//! agents because they expose additional surfaces (hooks, MCP, skills).
+//! Currently serves Roo Code and Kilo Code.
 
 use std::path::Path;
 
@@ -94,10 +92,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn spec(tag: &str, rules: &str) -> HookSpec {
-        HookSpec::builder(tag)
-            .command("noop")
-            .rules(rules)
-            .build()
+        HookSpec::builder(tag).command("noop").rules(rules).build()
     }
 
     #[test]
@@ -120,10 +115,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = PromptAgent::kilocode();
         agent
-            .install(
-                &Scope::Local(dir.path().to_path_buf()),
-                &spec("alpha", "x"),
-            )
+            .install(&Scope::Local(dir.path().to_path_buf()), &spec("alpha", "x"))
             .unwrap();
         assert!(dir.path().join(".kilocode/rules/alpha.md").exists());
     }
@@ -165,6 +157,9 @@ mod tests {
         let scope = Scope::Local(dir.path().to_path_buf());
         let no_rules = HookSpec::builder("alpha").command("noop").build();
         let err = agent.install(&scope, &no_rules).unwrap_err();
-        assert!(matches!(err, HookerError::MissingSpecField { field: "rules", .. }));
+        assert!(matches!(
+            err,
+            HookerError::MissingSpecField { field: "rules", .. }
+        ));
     }
 }

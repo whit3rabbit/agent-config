@@ -403,10 +403,7 @@ mod tests {
         )
         .unwrap();
         assert!(changed);
-        assert_eq!(
-            root["hooks"]["PreToolUse"][0]["command"],
-            json!("new")
-        );
+        assert_eq!(root["hooks"]["PreToolUse"][0]["command"], json!("new"));
     }
 
     #[test]
@@ -414,8 +411,7 @@ mod tests {
         let mut root = json!({});
         let entry = json!({ "matcher": "Bash", "command": "do" });
         upsert_tagged_array_entry(&mut root, &["h"], "alpha", entry.clone()).unwrap();
-        let changed_again =
-            upsert_tagged_array_entry(&mut root, &["h"], "alpha", entry).unwrap();
+        let changed_again = upsert_tagged_array_entry(&mut root, &["h"], "alpha", entry).unwrap();
         assert!(!changed_again);
     }
 
@@ -436,12 +432,8 @@ mod tests {
                 { "matcher": "Bash", "command": "ours", "_ai_hooker_tag": "alpha" }
             ]}
         });
-        let removed = remove_tagged_array_entry(
-            &mut root,
-            &["hooks", "PreToolUse"],
-            "alpha",
-        )
-        .unwrap();
+        let removed =
+            remove_tagged_array_entry(&mut root, &["hooks", "PreToolUse"], "alpha").unwrap();
         assert!(removed);
         let arr = root["hooks"]["PreToolUse"].as_array().unwrap();
         assert_eq!(arr.len(), 1);

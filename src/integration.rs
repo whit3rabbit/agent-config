@@ -83,8 +83,7 @@ pub trait McpSurface: Send + Sync {
 
     /// Install (or update) the MCP server. Repeated calls with the same
     /// `spec.name` and same content are a no-op after the first.
-    fn install_mcp(&self, scope: &Scope, spec: &McpSpec)
-        -> Result<InstallReport, HookerError>;
+    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError>;
 
     /// Uninstall the MCP server identified by `name`, owned by `owner_tag`.
     ///
@@ -123,11 +122,7 @@ pub trait SkillSurface: Send + Sync {
     /// Install (or update) the skill directory and record ownership.
     /// Repeated calls with byte-identical contents are a no-op after the
     /// first.
-    fn install_skill(
-        &self,
-        scope: &Scope,
-        spec: &SkillSpec,
-    ) -> Result<InstallReport, HookerError>;
+    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError>;
 
     /// Uninstall the skill identified by `name`, owned by `owner_tag`.
     /// Returns [`HookerError::NotOwnedByCaller`] on owner mismatch or when
@@ -154,6 +149,24 @@ pub struct InstallReport {
     pub already_installed: bool,
 }
 
+impl InstallReport {
+    /// Fold another report's contents into this one.
+    ///
+    /// `already_installed` stays true only if both reports were already
+    /// installed *and* this report has not produced any created/patched
+    /// entries from earlier merges.
+    pub(crate) fn merge(&mut self, from: InstallReport) {
+        if !from.already_installed {
+            self.already_installed = false;
+        } else if self.created.is_empty() && self.patched.is_empty() {
+            self.already_installed = true;
+        }
+        self.created.extend(from.created);
+        self.patched.extend(from.patched);
+        self.backed_up.extend(from.backed_up);
+    }
+}
+
 /// Outcome of a successful [`Integration::uninstall`].
 #[derive(Debug, Default, Clone)]
 pub struct UninstallReport {
@@ -165,6 +178,20 @@ pub struct UninstallReport {
     pub restored: Vec<PathBuf>,
     /// True if the integration was not installed; nothing changed.
     pub not_installed: bool,
+}
+
+impl UninstallReport {
+    /// Fold another report's contents into this one. `not_installed` survives
+    /// only when neither report removed/patched/restored anything.
+    pub(crate) fn merge(&mut self, from: UninstallReport) {
+        self.not_installed = from.not_installed
+            && self.removed.is_empty()
+            && self.patched.is_empty()
+            && self.restored.is_empty();
+        self.removed.extend(from.removed);
+        self.patched.extend(from.patched);
+        self.restored.extend(from.restored);
+    }
 }
 
 /// Outcome of a successful [`Integration::migrate`].

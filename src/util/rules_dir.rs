@@ -18,11 +18,7 @@ pub(crate) fn target_path(root: &Path, rules_dir: &str, tag: &str) -> PathBuf {
 }
 
 /// Returns true if a per-tag rule file already exists.
-pub(crate) fn is_installed(
-    root: &Path,
-    rules_dir: &str,
-    tag: &str,
-) -> Result<bool, HookerError> {
+pub(crate) fn is_installed(root: &Path, rules_dir: &str, tag: &str) -> Result<bool, HookerError> {
     Ok(target_path(root, rules_dir, tag).exists())
 }
 
@@ -34,7 +30,7 @@ pub(crate) fn install(
     body: &str,
 ) -> Result<InstallReport, HookerError> {
     let path = target_path(root, rules_dir, tag);
-    let body = ensure_trailing_newline(body);
+    let body = fs_atomic::ensure_trailing_newline(body);
     let outcome = fs_atomic::write_atomic(&path, body.as_bytes(), true)?;
 
     let mut report = InstallReport::default();
@@ -86,14 +82,6 @@ pub(crate) fn uninstall(
         parent = p.parent();
     }
     Ok(report)
-}
-
-fn ensure_trailing_newline(s: &str) -> String {
-    if s.ends_with('\n') {
-        s.to_string()
-    } else {
-        format!("{s}\n")
-    }
 }
 
 #[cfg(test)]

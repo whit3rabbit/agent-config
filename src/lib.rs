@@ -42,11 +42,9 @@ pub mod agents;
 
 pub use error::HookerError;
 pub use integration::{
-    Integration, InstallReport, McpSurface, MigrationReport, SkillSurface, UninstallReport,
+    InstallReport, Integration, McpSurface, MigrationReport, SkillSurface, UninstallReport,
 };
-pub use registry::{
-    all, by_id, mcp_by_id, mcp_capable, skill_by_id, skill_capable,
-};
+pub use registry::{all, by_id, mcp_by_id, mcp_capable, skill_by_id, skill_capable};
 pub use scope::{Scope, ScopeKind};
 pub use spec::{
     Event, HookSpec, HookSpecBuilder, Matcher, McpSpec, McpSpecBuilder, McpTransport, RulesBlock,

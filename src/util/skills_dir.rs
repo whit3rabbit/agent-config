@@ -38,19 +38,13 @@ fn skill_dir(skills_root: &Path, name: &str) -> PathBuf {
 }
 
 /// Returns true if the ledger has an entry for `name`.
-pub(crate) fn is_installed(
-    skills_root: &Path,
-    name: &str,
-) -> Result<bool, HookerError> {
+pub(crate) fn is_installed(skills_root: &Path, name: &str) -> Result<bool, HookerError> {
     ownership::contains(&ledger_path(skills_root), name)
 }
 
 /// Install (or update) a skill under `<skills_root>/<spec.name>/`. Records
 /// ownership in the sidecar ledger.
-pub(crate) fn install(
-    skills_root: &Path,
-    spec: &SkillSpec,
-) -> Result<InstallReport, HookerError> {
+pub(crate) fn install(skills_root: &Path, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
     spec.validate()?;
     for asset in &spec.assets {
         validate_relative(&asset.relative_path)?;
@@ -77,10 +71,7 @@ pub(crate) fn install(
     let prior = ownership::owner_of(&led, &spec.name)?;
     let owner_changed = prior.as_deref() != Some(spec.owner_tag.as_str());
 
-    if owner_changed
-        || !report.created.is_empty()
-        || !report.patched.is_empty()
-    {
+    if owner_changed || !report.created.is_empty() || !report.patched.is_empty() {
         ownership::record_install(&led, &spec.name, &spec.owner_tag)?;
     }
 
@@ -352,7 +343,10 @@ mod tests {
         fs::create_dir_all(&user_skill).unwrap();
         fs::write(user_skill.join("SKILL.md"), "---\nname: user-skill\n---\n").unwrap();
         let err = uninstall(dir.path(), "user-skill", "myapp").unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { actual: None, .. }));
+        assert!(matches!(
+            err,
+            HookerError::NotOwnedByCaller { actual: None, .. }
+        ));
     }
 
     #[test]
@@ -386,6 +380,9 @@ mod tests {
             .build();
         install(dir.path(), &spec).unwrap();
         let s = fs::read_to_string(dir.path().join("alpha/SKILL.md")).unwrap();
-        assert!(s.contains(r#"description: "Title: subtitle.""#), "got:\n{s}");
+        assert!(
+            s.contains(r#"description: "Title: subtitle.""#),
+            "got:\n{s}"
+        );
     }
 }

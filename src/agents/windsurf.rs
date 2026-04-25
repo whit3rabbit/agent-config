@@ -101,7 +101,7 @@ impl Integration for WindsurfAgent {
 
         if let Some(rules) = &spec.rules {
             let r = rules_dir::install(root, RULES_DIR, &spec.tag, &rules.content)?;
-            merge_install(&mut report, r);
+            report.merge(r);
         }
 
         // Hook entry — written when caller didn't ask for rules-only by
@@ -145,7 +145,7 @@ impl Integration for WindsurfAgent {
         let mut report = UninstallReport::default();
 
         let r = rules_dir::uninstall(root, RULES_DIR, tag)?;
-        merge_uninstall(&mut report, r);
+        report.merge(r);
 
         let p = self.hooks_path(scope)?;
         if p.exists() {
@@ -157,22 +157,13 @@ impl Integration for WindsurfAgent {
                 }
             }
             if changed {
-                let now_empty = doc
-                    .as_object()
-                    .map(|o| o.is_empty())
-                    .unwrap_or(true);
+                let now_empty = doc.as_object().map(|o| o.is_empty()).unwrap_or(true);
                 if now_empty {
-                    // The hooks file holds only tagged entries — there is no
-                    // "user state" to restore once they are all gone. Drop
-                    // the file and its `.bak` together: the `.bak` here would
-                    // capture an intermediate state of *our own* multi-event
-                    // installs (since `fs_atomic` makes `.bak` on the second
-                    // modification of an existing file regardless of who
-                    // created it), not pre-install user content.
+                    // The file holds only tagged entries; once they're all
+                    // gone the `.bak` snapshots an intermediate multi-event
+                    // install of our own, not pre-install user content.
                     fs_atomic::remove_if_exists(&p)?;
-                    let mut bak = p.as_os_str().to_owned();
-                    bak.push(".bak");
-                    let _ = fs_atomic::remove_if_exists(std::path::Path::new(&bak));
+                    fs_atomic::remove_backup_if_exists(&p)?;
                     report.removed.push(p.clone());
                 } else {
                     let bytes = json_patch::to_pretty(&doc);
@@ -204,11 +195,7 @@ impl McpSurface for WindsurfAgent {
         mcp_json_object::is_installed(&ledger, name)
     }
 
-    fn install_mcp(
-        &self,
-        scope: &Scope,
-        spec: &McpSpec,
-    ) -> Result<InstallReport, HookerError> {
+    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = self.mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -227,27 +214,6 @@ impl McpSurface for WindsurfAgent {
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::uninstall(&cfg, &ledger, name, owner_tag, "mcp server")
     }
-}
-
-fn merge_install(into: &mut InstallReport, from: InstallReport) {
-    if !from.already_installed {
-        into.already_installed = false;
-    } else if into.created.is_empty() && into.patched.is_empty() {
-        into.already_installed = true;
-    }
-    into.created.extend(from.created);
-    into.patched.extend(from.patched);
-    into.backed_up.extend(from.backed_up);
-}
-
-fn merge_uninstall(into: &mut UninstallReport, from: UninstallReport) {
-    into.not_installed = from.not_installed
-        && into.removed.is_empty()
-        && into.patched.is_empty()
-        && into.restored.is_empty();
-    into.removed.extend(from.removed);
-    into.patched.extend(from.patched);
-    into.restored.extend(from.restored);
 }
 
 /// Map [`Event`] to Windsurf's hook key. Windsurf uses snake_case event
@@ -448,7 +414,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = WindsurfAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install(&scope, &rules_spec("alpha", "rules body")).unwrap();
+        agent
+            .install(&scope, &rules_spec("alpha", "rules body"))
+            .unwrap();
         // No hook file produced when only rules are present.
         assert!(!dir.path().join(".windsurf/hooks.json").exists());
         assert!(dir.path().join(".windsurf/rules/alpha.md").exists());

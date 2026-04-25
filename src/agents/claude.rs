@@ -172,19 +172,12 @@ impl Integration for ClaudeAgent {
             let mut root = json_patch::read_or_empty(&settings)?;
             let mut changed = false;
             for event_key in ["PreToolUse", "PostToolUse"] {
-                if json_patch::remove_tagged_array_entry(
-                    &mut root,
-                    &["hooks", event_key],
-                    tag,
-                )? {
+                if json_patch::remove_tagged_array_entry(&mut root, &["hooks", event_key], tag)? {
                     changed = true;
                 }
             }
             if changed {
-                let is_now_empty = root
-                    .as_object()
-                    .map(|o| o.is_empty())
-                    .unwrap_or(true);
+                let is_now_empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
                 if is_now_empty && fs_atomic::restore_backup(&settings)? {
                     report.restored.push(settings.clone());
                 } else if is_now_empty {
@@ -215,10 +208,7 @@ impl Integration for ClaudeAgent {
             }
         }
 
-        if report.removed.is_empty()
-            && report.patched.is_empty()
-            && report.restored.is_empty()
-        {
+        if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
             report.not_installed = true;
         }
         Ok(report)
@@ -240,11 +230,7 @@ impl McpSurface for ClaudeAgent {
         mcp_json_object::is_installed(&ledger, name)
     }
 
-    fn install_mcp(
-        &self,
-        scope: &Scope,
-        spec: &McpSpec,
-    ) -> Result<InstallReport, HookerError> {
+    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -280,11 +266,7 @@ impl SkillSurface for ClaudeAgent {
         skills_dir::is_installed(&root, name)
     }
 
-    fn install_skill(
-        &self,
-        scope: &Scope,
-        spec: &SkillSpec,
-    ) -> Result<InstallReport, HookerError> {
+    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let root = Self::skills_root(scope)?;
         skills_dir::install(&root, spec)
@@ -537,7 +519,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = ClaudeAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
         let cfg = dir.path().join(".mcp.json");
         assert!(cfg.exists(), "expected {} to exist", cfg.display());
         let v = read_json(&cfg);
@@ -549,7 +533,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = ClaudeAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
         assert!(!dir.path().join(".claude/settings.json").exists());
         assert!(!dir.path().join(".claude.json").exists());
     }
@@ -571,7 +557,9 @@ mod tests {
         let agent = ClaudeAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         agent.install(&scope, &local_spec("alpha")).unwrap();
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
         // Hooks live in .claude/settings.json; MCP lives in .mcp.json — separate files.
         assert!(dir.path().join(".claude/settings.json").exists());
         assert!(dir.path().join(".mcp.json").exists());
@@ -582,10 +570,10 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = ClaudeAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "appA")).unwrap();
-        let err = agent
-            .uninstall_mcp(&scope, "github", "appB")
-            .unwrap_err();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "appA"))
+            .unwrap();
+        let err = agent.uninstall_mcp(&scope, "github", "appB").unwrap_err();
         assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
     }
 
@@ -594,7 +582,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = ClaudeAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
         assert!(agent.is_mcp_installed(&scope, "github").unwrap());
         agent.uninstall_mcp(&scope, "github", "myapp").unwrap();
         assert!(!agent.is_mcp_installed(&scope, "github").unwrap());

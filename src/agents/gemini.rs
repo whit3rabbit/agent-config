@@ -85,7 +85,11 @@ impl Integration for GeminiAgent {
     fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError> {
         let p = Self::settings_path(scope)?;
         let root = json_patch::read_or_empty(&p)?;
-        Ok(json_patch::contains_tagged(&root, &["hooks", "BeforeTool"], tag))
+        Ok(json_patch::contains_tagged(
+            &root,
+            &["hooks", "BeforeTool"],
+            tag,
+        ))
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
@@ -192,10 +196,7 @@ impl Integration for GeminiAgent {
             }
         }
 
-        if report.removed.is_empty()
-            && report.patched.is_empty()
-            && report.restored.is_empty()
-        {
+        if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
             report.not_installed = true;
         }
         Ok(report)
@@ -217,11 +218,7 @@ impl McpSurface for GeminiAgent {
         mcp_json_object::is_installed(&ledger, name)
     }
 
-    fn install_mcp(
-        &self,
-        scope: &Scope,
-        spec: &McpSpec,
-    ) -> Result<InstallReport, HookerError> {
+    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -403,7 +400,9 @@ mod tests {
         // Install a hook first.
         agent.install(&scope, &local_spec("alpha")).unwrap();
         // Then install MCP — must coexist in same file.
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
 
         let settings = dir.path().join(".gemini/settings.json");
         let v = read_json(&settings);
@@ -419,12 +418,17 @@ mod tests {
         let agent = GeminiAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         agent.install(&scope, &local_spec("alpha")).unwrap();
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
         agent.uninstall_mcp(&scope, "github", "myapp").unwrap();
 
         let settings = dir.path().join(".gemini/settings.json");
         let v = read_json(&settings);
-        assert!(v["hooks"]["BeforeTool"].is_array(), "hooks must survive MCP uninstall");
+        assert!(
+            v["hooks"]["BeforeTool"].is_array(),
+            "hooks must survive MCP uninstall"
+        );
         assert!(v.get("mcpServers").is_none(), "mcpServers should be pruned");
     }
 
@@ -444,7 +448,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = GeminiAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "appA")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "appA"))
+            .unwrap();
         let err = agent.uninstall_mcp(&scope, "github", "appB").unwrap_err();
         assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
     }

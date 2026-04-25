@@ -132,11 +132,7 @@ impl Integration for CopilotAgent {
 
         if let Some(rules) = &spec.rules {
             let instr = Self::instructions_path(scope)?;
-            let host = if instr.exists() {
-                std::fs::read_to_string(&instr).map_err(|e| HookerError::io(&instr, e))?
-            } else {
-                String::new()
-            };
+            let host = fs_atomic::read_to_string_or_empty(&instr)?;
             let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
             let outcome = fs_atomic::write_atomic(&instr, new_host.as_bytes(), true)?;
             if outcome.existed && !outcome.no_change {
@@ -175,29 +171,23 @@ impl Integration for CopilotAgent {
         }
 
         let instr = Self::instructions_path(scope)?;
-        if instr.exists() {
-            let host = std::fs::read_to_string(&instr)
-                .map_err(|e| HookerError::io(&instr, e))?;
-            let (stripped, removed) = md_block::remove(&host, tag);
-            if removed {
-                if stripped.trim().is_empty() {
-                    if fs_atomic::restore_backup(&instr)? {
-                        report.restored.push(instr.clone());
-                    } else {
-                        fs_atomic::remove_if_exists(&instr)?;
-                        report.removed.push(instr.clone());
-                    }
+        let host = fs_atomic::read_to_string_or_empty(&instr)?;
+        let (stripped, removed) = md_block::remove(&host, tag);
+        if removed {
+            if stripped.trim().is_empty() {
+                if fs_atomic::restore_backup(&instr)? {
+                    report.restored.push(instr.clone());
                 } else {
-                    fs_atomic::write_atomic(&instr, stripped.as_bytes(), false)?;
-                    report.patched.push(instr.clone());
+                    fs_atomic::remove_if_exists(&instr)?;
+                    report.removed.push(instr.clone());
                 }
+            } else {
+                fs_atomic::write_atomic(&instr, stripped.as_bytes(), false)?;
+                report.patched.push(instr.clone());
             }
         }
 
-        if report.removed.is_empty()
-            && report.patched.is_empty()
-            && report.restored.is_empty()
-        {
+        if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
             report.not_installed = true;
         }
         Ok(report)

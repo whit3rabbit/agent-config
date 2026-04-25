@@ -23,10 +23,7 @@ pub(crate) const ARRAY_KEY: &str = "mcp";
 pub(crate) const NAME_FIELD: &str = "name";
 
 /// Returns true if `name` is present in the ledger.
-pub(crate) fn is_installed(
-    ledger_path: &Path,
-    name: &str,
-) -> Result<bool, HookerError> {
+pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, HookerError> {
     ownership::contains(ledger_path, name)
 }
 
@@ -96,12 +93,8 @@ pub(crate) fn uninstall(
     ownership::require_owner(ledger_path, name, owner_tag, kind, in_config)?;
 
     if in_config {
-        let removed = json_patch::remove_named_array_entry(
-            &mut root,
-            &[ARRAY_KEY],
-            NAME_FIELD,
-            name,
-        )?;
+        let removed =
+            json_patch::remove_named_array_entry(&mut root, &[ARRAY_KEY], NAME_FIELD, name)?;
         debug_assert!(removed);
 
         let now_empty = root.as_object().map(Map::is_empty).unwrap_or(true);
@@ -241,7 +234,10 @@ mod tests {
         )
         .unwrap();
         let err = uninstall(&cfg, &led, "user", "myapp", "mcp server").unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { actual: None, .. }));
+        assert!(matches!(
+            err,
+            HookerError::NotOwnedByCaller { actual: None, .. }
+        ));
     }
 
     #[test]

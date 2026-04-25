@@ -85,7 +85,7 @@ impl Integration for OpenCodeAgent {
             }
             None => default_plugin_body(&spec.command),
         };
-        let body = ensure_trailing_newline(&body);
+        let body = fs_atomic::ensure_trailing_newline(&body);
 
         let outcome = fs_atomic::write_atomic(&p, body.as_bytes(), true)?;
         let mut report = InstallReport::default();
@@ -141,11 +141,7 @@ impl McpSurface for OpenCodeAgent {
         mcp_json_array::is_installed(&ledger, name)
     }
 
-    fn install_mcp(
-        &self,
-        scope: &Scope,
-        spec: &McpSpec,
-    ) -> Result<InstallReport, HookerError> {
+    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::config_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -163,14 +159,6 @@ impl McpSurface for OpenCodeAgent {
         let cfg = Self::config_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_array::uninstall(&cfg, &ledger, name, owner_tag, "mcp server")
-    }
-}
-
-fn ensure_trailing_newline(s: &str) -> String {
-    if s.ends_with('\n') {
-        s.to_string()
-    } else {
-        format!("{s}\n")
     }
 }
 
@@ -198,7 +186,9 @@ export const Hook: Plugin = async ({{ $ }}) => ({{
 }
 
 fn escape_js_double_string(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('`', "\\`").replace('$', "\\$")
+    s.replace('\\', "\\\\")
+        .replace('`', "\\`")
+        .replace('$', "\\$")
 }
 
 #[cfg(test)]
@@ -239,8 +229,7 @@ mod tests {
             .command("myapp hook opencode")
             .build();
         agent.install(&scope, &s).unwrap();
-        let body =
-            std::fs::read_to_string(dir.path().join(".opencode/plugins/alpha.ts")).unwrap();
+        let body = std::fs::read_to_string(dir.path().join(".opencode/plugins/alpha.ts")).unwrap();
         assert!(body.contains("myapp hook opencode"));
         assert!(body.contains("tool.execute.before"));
     }
@@ -288,7 +277,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = OpenCodeAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
         let cfg = dir.path().join(".opencode/opencode.json");
         assert!(cfg.exists());
         let v = read_json(&cfg);
@@ -309,7 +300,9 @@ mod tests {
         .unwrap();
         let agent = OpenCodeAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
         let v = read_json(&cfg);
         let arr = v["mcp"].as_array().unwrap();
         assert_eq!(arr.len(), 2);
@@ -333,7 +326,9 @@ mod tests {
         let scope = Scope::Local(dir.path().to_path_buf());
         let plugin_spec = HookSpec::builder("alpha").command("noop").build();
         agent.install(&scope, &plugin_spec).unwrap();
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
         // Plugin file and MCP config are separate.
         assert!(dir.path().join(".opencode/plugins/alpha.ts").exists());
         assert!(dir.path().join(".opencode/opencode.json").exists());
@@ -344,7 +339,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = OpenCodeAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "appA")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "appA"))
+            .unwrap();
         let err = agent.uninstall_mcp(&scope, "github", "appB").unwrap_err();
         assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
     }
@@ -354,7 +351,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = OpenCodeAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
         agent.uninstall_mcp(&scope, "github", "myapp").unwrap();
         // Empty config gets removed.
         assert!(!dir.path().join(".opencode/opencode.json").exists());

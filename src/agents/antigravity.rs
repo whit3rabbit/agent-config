@@ -48,9 +48,7 @@ impl AntigravityAgent {
     /// for skills.
     fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
         Ok(match scope {
-            Scope::Global => paths::gemini_home()?
-                .join("antigravity")
-                .join("skills"),
+            Scope::Global => paths::gemini_home()?.join("antigravity").join("skills"),
             Scope::Local(p) => p.join(".agent").join("skills"),
         })
     }
@@ -112,11 +110,7 @@ impl SkillSurface for AntigravityAgent {
         skills_dir::is_installed(&root, name)
     }
 
-    fn install_skill(
-        &self,
-        scope: &Scope,
-        spec: &SkillSpec,
-    ) -> Result<InstallReport, HookerError> {
+    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let root = Self::skills_root(scope)?;
         skills_dir::install(&root, spec)
@@ -179,7 +173,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = AntigravityAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_skill(&scope, &skill("alpha", "myapp")).unwrap();
+        agent
+            .install_skill(&scope, &skill("alpha", "myapp"))
+            .unwrap();
         assert!(dir.path().join(".agent/skills/alpha/SKILL.md").exists());
         let s = fs::read_to_string(dir.path().join(".agent/skills/alpha/SKILL.md")).unwrap();
         assert!(s.contains("name: alpha"));
@@ -202,7 +198,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = AntigravityAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_skill(&scope, &skill("alpha", "myapp")).unwrap();
+        agent
+            .install_skill(&scope, &skill("alpha", "myapp"))
+            .unwrap();
         agent.uninstall_skill(&scope, "alpha", "myapp").unwrap();
         assert!(!dir.path().join(".agent/skills/alpha").exists());
     }
@@ -212,10 +210,10 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = AntigravityAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_skill(&scope, &skill("alpha", "appA")).unwrap();
-        let err = agent
-            .uninstall_skill(&scope, "alpha", "appB")
-            .unwrap_err();
+        agent
+            .install_skill(&scope, &skill("alpha", "appA"))
+            .unwrap();
+        let err = agent.uninstall_skill(&scope, "alpha", "appB").unwrap_err();
         assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
     }
 
@@ -234,6 +232,9 @@ mod tests {
         let scope = Scope::Local(dir.path().to_path_buf());
         let no_rules = HookSpec::builder("alpha").command("noop").build();
         let err = agent.install(&scope, &no_rules).unwrap_err();
-        assert!(matches!(err, HookerError::MissingSpecField { field: "rules", .. }));
+        assert!(matches!(
+            err,
+            HookerError::MissingSpecField { field: "rules", .. }
+        ));
     }
 }

@@ -61,8 +61,7 @@ fn full_round_trip_against_a_local_project_for_three_agents() {
         // Idempotent re-install.
         let again = agent.install(&scope, &spec).unwrap();
         assert!(
-            again.already_installed
-                || (again.created.is_empty() && again.patched.is_empty()),
+            again.already_installed || (again.created.is_empty() && again.patched.is_empty()),
             "{id} re-install should be a no-op"
         );
 
@@ -72,9 +71,7 @@ fn full_round_trip_against_a_local_project_for_three_agents() {
         // Uninstall.
         let report = agent.uninstall(&scope, "smoketest").unwrap();
         assert!(
-            !report.removed.is_empty()
-                || !report.patched.is_empty()
-                || !report.restored.is_empty(),
+            !report.removed.is_empty() || !report.patched.is_empty() || !report.restored.is_empty(),
             "{id} uninstall should report at least one action"
         );
 
@@ -99,6 +96,8 @@ fn invalid_tag_is_rejected_at_install_time() {
     ));
 
     // And via direct uninstall path.
-    let err = agent.uninstall(&scope, "ghost tag with spaces").unwrap_err();
+    let err = agent
+        .uninstall(&scope, "ghost tag with spaces")
+        .unwrap_err();
     assert!(matches!(err, ai_hooker::HookerError::InvalidTag { .. }));
 }

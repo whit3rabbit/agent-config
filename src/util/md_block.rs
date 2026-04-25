@@ -130,7 +130,8 @@ mod tests {
 
     #[test]
     fn upsert_replaces_in_place() {
-        let host = "# Top\n\n<!-- BEGIN AI-HOOKER:app -->\nold\n<!-- END AI-HOOKER:app -->\n\n# Bottom\n";
+        let host =
+            "# Top\n\n<!-- BEGIN AI-HOOKER:app -->\nold\n<!-- END AI-HOOKER:app -->\n\n# Bottom\n";
         let out = upsert(host, "app", "new");
         assert_eq!(
             out,

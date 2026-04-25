@@ -138,11 +138,7 @@ impl Integration for CursorAgent {
         let mut root = json_patch::read_or_empty(&p)?;
         let mut changed = false;
         for event_key in ["preToolUse", "postToolUse"] {
-            if json_patch::remove_tagged_array_entry(
-                &mut root,
-                &["hooks", event_key],
-                tag,
-            )? {
+            if json_patch::remove_tagged_array_entry(&mut root, &["hooks", event_key], tag)? {
                 changed = true;
             }
         }
@@ -184,11 +180,7 @@ impl McpSurface for CursorAgent {
         mcp_json_object::is_installed(&ledger, name)
     }
 
-    fn install_mcp(
-        &self,
-        scope: &Scope,
-        spec: &McpSpec,
-    ) -> Result<InstallReport, HookerError> {
+    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -355,7 +347,10 @@ mod tests {
         assert!(p.exists());
 
         agent.uninstall(&scope, "alpha").unwrap();
-        assert!(!p.exists(), "we authored the file; should be removed on uninstall");
+        assert!(
+            !p.exists(),
+            "we authored the file; should be removed on uninstall"
+        );
     }
 
     #[test]
@@ -390,7 +385,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = CursorAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
         let cfg = dir.path().join(".cursor/mcp.json");
         assert!(cfg.exists());
         let v = read_json(&cfg);
@@ -403,7 +400,9 @@ mod tests {
         let agent = CursorAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         agent.install(&scope, &local_spec("alpha")).unwrap();
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
         assert!(dir.path().join(".cursor/hooks.json").exists());
         assert!(dir.path().join(".cursor/mcp.json").exists());
         // Hooks file does not contain the MCP server.
@@ -427,7 +426,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = CursorAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "appA")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "appA"))
+            .unwrap();
         let err = agent.uninstall_mcp(&scope, "github", "appB").unwrap_err();
         assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
     }
@@ -437,7 +438,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = CursorAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        agent.install_mcp(&scope, &local_mcp_spec("github", "myapp")).unwrap();
+        agent
+            .install_mcp(&scope, &local_mcp_spec("github", "myapp"))
+            .unwrap();
         agent.uninstall_mcp(&scope, "github", "myapp").unwrap();
         assert!(!dir.path().join(".cursor/mcp.json").exists());
     }

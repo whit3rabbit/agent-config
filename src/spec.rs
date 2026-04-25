@@ -73,10 +73,7 @@ pub(crate) enum IdentifierKind {
 /// Shared identifier validator: must be non-empty and contain only ASCII
 /// alphanumerics, `_`, or `-`. Reasons are static strings so callers preserve
 /// the existing [`HookerError::InvalidTag`] shape.
-pub(crate) fn validate_identifier(
-    value: &str,
-    kind: IdentifierKind,
-) -> Result<(), HookerError> {
+pub(crate) fn validate_identifier(value: &str, kind: IdentifierKind) -> Result<(), HookerError> {
     let (empty, illegal) = match kind {
         IdentifierKind::Tag => (
             "tag must not be empty",
@@ -630,18 +627,13 @@ mod tests {
             .command("x")
             .try_build()
             .unwrap_err();
-        assert!(
-            matches!(err, HookerError::InvalidTag { reason, .. } if reason.contains("ASCII"))
-        );
+        assert!(matches!(err, HookerError::InvalidTag { reason, .. } if reason.contains("ASCII")));
     }
 
     #[test]
     fn try_build_rejects_tag_with_special_chars() {
         for bad in ["tag/slash", "tag.dot", "tag!bang", "tag@at"] {
-            let err = HookSpec::builder(bad)
-                .command("x")
-                .try_build()
-                .unwrap_err();
+            let err = HookSpec::builder(bad).command("x").try_build().unwrap_err();
             assert!(
                 matches!(err, HookerError::InvalidTag { .. }),
                 "expected InvalidTag for {bad:?}"
@@ -662,9 +654,7 @@ mod tests {
     #[test]
     fn try_build_rejects_missing_command() {
         let err = HookSpec::builder("ok").try_build().unwrap_err();
-        assert!(
-            matches!(err, HookerError::MissingSpecField { field, .. } if field == "command")
-        );
+        assert!(matches!(err, HookerError::MissingSpecField { field, .. } if field == "command"));
     }
 
     #[test]
@@ -697,9 +687,7 @@ mod tests {
 
     #[test]
     fn builder_defaults() {
-        let spec = HookSpec::builder("myapp")
-            .command("run")
-            .build();
+        let spec = HookSpec::builder("myapp").command("run").build();
 
         assert!(matches!(spec.matcher, Matcher::All));
         assert!(matches!(spec.event, Event::PreToolUse));
@@ -740,7 +728,10 @@ mod tests {
         match spec.transport {
             McpTransport::Http { url, headers } => {
                 assert_eq!(url, "https://example.com/mcp");
-                assert_eq!(headers.get("Authorization").map(String::as_str), Some("Bearer xyz"));
+                assert_eq!(
+                    headers.get("Authorization").map(String::as_str),
+                    Some("Bearer xyz")
+                );
             }
             other => panic!("expected http, got {other:?}"),
         }
@@ -757,10 +748,11 @@ mod tests {
 
     #[test]
     fn mcp_try_build_rejects_missing_transport() {
-        let err = McpSpec::builder("x").owner("myapp").try_build().unwrap_err();
-        assert!(
-            matches!(err, HookerError::MissingSpecField { field, .. } if field == "transport")
-        );
+        let err = McpSpec::builder("x")
+            .owner("myapp")
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, HookerError::MissingSpecField { field, .. } if field == "transport"));
     }
 
     #[test]

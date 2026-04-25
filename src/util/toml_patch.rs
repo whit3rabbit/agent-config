@@ -84,11 +84,7 @@ pub(crate) fn remove_named_table(
 }
 
 /// True if `[parent.<name>]` exists in the document.
-pub(crate) fn contains_named_table(
-    doc: &DocumentMut,
-    parent: &[&str],
-    name: &str,
-) -> bool {
+pub(crate) fn contains_named_table(doc: &DocumentMut, parent: &[&str], name: &str) -> bool {
     let mut cur: &Item = doc.as_item();
     for key in parent {
         let Some(next) = cur.as_table().and_then(|t| t.get(key)) else {
@@ -96,13 +92,12 @@ pub(crate) fn contains_named_table(
         };
         cur = next;
     }
-    cur.as_table().map(|t| t.contains_key(name)).unwrap_or(false)
+    cur.as_table()
+        .map(|t| t.contains_key(name))
+        .unwrap_or(false)
 }
 
-fn ensure_table<'a>(
-    doc: &'a mut DocumentMut,
-    path: &[&str],
-) -> Result<&'a mut Table, HookerError> {
+fn ensure_table<'a>(doc: &'a mut DocumentMut, path: &[&str]) -> Result<&'a mut Table, HookerError> {
     let mut cur: &mut Table = doc.as_table_mut();
     for key in path {
         if !cur.contains_key(key) {
@@ -122,10 +117,7 @@ fn ensure_table<'a>(
     Ok(cur)
 }
 
-fn traverse_table_mut<'a>(
-    doc: &'a mut DocumentMut,
-    path: &[&str],
-) -> Option<&'a mut Table> {
+fn traverse_table_mut<'a>(doc: &'a mut DocumentMut, path: &[&str]) -> Option<&'a mut Table> {
     let mut cur: &mut Table = doc.as_table_mut();
     for key in path {
         cur = cur.get_mut(key)?.as_table_mut()?;
@@ -190,7 +182,10 @@ mod tests {
         let changed = upsert_named_table(&mut doc, &["mcp_servers"], "github", t).unwrap();
         assert!(changed);
         let rendered = doc.to_string();
-        assert!(rendered.contains("[mcp_servers.github]"), "got:\n{rendered}");
+        assert!(
+            rendered.contains("[mcp_servers.github]"),
+            "got:\n{rendered}"
+        );
         assert!(rendered.contains(r#"command = "npx""#), "got:\n{rendered}");
     }
 
@@ -200,8 +195,7 @@ mod tests {
         let mut t = Table::new();
         t["command"] = value("npx");
         upsert_named_table(&mut doc, &["mcp_servers"], "github", t.clone()).unwrap();
-        let changed_again =
-            upsert_named_table(&mut doc, &["mcp_servers"], "github", t).unwrap();
+        let changed_again = upsert_named_table(&mut doc, &["mcp_servers"], "github", t).unwrap();
         assert!(!changed_again);
     }
 
@@ -214,8 +208,7 @@ mod tests {
 
         let mut t2 = Table::new();
         t2["command"] = value("new");
-        let changed =
-            upsert_named_table(&mut doc, &["mcp_servers"], "github", t2).unwrap();
+        let changed = upsert_named_table(&mut doc, &["mcp_servers"], "github", t2).unwrap();
         assert!(changed);
         assert!(doc.to_string().contains(r#"command = "new""#));
     }
