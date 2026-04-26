@@ -85,7 +85,7 @@ files:
 {
   "entries": {
     "golden-server": {
-      "content_hash": "9cf386a26b74249c08cc54196822deee1679dbb8ae4373c51af74283ef8e3e0f",
+      "content_hash": "de73436d65e5d173e50b0a75ebd36bc753c2281d77b04050a84202439c0173ec",
       "owner": "other-owner"
     }
   },
