@@ -305,6 +305,7 @@ impl McpSurface for HermesAgent {
     ) -> Result<InstallReport, AgentConfigError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
+        scope.ensure_contained(&cfg)?;
         spec.validate_local_secret_policy(scope)?;
         Self::install_mcp_config(&cfg, spec)
     }
@@ -318,6 +319,7 @@ impl McpSurface for HermesAgent {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::mcp_path(scope)?;
+        scope.ensure_contained(&cfg)?;
         Self::uninstall_mcp_config(&cfg, name, owner_tag)
     }
 }
@@ -390,6 +392,7 @@ impl SkillSurface for HermesAgent {
         spec: &SkillSpec,
     ) -> Result<InstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
+        scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
     }
 
