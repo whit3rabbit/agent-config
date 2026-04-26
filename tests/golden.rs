@@ -935,8 +935,21 @@ impl Normalizer {
         for (from, to) in &self.replacements {
             out = out.replace(from, to);
         }
-        out
+        normalize_placeholder_separators(&out)
     }
+}
+
+fn normalize_placeholder_separators(input: &str) -> String {
+    input
+        .split_inclusive('\n')
+        .map(|line| {
+            if line.contains("[ROOT]") || line.contains("[HOME]") || line.contains("[CODEX_HOME]") {
+                line.replace("\\\\", "/").replace('\\', "/")
+            } else {
+                line.to_string()
+            }
+        })
+        .collect()
 }
 
 fn push_path_replacements(
@@ -966,5 +979,5 @@ fn normalizer_redacts_debug_escaped_windows_paths() {
     let normalizer = Normalizer::new(&env);
     let input = r#""C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\.tmp123\\project\\.mcp.json""#;
 
-    assert_eq!(normalizer.normalize(input), r#""[ROOT]\\.mcp.json""#);
+    assert_eq!(normalizer.normalize(input), r#""[ROOT]/.mcp.json""#);
 }
