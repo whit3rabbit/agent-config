@@ -203,6 +203,7 @@ pub(crate) fn uninstall(
         ownership::require_owner(&led, name, owner_tag, KIND, on_disk)?;
 
         if on_disk {
+            ownership::check_drift(&led, name, &skill_dir(skills_root, name).join(SKILL_MD))?;
             fs_atomic::ensure_contained(&dir, skills_root)?;
             fs::remove_dir_all(&dir).map_err(|e| AgentConfigError::io(&dir, e))?;
             report.removed.push(dir);
@@ -596,6 +597,22 @@ mod tests {
             err,
             AgentConfigError::NotOwnedByCaller { actual: None, .. }
         ));
+    }
+
+    #[test]
+    fn uninstall_refuses_when_skill_md_drifted() {
+        let dir = tempdir().unwrap();
+        install(dir.path(), &basic_spec("alpha", "appA")).unwrap();
+
+        // User edits SKILL.md outside our control.
+        let md = dir.path().join("alpha/SKILL.md");
+        let mut s = fs::read_to_string(&md).unwrap();
+        s.push_str("\n<!-- user note -->\n");
+        fs::write(&md, s).unwrap();
+
+        let err = uninstall(dir.path(), "alpha", "appA").unwrap_err();
+        assert!(matches!(err, AgentConfigError::ConfigDrifted { .. }));
+        assert!(md.exists(), "drifted skill must not be deleted");
     }
 
     #[test]
