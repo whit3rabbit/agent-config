@@ -31,7 +31,7 @@ use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
 use crate::status::StatusReport;
 use crate::util::{
-    fs_atomic, json_patch, mcp_json_object, md_block, ownership, planning, skills_dir,
+    file_lock, fs_atomic, json_patch, mcp_json_object, md_block, ownership, planning, skills_dir,
 };
 
 /// Claude Code (Anthropic's official CLI).
@@ -173,40 +173,44 @@ impl Integration for ClaudeAgent {
         let mut report = InstallReport::default();
 
         let settings = Self::settings_path(scope)?;
-        let mut root = json_patch::read_or_empty(&settings)?;
+        {
+            let _settings_lock = file_lock::FileLock::acquire(&settings)?;
+            let mut root = json_patch::read_or_empty(&settings)?;
 
-        let event_key = event_to_string(&spec.event);
-        let matcher_str = matcher_to_claude(&spec.matcher);
+            let event_key = event_to_string(&spec.event);
+            let matcher_str = matcher_to_claude(&spec.matcher);
 
-        let entry = json!({
-            "matcher": matcher_str,
-            "hooks": [{ "type": "command", "command": spec.command }],
-        });
+            let entry = json!({
+                "matcher": matcher_str,
+                "hooks": [{ "type": "command", "command": spec.command }],
+            });
 
-        let changed = json_patch::upsert_tagged_array_entry(
-            &mut root,
-            &["hooks", &event_key],
-            &spec.tag,
-            entry,
-        )?;
+            let changed = json_patch::upsert_tagged_array_entry(
+                &mut root,
+                &["hooks", &event_key],
+                &spec.tag,
+                entry,
+            )?;
 
-        if changed {
-            let bytes = json_patch::to_pretty(&root);
-            let outcome = fs_atomic::write_atomic(&settings, &bytes, true)?;
-            if outcome.existed {
-                report.patched.push(outcome.path.clone());
+            if changed {
+                let bytes = json_patch::to_pretty(&root);
+                let outcome = fs_atomic::write_atomic(&settings, &bytes, true)?;
+                if outcome.existed {
+                    report.patched.push(outcome.path.clone());
+                } else {
+                    report.created.push(outcome.path.clone());
+                }
+                if let Some(b) = outcome.backup {
+                    report.backed_up.push(b);
+                }
             } else {
-                report.created.push(outcome.path.clone());
+                report.already_installed = true;
             }
-            if let Some(b) = outcome.backup {
-                report.backed_up.push(b);
-            }
-        } else {
-            report.already_installed = true;
         }
 
         if let Some(rules) = &spec.rules {
             let memory = Self::memory_path(scope)?;
+            let _memory_lock = file_lock::FileLock::acquire(&memory)?;
             let host = fs_atomic::read_to_string_or_empty(&memory)?;
             let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
             let outcome = fs_atomic::write_atomic(&memory, new_host.as_bytes(), true)?;
@@ -232,6 +236,7 @@ impl Integration for ClaudeAgent {
 
         let settings = Self::settings_path(scope)?;
         if settings.exists() {
+            let _settings_lock = file_lock::FileLock::acquire(&settings)?;
             let mut root = json_patch::read_or_empty(&settings)?;
             let changed =
                 json_patch::remove_tagged_array_entries_under(&mut root, &["hooks"], tag)?;
@@ -251,6 +256,7 @@ impl Integration for ClaudeAgent {
         }
 
         let memory = Self::memory_path(scope)?;
+        let _memory_lock = file_lock::FileLock::acquire(&memory)?;
         let host = fs_atomic::read_to_string_or_empty(&memory)?;
         let (stripped, removed) = md_block::remove(&host, tag);
         if removed {

@@ -123,7 +123,36 @@ fn find_block(host: &str, begin: &str, end: &str) -> Option<(usize, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::HookerError;
+    use crate::util::{file_lock, fs_atomic};
     use pretty_assertions::assert_eq;
+    use std::sync::{Arc, Barrier};
+    use std::thread;
+
+    fn run_two<A, B, FA, FB>(a: FA, b: FB) -> (A, B)
+    where
+        A: Send + 'static,
+        B: Send + 'static,
+        FA: FnOnce() -> A + Send + 'static,
+        FB: FnOnce() -> B + Send + 'static,
+    {
+        let barrier = Arc::new(Barrier::new(3));
+        let a_barrier = Arc::clone(&barrier);
+        let b_barrier = Arc::clone(&barrier);
+        let a_thread = thread::spawn(move || {
+            a_barrier.wait();
+            a()
+        });
+        let b_thread = thread::spawn(move || {
+            b_barrier.wait();
+            b()
+        });
+        barrier.wait();
+        (
+            a_thread.join().expect("first markdown writer panicked"),
+            b_thread.join().expect("second markdown writer panicked"),
+        )
+    }
 
     #[test]
     fn upsert_appends_on_empty_host() {
@@ -213,5 +242,40 @@ mod tests {
         let c = upsert("", "app", "x\n\n\n");
         assert_eq!(a, b);
         assert_eq!(b, c);
+    }
+
+    #[test]
+    fn concurrent_file_upsert_different_tags_keeps_both_blocks() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("AGENTS.md");
+        let path_a = path.clone();
+        let path_b = path.clone();
+
+        let (ra, rb) = run_two(
+            move || {
+                file_lock::with_lock(&path_a, || {
+                    let host = fs_atomic::read_to_string_or_empty(&path_a)?;
+                    let updated = upsert(&host, "alpha", "Alpha body.");
+                    fs_atomic::write_atomic(&path_a, updated.as_bytes(), true)?;
+                    Ok::<(), HookerError>(())
+                })
+            },
+            move || {
+                file_lock::with_lock(&path_b, || {
+                    let host = fs_atomic::read_to_string_or_empty(&path_b)?;
+                    let updated = upsert(&host, "beta", "Beta body.");
+                    fs_atomic::write_atomic(&path_b, updated.as_bytes(), true)?;
+                    Ok::<(), HookerError>(())
+                })
+            },
+        );
+
+        ra.unwrap();
+        rb.unwrap();
+        let text = std::fs::read_to_string(path).unwrap();
+        assert!(text.contains("BEGIN AI-HOOKER:alpha"));
+        assert!(text.contains("BEGIN AI-HOOKER:beta"));
+        assert_eq!(text.matches("BEGIN AI-HOOKER:alpha").count(), 1);
+        assert_eq!(text.matches("BEGIN AI-HOOKER:beta").count(), 1);
     }
 }

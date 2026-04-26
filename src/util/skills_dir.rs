@@ -21,7 +21,7 @@ use crate::error::HookerError;
 use crate::integration::{InstallReport, UninstallReport};
 use crate::plan::{has_refusal, PlannedChange, RefusalReason};
 use crate::spec::{SkillFrontmatter, SkillSpec};
-use crate::util::{fs_atomic, ownership, planning};
+use crate::util::{file_lock, fs_atomic, ownership, planning};
 
 const LEDGER_FILE: &str = ".ai-hooker-skills.json";
 const SKILL_MD: &str = "SKILL.md";
@@ -62,37 +62,39 @@ pub(crate) fn install(skills_root: &Path, spec: &SkillSpec) -> Result<InstallRep
         validate_relative(&asset.relative_path)?;
     }
 
-    let mut report = InstallReport::default();
-    let dir = skill_dir(skills_root, &spec.name);
-    let led = ledger_path(skills_root);
+    file_lock::with_lock(skills_root, || {
+        let mut report = InstallReport::default();
+        let dir = skill_dir(skills_root, &spec.name);
+        let led = ledger_path(skills_root);
 
-    ownership::require_owner(&led, &spec.name, &spec.owner_tag, KIND, dir.exists())?;
+        ownership::require_owner(&led, &spec.name, &spec.owner_tag, KIND, dir.exists())?;
 
-    let skill_md_path = dir.join(SKILL_MD);
-    let skill_md = render_skill_md(&spec.frontmatter, &spec.body);
-    let outcome = fs_atomic::write_atomic(&skill_md_path, skill_md.as_bytes(), false)?;
-    record_outcome(&mut report, outcome);
-
-    for asset in &spec.assets {
-        let asset_path = dir.join(&asset.relative_path);
-        let outcome = fs_atomic::write_atomic(&asset_path, &asset.bytes, false)?;
-        if asset.executable {
-            fs_atomic::chmod(&asset_path, 0o755)?;
-        }
+        let skill_md_path = dir.join(SKILL_MD);
+        let skill_md = render_skill_md(&spec.frontmatter, &spec.body);
+        let outcome = fs_atomic::write_atomic(&skill_md_path, skill_md.as_bytes(), false)?;
         record_outcome(&mut report, outcome);
-    }
 
-    let prior = ownership::owner_of(&led, &spec.name)?;
-    let owner_changed = prior.as_deref() != Some(spec.owner_tag.as_str());
+        for asset in &spec.assets {
+            let asset_path = dir.join(&asset.relative_path);
+            let outcome = fs_atomic::write_atomic(&asset_path, &asset.bytes, false)?;
+            if asset.executable {
+                fs_atomic::chmod(&asset_path, 0o755)?;
+            }
+            record_outcome(&mut report, outcome);
+        }
 
-    if owner_changed || !report.created.is_empty() || !report.patched.is_empty() {
-        ownership::record_install(&led, &spec.name, &spec.owner_tag)?;
-    }
+        let prior = ownership::owner_of(&led, &spec.name)?;
+        let owner_changed = prior.as_deref() != Some(spec.owner_tag.as_str());
 
-    if report.created.is_empty() && report.patched.is_empty() && !owner_changed {
-        report.already_installed = true;
-    }
-    Ok(report)
+        if owner_changed || !report.created.is_empty() || !report.patched.is_empty() {
+            ownership::record_install(&led, &spec.name, &spec.owner_tag)?;
+        }
+
+        if report.created.is_empty() && report.patched.is_empty() && !owner_changed {
+            report.already_installed = true;
+        }
+        Ok(report)
+    })
 }
 
 /// Plan installing or updating a skill directory without mutating disk.
@@ -164,31 +166,44 @@ pub(crate) fn uninstall(
 ) -> Result<UninstallReport, HookerError> {
     SkillSpec::validate_name(name)?;
 
-    let mut report = UninstallReport::default();
     let dir = skill_dir(skills_root, name);
     let led = ledger_path(skills_root);
-
     let on_disk = dir.exists();
     let in_ledger = ownership::contains(&led, name)?;
-
     if !on_disk && !in_ledger {
-        report.not_installed = true;
-        return Ok(report);
+        return Ok(UninstallReport {
+            not_installed: true,
+            ..UninstallReport::default()
+        });
     }
 
-    ownership::require_owner(&led, name, owner_tag, KIND, on_disk)?;
+    file_lock::with_lock(skills_root, || {
+        let mut report = UninstallReport::default();
+        let dir = skill_dir(skills_root, name);
+        let led = ledger_path(skills_root);
 
-    if on_disk {
-        fs::remove_dir_all(&dir).map_err(|e| HookerError::io(&dir, e))?;
-        report.removed.push(dir);
-    }
+        let on_disk = dir.exists();
+        let in_ledger = ownership::contains(&led, name)?;
 
-    ownership::record_uninstall(&led, name)?;
+        if !on_disk && !in_ledger {
+            report.not_installed = true;
+            return Ok(report);
+        }
 
-    if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
-        report.not_installed = true;
-    }
-    Ok(report)
+        ownership::require_owner(&led, name, owner_tag, KIND, on_disk)?;
+
+        if on_disk {
+            fs::remove_dir_all(&dir).map_err(|e| HookerError::io(&dir, e))?;
+            report.removed.push(dir);
+        }
+
+        ownership::record_uninstall(&led, name)?;
+
+        if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
+            report.not_installed = true;
+        }
+        Ok(report)
+    })
 }
 
 /// Plan uninstalling a skill directory without mutating disk.
@@ -323,7 +338,34 @@ fn yaml_escape_scalar(s: &str) -> String {
 mod tests {
     use super::*;
     use crate::spec::SkillAsset;
+    use std::sync::{Arc, Barrier};
+    use std::thread;
     use tempfile::tempdir;
+
+    fn run_two<A, B, FA, FB>(a: FA, b: FB) -> (A, B)
+    where
+        A: Send + 'static,
+        B: Send + 'static,
+        FA: FnOnce() -> A + Send + 'static,
+        FB: FnOnce() -> B + Send + 'static,
+    {
+        let barrier = Arc::new(Barrier::new(3));
+        let a_barrier = Arc::clone(&barrier);
+        let b_barrier = Arc::clone(&barrier);
+        let a_thread = thread::spawn(move || {
+            a_barrier.wait();
+            a()
+        });
+        let b_thread = thread::spawn(move || {
+            b_barrier.wait();
+            b()
+        });
+        barrier.wait();
+        (
+            a_thread.join().expect("first skill writer panicked"),
+            b_thread.join().expect("second skill writer panicked"),
+        )
+    }
 
     fn basic_spec(name: &str, owner: &str) -> SkillSpec {
         SkillSpec::builder(name)
@@ -530,6 +572,35 @@ mod tests {
         assert!(
             s.contains(r#"description: "Title: subtitle.""#),
             "got:\n{s}"
+        );
+    }
+
+    #[test]
+    fn concurrent_install_different_skills_keeps_both_ledger_entries() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        let root_a = root.clone();
+        let root_b = root.clone();
+        let spec_a = basic_spec("alpha", "appA");
+        let spec_b = basic_spec("beta", "appB");
+
+        let (ra, rb) = run_two(
+            move || install(&root_a, &spec_a),
+            move || install(&root_b, &spec_b),
+        );
+
+        ra.unwrap();
+        rb.unwrap();
+        assert!(root.join("alpha/SKILL.md").is_file());
+        assert!(root.join("beta/SKILL.md").is_file());
+        let led = ledger_path(&root);
+        assert_eq!(
+            ownership::owner_of(&led, "alpha").unwrap().as_deref(),
+            Some("appA")
+        );
+        assert_eq!(
+            ownership::owner_of(&led, "beta").unwrap().as_deref(),
+            Some("appB")
         );
     }
 }

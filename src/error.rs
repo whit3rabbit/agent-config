@@ -66,6 +66,13 @@ pub enum HookerError {
     #[error("backup already exists at {0}; aborting to avoid losing user data")]
     BackupExists(PathBuf),
 
+    /// Could not acquire a filesystem lock before the timeout elapsed.
+    #[error("timed out waiting for lock at {path}")]
+    LockTimeout {
+        /// The lock file path that remained held.
+        path: PathBuf,
+    },
+
     /// A target file existed but contained invalid TOML (Codex `config.toml`).
     #[error("invalid TOML in {path}: {source}")]
     TomlInvalid {
@@ -194,6 +201,11 @@ mod tests {
 
         let backup = HookerError::BackupExists(PathBuf::from("/c.bak"));
         assert!(format!("{backup}").contains("/c.bak"));
+
+        let lock = HookerError::LockTimeout {
+            path: PathBuf::from("/c.lock"),
+        };
+        assert!(format!("{lock}").contains("/c.lock"));
 
         let toml = HookerError::TomlInvalid {
             path: PathBuf::from("/d.toml"),

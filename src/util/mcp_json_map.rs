@@ -17,7 +17,7 @@ use crate::integration::{InstallReport, UninstallReport};
 use crate::plan::{has_refusal, PlannedChange, RefusalReason};
 use crate::spec::{McpSpec, McpTransport};
 use crate::status::ConfigPresence;
-use crate::util::{fs_atomic, json5_patch, json_patch, ownership, planning};
+use crate::util::{file_lock, fs_atomic, json5_patch, json_patch, ownership, planning};
 
 /// The on-disk syntax to accept when reading the config.
 #[derive(Debug, Clone, Copy)]
@@ -81,46 +81,48 @@ pub(crate) fn install(
     build_server: ServerBuilder,
     format: ConfigFormat,
 ) -> Result<InstallReport, HookerError> {
-    let mut report = InstallReport::default();
+    file_lock::with_lock(config_path, || {
+        let mut report = InstallReport::default();
 
-    let mut root = read_or_empty(config_path, format)?;
-    let in_config = json_patch::contains_named(&root, servers_path, &spec.name);
-    ownership::require_owner(
-        ledger_path,
-        &spec.name,
-        &spec.owner_tag,
-        "mcp server",
-        in_config,
-    )?;
+        let mut root = read_or_empty(config_path, format)?;
+        let in_config = json_patch::contains_named(&root, servers_path, &spec.name);
+        ownership::require_owner(
+            ledger_path,
+            &spec.name,
+            &spec.owner_tag,
+            "mcp server",
+            in_config,
+        )?;
 
-    let value = build_server(spec);
-    let changed =
-        json_patch::upsert_named_object_entry(&mut root, servers_path, &spec.name, value)?;
+        let value = build_server(spec);
+        let changed =
+            json_patch::upsert_named_object_entry(&mut root, servers_path, &spec.name, value)?;
 
-    let prior_owner = ownership::owner_of(ledger_path, &spec.name)?;
-    let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
+        let prior_owner = ownership::owner_of(ledger_path, &spec.name)?;
+        let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
 
-    if changed {
-        let bytes = json_patch::to_pretty(&root);
-        let outcome = fs_atomic::write_atomic(config_path, &bytes, true)?;
-        if outcome.existed {
-            report.patched.push(outcome.path.clone());
-        } else {
-            report.created.push(outcome.path.clone());
+        if changed {
+            let bytes = json_patch::to_pretty(&root);
+            let outcome = fs_atomic::write_atomic(config_path, &bytes, true)?;
+            if outcome.existed {
+                report.patched.push(outcome.path.clone());
+            } else {
+                report.created.push(outcome.path.clone());
+            }
+            if let Some(b) = outcome.backup {
+                report.backed_up.push(b);
+            }
         }
-        if let Some(b) = outcome.backup {
-            report.backed_up.push(b);
+
+        if changed || owner_changed {
+            ownership::record_install(ledger_path, &spec.name, &spec.owner_tag)?;
         }
-    }
 
-    if changed || owner_changed {
-        ownership::record_install(ledger_path, &spec.name, &spec.owner_tag)?;
-    }
-
-    if !changed && !owner_changed {
-        report.already_installed = true;
-    }
-    Ok(report)
+        if !changed && !owner_changed {
+            report.already_installed = true;
+        }
+        Ok(report)
+    })
 }
 
 /// Plan installing or updating an MCP server in a named object.
@@ -205,42 +207,54 @@ pub(crate) fn uninstall(
     servers_path: &[&str],
     format: ConfigFormat,
 ) -> Result<UninstallReport, HookerError> {
-    let mut report = UninstallReport::default();
-
-    let mut root = read_or_empty(config_path, format)?;
+    let root = read_or_empty(config_path, format)?;
     let in_config = json_patch::contains_named(&root, servers_path, name);
     let in_ledger = ownership::contains(ledger_path, name)?;
-
     if !in_config && !in_ledger {
-        report.not_installed = true;
-        return Ok(report);
+        return Ok(UninstallReport {
+            not_installed: true,
+            ..UninstallReport::default()
+        });
     }
 
-    ownership::require_owner(ledger_path, name, owner_tag, kind, in_config)?;
+    file_lock::with_lock(config_path, || {
+        let mut report = UninstallReport::default();
 
-    if in_config {
-        let removed = json_patch::remove_named_object_entry(&mut root, servers_path, name)?;
-        debug_assert!(removed);
+        let mut root = read_or_empty(config_path, format)?;
+        let in_config = json_patch::contains_named(&root, servers_path, name);
+        let in_ledger = ownership::contains(ledger_path, name)?;
 
-        let now_empty = root.as_object().map(Map::is_empty).unwrap_or(true);
-        if now_empty && fs_atomic::restore_backup(config_path)? {
-            report.restored.push(config_path.to_path_buf());
-        } else if now_empty {
-            fs_atomic::remove_if_exists(config_path)?;
-            report.removed.push(config_path.to_path_buf());
-        } else {
-            let bytes = json_patch::to_pretty(&root);
-            fs_atomic::write_atomic(config_path, &bytes, false)?;
-            report.patched.push(config_path.to_path_buf());
+        if !in_config && !in_ledger {
+            report.not_installed = true;
+            return Ok(report);
         }
-    }
 
-    ownership::record_uninstall(ledger_path, name)?;
+        ownership::require_owner(ledger_path, name, owner_tag, kind, in_config)?;
 
-    if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
-        report.not_installed = true;
-    }
-    Ok(report)
+        if in_config {
+            let removed = json_patch::remove_named_object_entry(&mut root, servers_path, name)?;
+            debug_assert!(removed);
+
+            let now_empty = root.as_object().map(Map::is_empty).unwrap_or(true);
+            if now_empty && fs_atomic::restore_backup(config_path)? {
+                report.restored.push(config_path.to_path_buf());
+            } else if now_empty {
+                fs_atomic::remove_if_exists(config_path)?;
+                report.removed.push(config_path.to_path_buf());
+            } else {
+                let bytes = json_patch::to_pretty(&root);
+                fs_atomic::write_atomic(config_path, &bytes, false)?;
+                report.patched.push(config_path.to_path_buf());
+            }
+        }
+
+        ownership::record_uninstall(ledger_path, name)?;
+
+        if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
+            report.not_installed = true;
+        }
+        Ok(report)
+    })
 }
 
 /// Plan uninstalling an MCP server from a named object.

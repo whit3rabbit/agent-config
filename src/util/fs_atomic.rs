@@ -110,11 +110,20 @@ fn create_backup(path: &Path) -> Result<PathBuf, HookerError> {
     bak.push(".bak");
     let bak = PathBuf::from(bak);
 
-    if bak.exists() {
-        return Err(HookerError::BackupExists(bak));
-    }
-
-    fs::copy(path, &bak).map_err(|e| HookerError::io(path, e))?;
+    let mut src = fs::File::open(path).map_err(|e| HookerError::io(path, e))?;
+    let mut dst = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&bak)
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::AlreadyExists {
+                HookerError::BackupExists(bak.clone())
+            } else {
+                HookerError::io(&bak, e)
+            }
+        })?;
+    std::io::copy(&mut src, &mut dst).map_err(|e| HookerError::io(&bak, e))?;
+    dst.sync_all().map_err(|e| HookerError::io(&bak, e))?;
     Ok(bak)
 }
 
@@ -189,7 +198,34 @@ pub(crate) fn ensure_trailing_newline(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Barrier};
+    use std::thread;
     use tempfile::tempdir;
+
+    fn run_two<A, B, FA, FB>(a: FA, b: FB) -> (A, B)
+    where
+        A: Send + 'static,
+        B: Send + 'static,
+        FA: FnOnce() -> A + Send + 'static,
+        FB: FnOnce() -> B + Send + 'static,
+    {
+        let barrier = Arc::new(Barrier::new(3));
+        let a_barrier = Arc::clone(&barrier);
+        let b_barrier = Arc::clone(&barrier);
+        let a_thread = thread::spawn(move || {
+            a_barrier.wait();
+            a()
+        });
+        let b_thread = thread::spawn(move || {
+            b_barrier.wait();
+            b()
+        });
+        barrier.wait();
+        (
+            a_thread.join().expect("first writer panicked"),
+            b_thread.join().expect("second writer panicked"),
+        )
+    }
 
     #[test]
     fn writes_new_file_no_backup() {
@@ -276,5 +312,54 @@ mod tests {
         assert_eq!(read_to_string_or_empty(&path).unwrap(), "");
         fs::write(&path, b"hello").unwrap();
         assert_eq!(read_to_string_or_empty(&path).unwrap(), "hello");
+    }
+
+    #[test]
+    fn concurrent_writes_without_backup_leave_complete_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        let path_a = path.clone();
+        let path_b = path.clone();
+        let a = br#"{"winner":"a","padding":"aaaaaaaaaaaaaaaa"}"#.to_vec();
+        let b = br#"{"winner":"b","padding":"bbbbbbbbbbbbbbbb"}"#.to_vec();
+        let expect_a = a.clone();
+        let expect_b = b.clone();
+
+        let (ra, rb) = run_two(
+            move || write_atomic(&path_a, &a, false),
+            move || write_atomic(&path_b, &b, false),
+        );
+
+        ra.unwrap();
+        rb.unwrap();
+        let final_bytes = fs::read(&path).unwrap();
+        assert!(
+            final_bytes == expect_a || final_bytes == expect_b,
+            "final file should be one complete write, got {:?}",
+            String::from_utf8_lossy(&final_bytes)
+        );
+    }
+
+    #[test]
+    fn concurrent_backup_creation_keeps_original_backup() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        fs::write(&path, b"original").unwrap();
+        let path_a = path.clone();
+        let path_b = path.clone();
+
+        let (ra, rb) = run_two(
+            move || write_atomic(&path_a, b"new-a", true),
+            move || write_atomic(&path_b, b"new-b", true),
+        );
+
+        let ok_count = ra.is_ok() as usize + rb.is_ok() as usize;
+        let backup_exists_count = matches!(ra, Err(HookerError::BackupExists(_))) as usize
+            + matches!(rb, Err(HookerError::BackupExists(_))) as usize;
+        assert_eq!(ok_count, 1);
+        assert_eq!(backup_exists_count, 1);
+        assert_eq!(fs::read(backup_path(&path)).unwrap(), b"original");
+        let final_bytes = fs::read(&path).unwrap();
+        assert!(final_bytes == b"new-a" || final_bytes == b"new-b");
     }
 }

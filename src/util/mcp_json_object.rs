@@ -126,7 +126,34 @@ mod tests {
     use crate::spec::McpTransport;
     use serde_json::{json, Value};
     use std::collections::BTreeMap;
+    use std::sync::{Arc, Barrier};
+    use std::thread;
     use tempfile::tempdir;
+
+    fn run_two<A, B, FA, FB>(a: FA, b: FB) -> (A, B)
+    where
+        A: Send + 'static,
+        B: Send + 'static,
+        FA: FnOnce() -> A + Send + 'static,
+        FB: FnOnce() -> B + Send + 'static,
+    {
+        let barrier = Arc::new(Barrier::new(3));
+        let a_barrier = Arc::clone(&barrier);
+        let b_barrier = Arc::clone(&barrier);
+        let a_thread = thread::spawn(move || {
+            a_barrier.wait();
+            a()
+        });
+        let b_thread = thread::spawn(move || {
+            b_barrier.wait();
+            b()
+        });
+        barrier.wait();
+        (
+            a_thread.join().expect("first MCP writer panicked"),
+            b_thread.join().expect("second MCP writer panicked"),
+        )
+    }
 
     fn paths(dir: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
         (dir.join("mcp.json"), dir.join(".ai-hooker-mcp.json"))
@@ -314,5 +341,36 @@ mod tests {
         assert!(!is_installed(&led, "github").unwrap());
         install(&cfg, &led, &stdio_spec("github", "myapp")).unwrap();
         assert!(is_installed(&led, "github").unwrap());
+    }
+
+    #[test]
+    fn concurrent_install_different_names_keeps_both_config_and_ledger_entries() {
+        let dir = tempdir().unwrap();
+        let (cfg, led) = paths(dir.path());
+        let cfg_a = cfg.clone();
+        let led_a = led.clone();
+        let cfg_b = cfg.clone();
+        let led_b = led.clone();
+        let spec_a = stdio_spec("alpha", "appA");
+        let spec_b = stdio_spec("beta", "appB");
+
+        let (ra, rb) = run_two(
+            move || install(&cfg_a, &led_a, &spec_a),
+            move || install(&cfg_b, &led_b, &spec_b),
+        );
+
+        ra.unwrap();
+        rb.unwrap();
+        let v: Value = serde_json::from_slice(&std::fs::read(&cfg).unwrap()).unwrap();
+        assert_eq!(v["mcpServers"]["alpha"]["command"], json!("npx"));
+        assert_eq!(v["mcpServers"]["beta"]["command"], json!("npx"));
+        assert_eq!(
+            ownership::owner_of(&led, "alpha").unwrap().as_deref(),
+            Some("appA")
+        );
+        assert_eq!(
+            ownership::owner_of(&led, "beta").unwrap().as_deref(),
+            Some("appB")
+        );
     }
 }

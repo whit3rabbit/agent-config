@@ -25,6 +25,31 @@ cargo clippy --all-targets     # lints lib + tests + examples
 
 No external services or network required. All tests use `tempfile` for isolation.
 
+### Concurrency and Docker notes
+
+Concurrency coverage lives in `tests/concurrency.rs`, with helper-level stress
+tests in the utility modules. Shared read-modify-write helpers should hold
+`util::file_lock` locks at the helper boundary. Keep lock ordering stable:
+config/root lock first, ledger lock second.
+
+Linux container check used during the concurrency work:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" \
+  -e CARGO_HOME=/tmp/cargo \
+  -e CARGO_TARGET_DIR=/tmp/ai-hooker-target \
+  -e HOME=/tmp \
+  -v "$PWD":/work -w /work \
+  rust:latest \
+  bash -c 'cargo test --locked --test concurrency'
+```
+
+`rust:latest` passed the concurrency suite on Linux. `rust:1.74` currently
+fails before compiling because the locked dependency graph pulls
+`getrandom 0.4.2`, whose manifest uses edition 2024, which Cargo 1.74 cannot
+parse. Treat that as an MSRV/dependency compatibility issue, not a concurrency
+failure.
+
 ## Architecture
 
 ### Core flow

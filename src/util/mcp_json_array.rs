@@ -14,7 +14,7 @@ use serde_json::{Map, Value};
 use crate::error::HookerError;
 use crate::integration::{InstallReport, UninstallReport};
 use crate::spec::{McpSpec, McpTransport};
-use crate::util::{fs_atomic, json_patch, ownership};
+use crate::util::{file_lock, fs_atomic, json_patch, ownership};
 
 /// Default array key for array-backed MCP configs.
 pub(crate) const ARRAY_KEY: &str = "mcp";
@@ -34,50 +34,52 @@ pub(crate) fn install(
     ledger_path: &Path,
     spec: &McpSpec,
 ) -> Result<InstallReport, HookerError> {
-    let mut report = InstallReport::default();
-    let mut root = json_patch::read_or_empty(config_path)?;
-    let in_config =
-        json_patch::contains_in_named_array(&root, &[ARRAY_KEY], NAME_FIELD, &spec.name);
-    ownership::require_owner(
-        ledger_path,
-        &spec.name,
-        &spec.owner_tag,
-        "mcp server",
-        in_config,
-    )?;
+    file_lock::with_lock(config_path, || {
+        let mut report = InstallReport::default();
+        let mut root = json_patch::read_or_empty(config_path)?;
+        let in_config =
+            json_patch::contains_in_named_array(&root, &[ARRAY_KEY], NAME_FIELD, &spec.name);
+        ownership::require_owner(
+            ledger_path,
+            &spec.name,
+            &spec.owner_tag,
+            "mcp server",
+            in_config,
+        )?;
 
-    let value = build_array_entry(spec);
-    let changed = json_patch::upsert_named_array_entry(
-        &mut root,
-        &[ARRAY_KEY],
-        NAME_FIELD,
-        &spec.name,
-        value,
-    )?;
+        let value = build_array_entry(spec);
+        let changed = json_patch::upsert_named_array_entry(
+            &mut root,
+            &[ARRAY_KEY],
+            NAME_FIELD,
+            &spec.name,
+            value,
+        )?;
 
-    let prior_owner = ownership::owner_of(ledger_path, &spec.name)?;
-    let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
+        let prior_owner = ownership::owner_of(ledger_path, &spec.name)?;
+        let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
 
-    if changed {
-        let bytes = json_patch::to_pretty(&root);
-        let outcome = fs_atomic::write_atomic(config_path, &bytes, true)?;
-        if outcome.existed {
-            report.patched.push(outcome.path.clone());
-        } else {
-            report.created.push(outcome.path.clone());
+        if changed {
+            let bytes = json_patch::to_pretty(&root);
+            let outcome = fs_atomic::write_atomic(config_path, &bytes, true)?;
+            if outcome.existed {
+                report.patched.push(outcome.path.clone());
+            } else {
+                report.created.push(outcome.path.clone());
+            }
+            if let Some(b) = outcome.backup {
+                report.backed_up.push(b);
+            }
         }
-        if let Some(b) = outcome.backup {
-            report.backed_up.push(b);
-        }
-    }
 
-    if changed || owner_changed {
-        ownership::record_install(ledger_path, &spec.name, &spec.owner_tag)?;
-    }
-    if !changed && !owner_changed {
-        report.already_installed = true;
-    }
-    Ok(report)
+        if changed || owner_changed {
+            ownership::record_install(ledger_path, &spec.name, &spec.owner_tag)?;
+        }
+        if !changed && !owner_changed {
+            report.already_installed = true;
+        }
+        Ok(report)
+    })
 }
 
 /// Uninstall the server. Refuses on owner mismatch / hand-installed entries.
@@ -88,43 +90,55 @@ pub(crate) fn uninstall(
     owner_tag: &str,
     kind: &'static str,
 ) -> Result<UninstallReport, HookerError> {
-    let mut report = UninstallReport::default();
-    let mut root = json_patch::read_or_empty(config_path)?;
-
+    let root = json_patch::read_or_empty(config_path)?;
     let in_config = json_patch::contains_in_named_array(&root, &[ARRAY_KEY], NAME_FIELD, name);
     let in_ledger = ownership::contains(ledger_path, name)?;
-
     if !in_config && !in_ledger {
-        report.not_installed = true;
-        return Ok(report);
+        return Ok(UninstallReport {
+            not_installed: true,
+            ..UninstallReport::default()
+        });
     }
 
-    ownership::require_owner(ledger_path, name, owner_tag, kind, in_config)?;
+    file_lock::with_lock(config_path, || {
+        let mut report = UninstallReport::default();
+        let mut root = json_patch::read_or_empty(config_path)?;
 
-    if in_config {
-        let removed =
-            json_patch::remove_named_array_entry(&mut root, &[ARRAY_KEY], NAME_FIELD, name)?;
-        debug_assert!(removed);
+        let in_config = json_patch::contains_in_named_array(&root, &[ARRAY_KEY], NAME_FIELD, name);
+        let in_ledger = ownership::contains(ledger_path, name)?;
 
-        let now_empty = root.as_object().map(Map::is_empty).unwrap_or(true);
-        if now_empty && fs_atomic::restore_backup(config_path)? {
-            report.restored.push(config_path.to_path_buf());
-        } else if now_empty {
-            fs_atomic::remove_if_exists(config_path)?;
-            report.removed.push(config_path.to_path_buf());
-        } else {
-            let bytes = json_patch::to_pretty(&root);
-            fs_atomic::write_atomic(config_path, &bytes, false)?;
-            report.patched.push(config_path.to_path_buf());
+        if !in_config && !in_ledger {
+            report.not_installed = true;
+            return Ok(report);
         }
-    }
 
-    ownership::record_uninstall(ledger_path, name)?;
+        ownership::require_owner(ledger_path, name, owner_tag, kind, in_config)?;
 
-    if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
-        report.not_installed = true;
-    }
-    Ok(report)
+        if in_config {
+            let removed =
+                json_patch::remove_named_array_entry(&mut root, &[ARRAY_KEY], NAME_FIELD, name)?;
+            debug_assert!(removed);
+
+            let now_empty = root.as_object().map(Map::is_empty).unwrap_or(true);
+            if now_empty && fs_atomic::restore_backup(config_path)? {
+                report.restored.push(config_path.to_path_buf());
+            } else if now_empty {
+                fs_atomic::remove_if_exists(config_path)?;
+                report.removed.push(config_path.to_path_buf());
+            } else {
+                let bytes = json_patch::to_pretty(&root);
+                fs_atomic::write_atomic(config_path, &bytes, false)?;
+                report.patched.push(config_path.to_path_buf());
+            }
+        }
+
+        ownership::record_uninstall(ledger_path, name)?;
+
+        if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
+            report.not_installed = true;
+        }
+        Ok(report)
+    })
 }
 
 fn build_array_entry(spec: &McpSpec) -> Value {

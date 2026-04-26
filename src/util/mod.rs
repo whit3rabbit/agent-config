@@ -3,6 +3,7 @@
 //! These modules are the safety-critical core of the crate. Bugs here corrupt
 //! user files; agent-specific code only composes these primitives.
 
+pub(crate) mod file_lock;
 pub(crate) mod fs_atomic;
 pub(crate) mod json5_patch;
 pub(crate) mod json_patch;

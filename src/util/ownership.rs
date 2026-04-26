@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Map, Value};
 
 use crate::error::HookerError;
-use crate::util::{fs_atomic, json_patch};
+use crate::util::{file_lock, fs_atomic, json_patch};
 
 /// Sidecar ledger filename, sibling to the harness's MCP config file.
 const MCP_LEDGER_FILE: &str = ".ai-hooker-mcp.json";
@@ -49,11 +49,13 @@ pub(crate) fn record_install(
     name: &str,
     owner: &str,
 ) -> Result<(), HookerError> {
-    let mut root = json_patch::read_or_empty(ledger_path)?;
-    let entries = ensure_shape(&mut root);
-    entries.insert(name.to_string(), json!({ OWNER_KEY: owner }));
-    fs_atomic::write_atomic(ledger_path, &json_patch::to_pretty(&root), false)?;
-    Ok(())
+    file_lock::with_lock(ledger_path, || {
+        let mut root = json_patch::read_or_empty(ledger_path)?;
+        let entries = ensure_shape(&mut root);
+        entries.insert(name.to_string(), json!({ OWNER_KEY: owner }));
+        fs_atomic::write_atomic(ledger_path, &json_patch::to_pretty(&root), false)?;
+        Ok(())
+    })
 }
 
 /// Forget an entry. Returns the previously recorded owner, if any. Removes the
@@ -62,26 +64,28 @@ pub(crate) fn record_uninstall(
     ledger_path: &Path,
     name: &str,
 ) -> Result<Option<String>, HookerError> {
-    let mut root = json_patch::read_or_empty(ledger_path)?;
-    let prev_owner = {
-        let Some(entries) = root.get_mut(ENTRIES_KEY).and_then(Value::as_object_mut) else {
-            return Ok(None);
+    file_lock::with_lock(ledger_path, || {
+        let mut root = json_patch::read_or_empty(ledger_path)?;
+        let prev_owner = {
+            let Some(entries) = root.get_mut(ENTRIES_KEY).and_then(Value::as_object_mut) else {
+                return Ok(None);
+            };
+            let removed = entries.remove(name);
+            let owner = removed
+                .as_ref()
+                .and_then(|v| v.get(OWNER_KEY))
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            if entries.is_empty() {
+                // Drop the ledger entirely so a clean uninstall leaves no trace.
+                fs_atomic::remove_if_exists(ledger_path)?;
+                return Ok(owner);
+            }
+            owner
         };
-        let removed = entries.remove(name);
-        let owner = removed
-            .as_ref()
-            .and_then(|v| v.get(OWNER_KEY))
-            .and_then(Value::as_str)
-            .map(str::to_owned);
-        if entries.is_empty() {
-            // Drop the ledger entirely so a clean uninstall leaves no trace.
-            fs_atomic::remove_if_exists(ledger_path)?;
-            return Ok(owner);
-        }
-        owner
-    };
-    fs_atomic::write_atomic(ledger_path, &json_patch::to_pretty(&root), false)?;
-    Ok(prev_owner)
+        fs_atomic::write_atomic(ledger_path, &json_patch::to_pretty(&root), false)?;
+        Ok(prev_owner)
+    })
 }
 
 /// Look up the owner of `name` without mutating the ledger.
@@ -236,7 +240,34 @@ fn ensure_shape(root: &mut Value) -> &mut Map<String, Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Barrier};
+    use std::thread;
     use tempfile::tempdir;
+
+    fn run_two<A, B, FA, FB>(a: FA, b: FB) -> (A, B)
+    where
+        A: Send + 'static,
+        B: Send + 'static,
+        FA: FnOnce() -> A + Send + 'static,
+        FB: FnOnce() -> B + Send + 'static,
+    {
+        let barrier = Arc::new(Barrier::new(3));
+        let a_barrier = Arc::clone(&barrier);
+        let b_barrier = Arc::clone(&barrier);
+        let a_thread = thread::spawn(move || {
+            a_barrier.wait();
+            a()
+        });
+        let b_thread = thread::spawn(move || {
+            b_barrier.wait();
+            b()
+        });
+        barrier.wait();
+        (
+            a_thread.join().expect("first ledger writer panicked"),
+            b_thread.join().expect("second ledger writer panicked"),
+        )
+    }
 
     fn ledger_path(dir: &Path) -> std::path::PathBuf {
         dir.join(".ai-hooker-mcp.json")
@@ -361,5 +392,45 @@ mod tests {
         assert!(!contains(&path, "x").unwrap());
         record_install(&path, "x", "myapp").unwrap();
         assert!(contains(&path, "x").unwrap());
+    }
+
+    #[test]
+    fn concurrent_record_install_different_names_keeps_both() {
+        let dir = tempdir().unwrap();
+        let path = ledger_path(dir.path());
+        let path_a = path.clone();
+        let path_b = path.clone();
+
+        let (ra, rb) = run_two(
+            move || record_install(&path_a, "alpha", "appA"),
+            move || record_install(&path_b, "beta", "appB"),
+        );
+
+        ra.unwrap();
+        rb.unwrap();
+        assert_eq!(owner_of(&path, "alpha").unwrap().as_deref(), Some("appA"));
+        assert_eq!(owner_of(&path, "beta").unwrap().as_deref(), Some("appB"));
+    }
+
+    #[test]
+    fn concurrent_record_install_same_name_different_owners_is_valid_last_writer_wins() {
+        let dir = tempdir().unwrap();
+        let path = ledger_path(dir.path());
+        let path_a = path.clone();
+        let path_b = path.clone();
+
+        let (ra, rb) = run_two(
+            move || record_install(&path_a, "shared", "appA"),
+            move || record_install(&path_b, "shared", "appB"),
+        );
+
+        ra.unwrap();
+        rb.unwrap();
+        let owner = owner_of(&path, "shared").unwrap().unwrap();
+        assert!(matches!(owner.as_str(), "appA" | "appB"));
+        let StrictLedgerRead::Valid { entries } = read_strict(&path).unwrap() else {
+            panic!("ledger should parse after concurrent writes");
+        };
+        assert_eq!(entries.len(), 1);
     }
 }
