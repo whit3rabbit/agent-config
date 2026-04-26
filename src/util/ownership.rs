@@ -239,7 +239,6 @@ pub(crate) fn contains(ledger_path: &Path, name: &str) -> Result<bool, AgentConf
 }
 
 /// Look up the content hash recorded for `name`, if any.
-#[allow(dead_code)]
 pub(crate) fn content_hash_of(
     ledger_path: &Path,
     name: &str,
@@ -265,6 +264,11 @@ pub(crate) fn content_hash_of(
 ///
 /// Returns [`AgentConfigError::ConfigDrifted`] if the hash is recorded but the
 /// current file content differs.
+///
+/// Whole-file drift check used for skills (1:1 file per entry). MCP and
+/// other multi-entry surfaces use [`check_entry_drift`] instead so a sibling
+/// install does not invalidate earlier entries' hashes.
+// Wired into `skills_dir::uninstall` in a follow-up commit (Task B4).
 #[allow(dead_code)]
 pub(crate) fn check_drift(
     ledger_path: &Path,
@@ -282,6 +286,34 @@ pub(crate) fn check_drift(
         Some(_) => Err(AgentConfigError::ConfigDrifted {
             path: config_path.to_path_buf(),
         }),
+    }
+}
+
+/// Check whether the canonical hash recorded for `name` matches the hash of
+/// the supplied current entry bytes.
+///
+/// Returns `Ok(())` if no hash was recorded (v1 ledger, or entry installed
+/// before per-entry hashing) or if the bytes hash to the recorded value.
+/// Returns [`AgentConfigError::ConfigDrifted`] if the hashes differ.
+///
+/// `config_path` is included only for the error report; the comparison itself
+/// is over the entry bytes supplied by the caller.
+pub(crate) fn check_entry_drift(
+    ledger_path: &Path,
+    name: &str,
+    config_path: &Path,
+    current_entry_bytes: &[u8],
+) -> Result<(), AgentConfigError> {
+    let Some(expected) = content_hash_of(ledger_path, name)? else {
+        return Ok(());
+    };
+    let actual = content_hash(current_entry_bytes);
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(AgentConfigError::ConfigDrifted {
+            path: config_path.to_path_buf(),
+        })
     }
 }
 

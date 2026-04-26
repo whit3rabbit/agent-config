@@ -33,6 +33,25 @@ pub(crate) enum ConfigFormat {
 /// Builder for one server entry under the chosen object key.
 pub(crate) type ServerBuilder = fn(&McpSpec) -> Value;
 
+/// Canonical SHA-256 hash of an owned entry's value. Uses compact
+/// `serde_json::to_vec` (with `preserve_order` enabled at the crate level) so
+/// install-side and uninstall-side hashes agree even when the surrounding
+/// file gets reformatted by a sibling install.
+fn hash_entry(value: &Value) -> String {
+    let canonical = serde_json::to_vec(value).expect("Value serializes to JSON");
+    ownership::content_hash(&canonical)
+}
+
+/// Walk `root.<path...>` and return the named entry under that object.
+/// Mirrors `json_patch::contains_named` but returns the value reference.
+fn lookup_named<'a>(root: &'a Value, path: &[&str], name: &str) -> Option<&'a Value> {
+    let mut cur = root;
+    for key in path {
+        cur = cur.get(*key)?;
+    }
+    cur.get(name)
+}
+
 /// Returns true if `name` exists in the MCP ownership ledger.
 pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, AgentConfigError> {
     ownership::contains(ledger_path, name)
@@ -95,13 +114,19 @@ pub(crate) fn install(
         )?;
 
         let value = build_server(spec);
+        // Hash the canonical (compact) serialization of the *owned entry* so
+        // that sibling installs to the same file do not invalidate this
+        // entry's recorded hash. `to_vec` is byte-stable for `serde_json::Value`
+        // (preserve_order is enabled) and must be used identically on the
+        // uninstall side via `check_entry_drift`.
+        let current_entry_hash = hash_entry(&value);
         let changed =
             json_patch::upsert_named_object_entry(&mut root, servers_path, &spec.name, value)?;
 
         let prior_owner = ownership::owner_of(ledger_path, &spec.name)?;
         let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
 
-        let written_bytes: Option<Vec<u8>> = if changed {
+        if changed {
             let bytes = json_patch::to_pretty(&root);
             let outcome = fs_atomic::write_atomic(config_path, &bytes, true)?;
             if outcome.existed {
@@ -112,17 +137,15 @@ pub(crate) fn install(
             if let Some(b) = outcome.backup {
                 report.backed_up.push(b);
             }
-            Some(bytes)
-        } else {
-            None
-        };
+        }
 
         if changed || owner_changed {
-            let hash = match written_bytes.as_deref() {
-                Some(b) => Some(ownership::content_hash(b)),
-                None => ownership::file_content_hash(config_path)?,
-            };
-            ownership::record_install(ledger_path, &spec.name, &spec.owner_tag, hash.as_deref())?;
+            ownership::record_install(
+                ledger_path,
+                &spec.name,
+                &spec.owner_tag,
+                Some(&current_entry_hash),
+            )?;
         }
 
         if !changed && !owner_changed {
@@ -236,6 +259,16 @@ pub(crate) fn uninstall(
         ownership::require_owner(ledger_path, name, owner_tag, kind, in_config)?;
 
         if in_config {
+            // Per-entry drift: extract the current entry value, hash it
+            // canonically, and compare to the hash recorded at install time.
+            // If a user (or another consumer's bug) edited our entry, refuse
+            // to remove it instead of silently clobbering their change.
+            let current_value = lookup_named(&root, servers_path, name)
+                .expect("contains_named was true; entry must exist");
+            let current_bytes =
+                serde_json::to_vec(current_value).expect("Value serializes to JSON");
+            ownership::check_entry_drift(ledger_path, name, config_path, &current_bytes)?;
+
             let removed = json_patch::remove_named_object_entry(&mut root, servers_path, name)?;
             debug_assert!(removed);
 
@@ -609,5 +642,82 @@ mod tests {
             err,
             AgentConfigError::NotOwnedByCaller { actual: None, .. }
         ));
+    }
+
+    #[test]
+    fn uninstall_succeeds_after_sibling_install_does_not_trigger_drift() {
+        let dir = tempdir().unwrap();
+        let (cfg, led) = paths(dir.path());
+        install(
+            &cfg,
+            &led,
+            &stdio_spec("alpha", "app-a"),
+            &["mcpServers"],
+            mcp_servers_value,
+            ConfigFormat::Json,
+        )
+        .unwrap();
+        install(
+            &cfg,
+            &led,
+            &stdio_spec("beta", "app-b"),
+            &["mcpServers"],
+            mcp_servers_value,
+            ConfigFormat::Json,
+        )
+        .unwrap();
+
+        let report = uninstall(
+            &cfg,
+            &led,
+            "alpha",
+            "app-a",
+            "mcp server",
+            &["mcpServers"],
+            ConfigFormat::Json,
+        )
+        .unwrap();
+
+        assert_eq!(report.patched, vec![cfg.clone()]);
+        let v: Value = serde_json::from_slice(&std::fs::read(&cfg).unwrap()).unwrap();
+        assert!(v["mcpServers"].get("alpha").is_none());
+        assert_eq!(v["mcpServers"]["beta"]["command"], json!("npx"));
+        assert!(!ownership::contains(&led, "alpha").unwrap());
+        assert!(ownership::contains(&led, "beta").unwrap());
+    }
+
+    #[test]
+    fn uninstall_refuses_when_entry_was_edited() {
+        let dir = tempdir().unwrap();
+        let (cfg, led) = paths(dir.path());
+        install(
+            &cfg,
+            &led,
+            &stdio_spec("alpha", "app-a"),
+            &["mcpServers"],
+            mcp_servers_value,
+            ConfigFormat::Json,
+        )
+        .unwrap();
+
+        let mut v: Value = serde_json::from_slice(&std::fs::read(&cfg).unwrap()).unwrap();
+        v["mcpServers"]["alpha"]["command"] = json!("uvx");
+        std::fs::write(&cfg, json_patch::to_pretty(&v)).unwrap();
+
+        let err = uninstall(
+            &cfg,
+            &led,
+            "alpha",
+            "app-a",
+            "mcp server",
+            &["mcpServers"],
+            ConfigFormat::Json,
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, AgentConfigError::ConfigDrifted { .. }));
+        let v: Value = serde_json::from_slice(&std::fs::read(&cfg).unwrap()).unwrap();
+        assert_eq!(v["mcpServers"]["alpha"]["command"], json!("uvx"));
+        assert!(ownership::contains(&led, "alpha").unwrap());
     }
 }

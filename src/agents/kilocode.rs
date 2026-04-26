@@ -208,6 +208,7 @@ impl McpSurface for KiloCodeAgent {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
         spec.validate_local_secret_policy(scope)?;
+        scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_map::install(
             &cfg,
@@ -228,6 +229,7 @@ impl McpSurface for KiloCodeAgent {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::mcp_path(scope)?;
+        scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_map::uninstall(
             &cfg,
@@ -304,6 +306,7 @@ impl SkillSurface for KiloCodeAgent {
         spec: &SkillSpec,
     ) -> Result<InstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
+        scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
     }
 

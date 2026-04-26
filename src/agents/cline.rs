@@ -521,6 +521,7 @@ impl McpSurface for ClineAgent {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
         spec.validate_local_secret_policy(scope)?;
+        scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::install(&cfg, &ledger, spec)
     }
@@ -534,6 +535,7 @@ impl McpSurface for ClineAgent {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::mcp_path(scope)?;
+        scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::uninstall(&cfg, &ledger, name, owner_tag, "mcp server")
     }
