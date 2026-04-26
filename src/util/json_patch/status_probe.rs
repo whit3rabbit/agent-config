@@ -40,6 +40,7 @@ pub(crate) fn tagged_hook_presence(
 /// Count tagged hook entries inside a *specific* event array at
 /// `parent_path` (e.g. `["pre_run_command"]` for Windsurf, where each event
 /// is a top-level array rather than a key under a parent object).
+#[allow(dead_code)]
 pub(crate) fn tagged_hook_presence_for_event(
     config_path: &Path,
     array_path: &[&str],
@@ -77,6 +78,7 @@ fn count_tagged_under(root: &Value, parent_path: &[&str], tag: &str) -> usize {
         .sum()
 }
 
+#[allow(dead_code)]
 fn traverse_array_at<'a>(root: &'a Value, path: &[&str]) -> Option<&'a Vec<Value>> {
     let mut cur = root;
     for key in path {

@@ -13,11 +13,16 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
 
+use crate::agents::planning as agent_planning;
 use crate::error::HookerError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
+use crate::plan::{InstallPlan, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{HookSpec, McpSpec, McpTransport, SkillSpec};
+use crate::status::{
+    InstallStatus as StatusInstallStatus, PathStatus, PlanTarget as StatusPlanTarget, StatusReport,
+};
 use crate::util::{fs_atomic, md_block, ownership, skills_dir, yaml_mcp_map};
 
 const SKILL_CATEGORY: &str = "ai-hooker";
@@ -129,6 +134,53 @@ impl Integration for HermesAgent {
         &[ScopeKind::Local]
     }
 
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+        HookSpec::validate_tag(tag)?;
+        let path = Self::prompt_path(scope)?;
+        let host = fs_atomic::read_to_string_or_empty(&path)?;
+        let block_present = md_block::contains(&host, tag);
+        let exists = path.exists();
+        Ok(StatusReport {
+            target: StatusPlanTarget::Hook {
+                tag: tag.to_string(),
+            },
+            status: if block_present {
+                StatusInstallStatus::InstalledOwned {
+                    owner: tag.to_string(),
+                }
+            } else {
+                StatusInstallStatus::Absent
+            },
+            config_path: Some(path.clone()),
+            ledger_path: None,
+            files: vec![if exists {
+                PathStatus::Exists { path }
+            } else {
+                PathStatus::Missing { path }
+            }],
+            warnings: Vec::new(),
+        })
+    }
+
+    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+        agent_planning::markdown_install(
+            Integration::id(self),
+            scope,
+            spec,
+            Self::prompt_path(scope),
+            true,
+        )
+    }
+
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+        agent_planning::markdown_uninstall(
+            Integration::id(self),
+            scope,
+            tag,
+            Self::prompt_path(scope),
+        )
+    }
+
     fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError> {
         HookSpec::validate_tag(tag)?;
         let path = Self::prompt_path(scope)?;
@@ -197,6 +249,54 @@ impl McpSurface for HermesAgent {
         &[ScopeKind::Global]
     }
 
+    fn mcp_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, HookerError> {
+        McpSpec::validate_name(name)?;
+        let cfg = Self::mcp_path(scope)?;
+        let ledger = ownership::mcp_ledger_for(&cfg);
+        let presence = yaml_mcp_map::config_presence(&cfg, &["mcp_servers"], name)?;
+        let recorded = ownership::owner_of(&ledger, name)?;
+        Ok(StatusReport::for_mcp(
+            name,
+            cfg,
+            ledger,
+            presence,
+            expected_owner,
+            recorded,
+        ))
+    }
+
+    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+        agent_planning::mcp_yaml_install(
+            McpSurface::id(self),
+            scope,
+            spec,
+            Self::mcp_path(scope),
+            &["mcp_servers"],
+            hermes_mcp_value,
+        )
+    }
+
+    fn plan_uninstall_mcp(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::mcp_yaml_uninstall(
+            McpSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::mcp_path(scope),
+            &["mcp_servers"],
+        )
+    }
+
     fn is_mcp_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
         McpSpec::validate_name(name)?;
         let cfg = Self::mcp_path(scope)?;
@@ -230,6 +330,54 @@ impl SkillSurface for HermesAgent {
 
     fn supported_skill_scopes(&self) -> &'static [ScopeKind] {
         &[ScopeKind::Global]
+    }
+
+    fn skill_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, HookerError> {
+        SkillSpec::validate_name(name)?;
+        let root = Self::skills_root(scope)?;
+        let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
+        let recorded = ownership::owner_of(&ledger, name)?;
+        Ok(StatusReport::for_skill(
+            name,
+            dir,
+            manifest,
+            ledger,
+            expected_owner,
+            recorded,
+        ))
+    }
+
+    fn plan_install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallPlan, HookerError> {
+        agent_planning::skill_install(
+            SkillSurface::id(self),
+            scope,
+            spec,
+            Self::skills_root(scope),
+        )
+    }
+
+    fn plan_uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::skill_uninstall(
+            SkillSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::skills_root(scope),
+        )
     }
 
     fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {

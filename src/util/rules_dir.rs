@@ -10,7 +10,9 @@ use std::path::{Path, PathBuf};
 
 use crate::error::HookerError;
 use crate::integration::{InstallReport, UninstallReport};
+use crate::plan::PlannedChange;
 use crate::util::fs_atomic;
+use crate::util::planning;
 
 /// Compute the per-tag rule-file path inside `<root>/<rules_dir>/`.
 pub(crate) fn target_path(root: &Path, rules_dir: &str, tag: &str) -> PathBuf {
@@ -45,6 +47,20 @@ pub(crate) fn install(
         report.backed_up.push(b);
     }
     Ok(report)
+}
+
+/// Plan writing the per-tag rule file. Idempotent on identical content.
+pub(crate) fn plan_install(
+    root: &Path,
+    rules_dir: &str,
+    tag: &str,
+    body: &str,
+) -> Result<Vec<PlannedChange>, HookerError> {
+    let path = target_path(root, rules_dir, tag);
+    let body = fs_atomic::ensure_trailing_newline(body);
+    let mut changes = Vec::new();
+    planning::plan_write_file(&mut changes, &path, body.as_bytes(), true)?;
+    Ok(changes)
 }
 
 /// Remove the per-tag rule file, then walk parent directories upward, pruning
@@ -82,6 +98,26 @@ pub(crate) fn uninstall(
         parent = p.parent();
     }
     Ok(report)
+}
+
+/// Plan removal of the per-tag rule file and any empty parent directories.
+pub(crate) fn plan_uninstall(
+    root: &Path,
+    rules_dir: &str,
+    tag: &str,
+) -> Result<Vec<PlannedChange>, HookerError> {
+    let path = target_path(root, rules_dir, tag);
+    let mut changes = Vec::new();
+    if !path.exists() {
+        changes.push(PlannedChange::NoOp {
+            path,
+            reason: "rule file is already absent".into(),
+        });
+        return Ok(changes);
+    }
+    changes.push(PlannedChange::RemoveFile { path: path.clone() });
+    planning::plan_remove_empty_parents(&mut changes, &path, root);
+    Ok(changes)
 }
 
 #[cfg(test)]

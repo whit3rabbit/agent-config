@@ -14,9 +14,11 @@
 use std::path::PathBuf;
 
 use crate::error::HookerError;
+use crate::plan::{InstallPlan, PlanTarget, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{HookSpec, McpSpec, SkillSpec};
-use crate::status::{InstallStatus, StatusReport};
+use crate::status::{InstallStatus as StatusInstallStatus, StatusReport};
+use crate::validation::ValidationReport;
 
 /// One AI harness's hook installer.
 ///
@@ -41,13 +43,14 @@ pub trait Integration: Send + Sync {
     /// scope. Used by CLI consumers to render install/uninstall state.
     ///
     /// Default impl matches on the richer [`status`](Integration::status)
-    /// result and treats [`InstallStatus::InstalledOwned`] and
-    /// [`InstallStatus::InstalledOtherOwner`] as installed; agents that have
+    /// result and treats [`StatusInstallStatus::InstalledOwned`] and
+    /// [`StatusInstallStatus::InstalledOtherOwner`] as installed; agents that have
     /// already implemented `status` get this for free.
     fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError> {
         Ok(matches!(
             self.status(scope, tag)?.status,
-            InstallStatus::InstalledOwned { .. } | InstallStatus::InstalledOtherOwner { .. }
+            StatusInstallStatus::InstalledOwned { .. }
+                | StatusInstallStatus::InstalledOtherOwner { .. }
         ))
     }
 
@@ -57,6 +60,37 @@ pub trait Integration: Send + Sync {
     /// drift (parse failures, duplicate entries), and reports any pending
     /// `.bak` files. See [`StatusReport`] for the full shape.
     fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError>;
+
+    /// Validate hook state without mutating user files.
+    ///
+    /// Unlike [`status`](Integration::status), this reports whether the
+    /// discovered state is internally consistent and safe to repair.
+    fn validate(&self, scope: &Scope, tag: &str) -> Result<ValidationReport, HookerError> {
+        HookSpec::validate_tag(tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: self.id(),
+            scope: scope.clone(),
+            tag: tag.to_string(),
+        };
+        let status = match self.status(scope, tag) {
+            Ok(status) => status,
+            Err(HookerError::JsonInvalid { path, source }) => {
+                return Ok(crate::validation::malformed_ledger_report(
+                    target,
+                    path,
+                    source.to_string(),
+                ));
+            }
+            Err(e) => return Err(e),
+        };
+        Ok(crate::validation::hook_report_from_status(target, status))
+    }
+
+    /// Plan a hook install without mutating user files.
+    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError>;
+
+    /// Plan a hook uninstall without mutating user files.
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError>;
 
     /// Install the hook. Repeated calls with the same `spec.tag` are a no-op
     /// after the first (the on-disk state is reached, then preserved).
@@ -98,15 +132,16 @@ pub trait McpSurface: Send + Sync {
     /// Default impl folds the richer
     /// [`mcp_status`](McpSurface::mcp_status) into the historical boolean
     /// ("under any owner"); concretely, both
-    /// [`InstallStatus::InstalledOwned`] and
-    /// [`InstallStatus::InstalledOtherOwner`] count as installed.
+    /// [`StatusInstallStatus::InstalledOwned`] and
+    /// [`StatusInstallStatus::InstalledOtherOwner`] count as installed.
     fn is_mcp_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
         // Pass the agent's id as the expected owner so any real consumer
         // owner (e.g. "myapp") routes through `InstalledOtherOwner`. The
         // boolean fold collapses both arms anyway.
         Ok(matches!(
             self.mcp_status(scope, name, self.id())?.status,
-            InstallStatus::InstalledOwned { .. } | InstallStatus::InstalledOtherOwner { .. }
+            StatusInstallStatus::InstalledOwned { .. }
+                | StatusInstallStatus::InstalledOtherOwner { .. }
         ))
     }
 
@@ -115,14 +150,70 @@ pub trait McpSurface: Send + Sync {
     ///
     /// `expected_owner` is the consumer tag the caller wants to compare
     /// against — when the ledger records this owner, the report returns
-    /// [`InstallStatus::InstalledOwned`]; anything else recorded becomes
-    /// [`InstallStatus::InstalledOtherOwner`].
+    /// [`StatusInstallStatus::InstalledOwned`]; anything else recorded becomes
+    /// [`StatusInstallStatus::InstalledOtherOwner`].
     fn mcp_status(
         &self,
         scope: &Scope,
         name: &str,
         expected_owner: &str,
     ) -> Result<StatusReport, HookerError>;
+
+    /// Validate MCP state without mutating user files.
+    fn validate_mcp(&self, scope: &Scope, name: &str) -> Result<ValidationReport, HookerError> {
+        self.validate_mcp_for_owner(scope, name, None)
+    }
+
+    /// Validate MCP state against a caller-supplied expected owner.
+    fn validate_mcp_for_owner(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: Option<&str>,
+    ) -> Result<ValidationReport, HookerError> {
+        McpSpec::validate_name(name)?;
+        if let Some(owner) = expected_owner {
+            HookSpec::validate_tag(owner)?;
+        }
+        let status = match self.mcp_status(scope, name, expected_owner.unwrap_or("")) {
+            Ok(status) => status,
+            Err(HookerError::JsonInvalid { path, source }) => {
+                let target = PlanTarget::Mcp {
+                    integration_id: self.id(),
+                    scope: scope.clone(),
+                    name: name.to_string(),
+                    owner: expected_owner.unwrap_or_default().to_string(),
+                };
+                return Ok(crate::validation::malformed_ledger_report(
+                    target,
+                    path,
+                    source.to_string(),
+                ));
+            }
+            Err(e) => return Err(e),
+        };
+        let target = PlanTarget::Mcp {
+            integration_id: self.id(),
+            scope: scope.clone(),
+            name: name.to_string(),
+            owner: expected_owner
+                .map(str::to_owned)
+                .or_else(|| owner_from_status(&status))
+                .unwrap_or_default(),
+        };
+        crate::validation::ledger_backed_report_from_status(target, name, expected_owner, status)
+    }
+
+    /// Plan an MCP server install without mutating user files.
+    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError>;
+
+    /// Plan an MCP server uninstall without mutating user files.
+    fn plan_uninstall_mcp(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError>;
 
     /// Install (or update) the MCP server. Repeated calls with the same
     /// `spec.name` and same content are a no-op after the first.
@@ -162,12 +253,13 @@ pub trait SkillSurface: Send + Sync {
     /// ownership ledger for this scope.
     ///
     /// Default impl mirrors [`McpSurface::is_mcp_installed`]: both
-    /// [`InstallStatus::InstalledOwned`] and
-    /// [`InstallStatus::InstalledOtherOwner`] count as installed.
+    /// [`StatusInstallStatus::InstalledOwned`] and
+    /// [`StatusInstallStatus::InstalledOtherOwner`] count as installed.
     fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
         Ok(matches!(
             self.skill_status(scope, name, self.id())?.status,
-            InstallStatus::InstalledOwned { .. } | InstallStatus::InstalledOtherOwner { .. }
+            StatusInstallStatus::InstalledOwned { .. }
+                | StatusInstallStatus::InstalledOtherOwner { .. }
         ))
     }
 
@@ -180,6 +272,66 @@ pub trait SkillSurface: Send + Sync {
         name: &str,
         expected_owner: &str,
     ) -> Result<StatusReport, HookerError>;
+
+    /// Validate skill state without mutating user files.
+    fn validate_skill(&self, scope: &Scope, name: &str) -> Result<ValidationReport, HookerError> {
+        self.validate_skill_for_owner(scope, name, None)
+    }
+
+    /// Validate skill state against a caller-supplied expected owner.
+    fn validate_skill_for_owner(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: Option<&str>,
+    ) -> Result<ValidationReport, HookerError> {
+        SkillSpec::validate_name(name)?;
+        if let Some(owner) = expected_owner {
+            HookSpec::validate_tag(owner)?;
+        }
+        let status = match self.skill_status(scope, name, expected_owner.unwrap_or("")) {
+            Ok(status) => status,
+            Err(HookerError::JsonInvalid { path, source }) => {
+                let target = PlanTarget::Skill {
+                    integration_id: self.id(),
+                    scope: scope.clone(),
+                    name: name.to_string(),
+                    owner: expected_owner.unwrap_or_default().to_string(),
+                };
+                return Ok(crate::validation::malformed_ledger_report(
+                    target,
+                    path,
+                    source.to_string(),
+                ));
+            }
+            Err(e) => return Err(e),
+        };
+        let target = PlanTarget::Skill {
+            integration_id: self.id(),
+            scope: scope.clone(),
+            name: name.to_string(),
+            owner: expected_owner
+                .map(str::to_owned)
+                .or_else(|| owner_from_status(&status))
+                .unwrap_or_default(),
+        };
+        crate::validation::skill_report_from_status(target, name, expected_owner, status)
+    }
+
+    /// Plan a skill install without mutating user files.
+    fn plan_install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallPlan, HookerError>;
+
+    /// Plan a skill uninstall without mutating user files.
+    fn plan_uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError>;
 
     /// Install (or update) the skill directory and record ownership.
     /// Repeated calls with byte-identical contents are a no-op after the
@@ -271,6 +423,15 @@ pub enum MigrationReport {
         /// Paths rewritten in place.
         rewritten: Vec<PathBuf>,
     },
+}
+
+fn owner_from_status(status: &StatusReport) -> Option<String> {
+    match &status.status {
+        StatusInstallStatus::InstalledOwned { owner }
+        | StatusInstallStatus::InstalledOtherOwner { owner }
+        | StatusInstallStatus::LedgerOnly { owner } => Some(owner.clone()),
+        _ => None,
+    }
 }
 
 #[cfg(test)]

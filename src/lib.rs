@@ -79,10 +79,12 @@
 pub mod error;
 pub mod integration;
 pub mod paths;
+pub mod plan;
 pub mod registry;
 pub mod scope;
 pub mod spec;
 pub mod status;
+pub mod validation;
 
 mod agents;
 mod util;
@@ -91,6 +93,10 @@ pub use error::HookerError;
 pub use integration::{
     InstallReport, Integration, McpSurface, MigrationReport, SkillSurface, UninstallReport,
 };
+pub use plan::{
+    InstallPlan, InstallStatus, PlanTarget, PlanWarning, PlannedChange, RefusalReason,
+    UninstallPlan,
+};
 pub use registry::{all, by_id, mcp_by_id, mcp_capable, skill_by_id, skill_capable};
 pub use scope::{Scope, ScopeKind};
 pub use spec::{
@@ -98,8 +104,10 @@ pub use spec::{
     ScriptTemplate, SkillAsset, SkillFrontmatter, SkillSpec, SkillSpecBuilder,
 };
 pub use status::{
-    DriftIssue, InstallStatus, PathStatus, PlanTarget, StatusReport, StatusWarning,
+    DriftIssue, InstallStatus as StatusInstallStatus, PathStatus, PlanTarget as StatusPlanTarget,
+    StatusReport, StatusWarning,
 };
+pub use validation::{SuggestedAction, ValidationReport};
 
 /// Result alias used throughout the crate's public API.
 pub type Result<T> = std::result::Result<T, HookerError>;

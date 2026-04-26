@@ -76,6 +76,7 @@ pub(crate) fn contains_tagged(root: &Value, path: &[&str], tag: &str) -> bool {
 ///
 /// This is used for hook configs where callers may install custom event names,
 /// so uninstall/detection cannot be limited to the built-in event keys.
+#[allow(dead_code)]
 pub(crate) fn contains_tagged_array_entry_under(
     root: &Value,
     parent_path: &[&str],

@@ -6,10 +6,13 @@
 
 use std::path::Path;
 
+use crate::agents::planning as agent_planning;
 use crate::error::HookerError;
 use crate::integration::{InstallReport, Integration, UninstallReport};
+use crate::plan::{InstallPlan, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::HookSpec;
+use crate::status::StatusReport;
 use crate::util::rules_dir;
 
 /// Reusable project-local rules-file integration.
@@ -67,6 +70,33 @@ impl Integration for PromptAgent {
     fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError> {
         let root = self.require_local(scope)?;
         rules_dir::is_installed(root, self.rules_dir, tag)
+    }
+
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+        HookSpec::validate_tag(tag)?;
+        let root = self.require_local(scope)?;
+        let path = rules_dir::target_path(root, self.rules_dir, tag);
+        Ok(StatusReport::for_file_hook(tag, path))
+    }
+
+    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+        agent_planning::rules_install(
+            self.id(),
+            scope,
+            spec,
+            self.require_local(scope),
+            self.rules_dir,
+        )
+    }
+
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+        agent_planning::rules_uninstall(
+            self.id(),
+            scope,
+            tag,
+            self.require_local(scope),
+            self.rules_dir,
+        )
     }
 
     fn install(&self, spec_scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {

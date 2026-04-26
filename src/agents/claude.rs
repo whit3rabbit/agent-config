@@ -26,10 +26,13 @@ use serde_json::json;
 use crate::error::HookerError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
+use crate::plan::{has_refusal, InstallPlan, PlanTarget, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{fs_atomic, json_patch, mcp_json_object, md_block, ownership, skills_dir};
+use crate::util::{
+    fs_atomic, json_patch, mcp_json_object, md_block, ownership, planning, skills_dir,
+};
 
 /// Claude Code (Anthropic's official CLI).
 pub struct ClaudeAgent;
@@ -100,6 +103,69 @@ impl Integration for ClaudeAgent {
         let settings = Self::settings_path(scope)?;
         let presence = json_patch::tagged_hook_presence(&settings, &["hooks"], tag)?;
         Ok(StatusReport::for_tagged_hook(tag, settings, presence))
+    }
+
+    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+        HookSpec::validate_tag(&spec.tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: spec.tag.clone(),
+        };
+        let settings = Self::settings_path(scope)?;
+        let mut changes = Vec::new();
+
+        let event_key = event_to_string(&spec.event);
+        let matcher_str = matcher_to_claude(&spec.matcher);
+        let entry = json!({
+            "matcher": matcher_str,
+            "hooks": [{ "type": "command", "command": spec.command }],
+        });
+        planning::plan_tagged_json_upsert(
+            &mut changes,
+            &settings,
+            &["hooks", event_key.as_str()],
+            &spec.tag,
+            entry,
+            |_| {},
+        )?;
+        if has_refusal(&changes) {
+            return Ok(InstallPlan::from_changes(target, changes));
+        }
+
+        if let Some(rules) = &spec.rules {
+            let memory = Self::memory_path(scope)?;
+            planning::plan_markdown_upsert(&mut changes, &memory, &spec.tag, &rules.content)?;
+        }
+
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+        HookSpec::validate_tag(tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: tag.to_string(),
+        };
+        let mut changes = Vec::new();
+        let settings = Self::settings_path(scope)?;
+        planning::plan_tagged_json_remove_under(
+            &mut changes,
+            &settings,
+            &["hooks"],
+            tag,
+            planning::json_object_empty,
+            true,
+        )?;
+        if has_refusal(&changes) {
+            return Ok(UninstallPlan::from_changes(target, changes));
+        }
+
+        let memory = Self::memory_path(scope)?;
+        planning::plan_markdown_remove(&mut changes, &memory, tag)?;
+
+        Ok(UninstallPlan::from_changes(target, changes))
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
@@ -238,6 +304,41 @@ impl McpSurface for ClaudeAgent {
         ))
     }
 
+    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+        spec.validate()?;
+        let target = PlanTarget::Mcp {
+            integration_id: McpSurface::id(self),
+            scope: scope.clone(),
+            name: spec.name.clone(),
+            owner: spec.owner_tag.clone(),
+        };
+        let cfg = Self::mcp_path(scope)?;
+        let ledger = ownership::mcp_ledger_for(&cfg);
+        let changes = mcp_json_object::plan_install(&cfg, &ledger, spec)?;
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall_mcp(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        McpSpec::validate_name(name)?;
+        HookSpec::validate_tag(owner_tag)?;
+        let target = PlanTarget::Mcp {
+            integration_id: McpSurface::id(self),
+            scope: scope.clone(),
+            name: name.to_string(),
+            owner: owner_tag.to_string(),
+        };
+        let cfg = Self::mcp_path(scope)?;
+        let ledger = ownership::mcp_ledger_for(&cfg);
+        let changes =
+            mcp_json_object::plan_uninstall(&cfg, &ledger, name, owner_tag, "mcp server")?;
+        Ok(UninstallPlan::from_changes(target, changes))
+    }
+
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
@@ -286,6 +387,42 @@ impl SkillSurface for ClaudeAgent {
             expected_owner,
             recorded,
         ))
+    }
+
+    fn plan_install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallPlan, HookerError> {
+        spec.validate()?;
+        let target = PlanTarget::Skill {
+            integration_id: SkillSurface::id(self),
+            scope: scope.clone(),
+            name: spec.name.clone(),
+            owner: spec.owner_tag.clone(),
+        };
+        let root = Self::skills_root(scope)?;
+        let changes = skills_dir::plan_install(&root, spec)?;
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        SkillSpec::validate_name(name)?;
+        HookSpec::validate_tag(owner_tag)?;
+        let target = PlanTarget::Skill {
+            integration_id: SkillSurface::id(self),
+            scope: scope.clone(),
+            name: name.to_string(),
+            owner: owner_tag.to_string(),
+        };
+        let root = Self::skills_root(scope)?;
+        let changes = skills_dir::plan_uninstall(&root, name, owner_tag)?;
+        Ok(UninstallPlan::from_changes(target, changes))
     }
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {

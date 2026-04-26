@@ -26,13 +26,15 @@ use std::path::PathBuf;
 
 use serde_json::json;
 
+use crate::agents::planning as agent_planning;
 use crate::error::HookerError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
+use crate::plan::{has_refusal, InstallPlan, PlanTarget, RefusalReason, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{fs_atomic, mcp_json_map, md_block, ownership, skills_dir};
+use crate::util::{fs_atomic, mcp_json_map, md_block, ownership, planning, skills_dir};
 
 /// GitHub Copilot.
 pub struct CopilotAgent;
@@ -107,6 +109,78 @@ impl Integration for CopilotAgent {
         HookSpec::validate_tag(tag)?;
         let p = Self::hooks_file(scope, tag)?;
         Ok(StatusReport::for_file_hook(tag, p))
+    }
+
+    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+        HookSpec::validate_tag(&spec.tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: spec.tag.clone(),
+        };
+        let p = match Self::hooks_file(scope, &spec.tag) {
+            Ok(p) => p,
+            Err(HookerError::UnsupportedScope { .. }) => {
+                return Ok(InstallPlan::refused(
+                    target,
+                    None,
+                    RefusalReason::UnsupportedScope,
+                ));
+            }
+            Err(e) => return Err(e),
+        };
+
+        let event_key = event_to_string(&spec.event);
+        let matcher_str = matcher_to_copilot(&spec.matcher);
+        let entry = json!({
+            "type": "command",
+            "bash": spec.command,
+            "matcher": matcher_str,
+        });
+        let doc = json!({
+            "version": 1,
+            "hooks": { event_key: [entry] },
+        });
+        let mut bytes = serde_json::to_vec_pretty(&doc).expect("serialize");
+        bytes.push(b'\n');
+
+        let mut changes = Vec::new();
+        planning::plan_write_file(&mut changes, &p, &bytes, true)?;
+        if has_refusal(&changes) {
+            return Ok(InstallPlan::from_changes(target, changes));
+        }
+
+        if let Some(rules) = &spec.rules {
+            let instr = Self::instructions_path(scope)?;
+            planning::plan_markdown_upsert(&mut changes, &instr, &spec.tag, &rules.content)?;
+        }
+
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+        HookSpec::validate_tag(tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: tag.to_string(),
+        };
+        let p = match Self::hooks_file(scope, tag) {
+            Ok(p) => p,
+            Err(HookerError::UnsupportedScope { .. }) => {
+                return Ok(UninstallPlan::refused(
+                    target,
+                    None,
+                    RefusalReason::UnsupportedScope,
+                ));
+            }
+            Err(e) => return Err(e),
+        };
+        let mut changes = Vec::new();
+        planning::plan_remove_file(&mut changes, &p);
+        let instr = Self::instructions_path(scope)?;
+        planning::plan_markdown_remove(&mut changes, &instr, tag)?;
+        Ok(UninstallPlan::from_changes(target, changes))
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
@@ -244,6 +318,35 @@ impl McpSurface for CopilotAgent {
         ))
     }
 
+    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+        agent_planning::mcp_json_map_install(
+            McpSurface::id(self),
+            scope,
+            spec,
+            Self::mcp_path(scope),
+            &["servers"],
+            mcp_json_map::vscode_servers_value,
+            mcp_json_map::ConfigFormat::Json,
+        )
+    }
+
+    fn plan_uninstall_mcp(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::mcp_json_map_uninstall(
+            McpSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::mcp_path(scope),
+            &["servers"],
+            mcp_json_map::ConfigFormat::Json,
+        )
+    }
+
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
@@ -307,6 +410,34 @@ impl SkillSurface for CopilotAgent {
             expected_owner,
             recorded,
         ))
+    }
+
+    fn plan_install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallPlan, HookerError> {
+        agent_planning::skill_install(
+            SkillSurface::id(self),
+            scope,
+            spec,
+            Self::skills_root(scope),
+        )
+    }
+
+    fn plan_uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::skill_uninstall(
+            SkillSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::skills_root(scope),
+        )
     }
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {

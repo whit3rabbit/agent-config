@@ -14,9 +14,10 @@ use serde_json::{Map, Value};
 
 use crate::error::HookerError;
 use crate::integration::{InstallReport, UninstallReport};
+use crate::plan::{has_refusal, PlannedChange, RefusalReason};
 use crate::spec::{McpSpec, McpTransport};
 use crate::status::ConfigPresence;
-use crate::util::{fs_atomic, json5_patch, json_patch, ownership};
+use crate::util::{fs_atomic, json5_patch, json_patch, ownership, planning};
 
 /// The on-disk syntax to accept when reading the config.
 #[derive(Debug, Clone, Copy)]
@@ -122,6 +123,77 @@ pub(crate) fn install(
     Ok(report)
 }
 
+/// Plan installing or updating an MCP server in a named object.
+pub(crate) fn plan_install(
+    config_path: &Path,
+    ledger_path: &Path,
+    spec: &McpSpec,
+    servers_path: &[&str],
+    build_server: ServerBuilder,
+    format: ConfigFormat,
+) -> Result<Vec<PlannedChange>, HookerError> {
+    let mut changes = Vec::new();
+
+    let mut root = match read_or_empty(config_path, format) {
+        Ok(root) => root,
+        Err(HookerError::JsonInvalid { .. }) | Err(HookerError::Other(_)) => {
+            changes.push(PlannedChange::Refuse {
+                path: Some(config_path.to_path_buf()),
+                reason: RefusalReason::InvalidConfig,
+            });
+            return Ok(changes);
+        }
+        Err(e) => return Err(e),
+    };
+    let in_config = json_patch::contains_named(&root, servers_path, &spec.name);
+    let prior_owner = ownership::owner_of(ledger_path, &spec.name)?;
+
+    match (prior_owner.as_deref(), in_config) {
+        (Some(owner), _) if owner != spec.owner_tag => {
+            changes.push(PlannedChange::Refuse {
+                path: Some(ledger_path.to_path_buf()),
+                reason: RefusalReason::OwnerMismatch,
+            });
+            return Ok(changes);
+        }
+        (None, true) => {
+            changes.push(PlannedChange::Refuse {
+                path: Some(config_path.to_path_buf()),
+                reason: RefusalReason::UserInstalledEntry,
+            });
+            return Ok(changes);
+        }
+        _ => {}
+    }
+
+    let value = build_server(spec);
+    let changed =
+        json_patch::upsert_named_object_entry(&mut root, servers_path, &spec.name, value)?;
+    let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
+
+    if changed {
+        let bytes = match format {
+            ConfigFormat::Json | ConfigFormat::Jsonc | ConfigFormat::Json5 => {
+                json_patch::to_pretty(&root)
+            }
+        };
+        planning::plan_write_file(&mut changes, config_path, &bytes, true)?;
+    }
+
+    if !has_refusal(&changes) && (changed || owner_changed) {
+        planning::plan_write_ledger(&mut changes, ledger_path, &spec.name, &spec.owner_tag);
+    }
+
+    if changes.is_empty() {
+        changes.push(PlannedChange::NoOp {
+            path: config_path.to_path_buf(),
+            reason: "MCP server is already up to date".into(),
+        });
+    }
+
+    Ok(changes)
+}
+
 /// Uninstall the server identified by `name`. Refuses on owner mismatch or
 /// hand-installed entries.
 pub(crate) fn uninstall(
@@ -169,6 +241,87 @@ pub(crate) fn uninstall(
         report.not_installed = true;
     }
     Ok(report)
+}
+
+/// Plan uninstalling an MCP server from a named object.
+pub(crate) fn plan_uninstall(
+    config_path: &Path,
+    ledger_path: &Path,
+    name: &str,
+    owner_tag: &str,
+    kind: &'static str,
+    servers_path: &[&str],
+    format: ConfigFormat,
+) -> Result<Vec<PlannedChange>, HookerError> {
+    let mut changes = Vec::new();
+    let mut root = match read_or_empty(config_path, format) {
+        Ok(root) => root,
+        Err(HookerError::JsonInvalid { .. }) | Err(HookerError::Other(_)) => {
+            changes.push(PlannedChange::Refuse {
+                path: Some(config_path.to_path_buf()),
+                reason: RefusalReason::InvalidConfig,
+            });
+            return Ok(changes);
+        }
+        Err(e) => return Err(e),
+    };
+    let in_config = json_patch::contains_named(&root, servers_path, name);
+    let actual_owner = ownership::owner_of(ledger_path, name)?;
+
+    if !in_config && actual_owner.is_none() {
+        changes.push(PlannedChange::NoOp {
+            path: config_path.to_path_buf(),
+            reason: format!("{kind} is already absent"),
+        });
+        return Ok(changes);
+    }
+
+    match (actual_owner.as_deref(), in_config) {
+        (Some(owner), _) if owner != owner_tag => {
+            changes.push(PlannedChange::Refuse {
+                path: Some(ledger_path.to_path_buf()),
+                reason: RefusalReason::OwnerMismatch,
+            });
+            return Ok(changes);
+        }
+        (None, true) => {
+            changes.push(PlannedChange::Refuse {
+                path: Some(config_path.to_path_buf()),
+                reason: RefusalReason::UserInstalledEntry,
+            });
+            return Ok(changes);
+        }
+        _ => {}
+    }
+
+    if in_config {
+        let removed = json_patch::remove_named_object_entry(&mut root, servers_path, name)?;
+        debug_assert!(removed);
+        let now_empty = root.as_object().map(Map::is_empty).unwrap_or(true);
+        if now_empty {
+            planning::plan_restore_backup_or_remove(&mut changes, config_path);
+        } else {
+            let bytes = match format {
+                ConfigFormat::Json | ConfigFormat::Jsonc | ConfigFormat::Json5 => {
+                    json_patch::to_pretty(&root)
+                }
+            };
+            planning::plan_write_file(&mut changes, config_path, &bytes, false)?;
+        }
+    }
+
+    if actual_owner.is_some() {
+        planning::plan_remove_ledger_entry(&mut changes, ledger_path, name);
+    }
+
+    if changes.is_empty() {
+        changes.push(PlannedChange::NoOp {
+            path: config_path.to_path_buf(),
+            reason: format!("{kind} is already absent"),
+        });
+    }
+
+    Ok(changes)
 }
 
 /// Standard `mcpServers.<name>` entry shape (Claude/Cursor/Gemini/etc.).

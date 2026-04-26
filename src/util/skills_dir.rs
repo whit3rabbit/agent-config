@@ -19,8 +19,9 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::error::HookerError;
 use crate::integration::{InstallReport, UninstallReport};
+use crate::plan::{has_refusal, PlannedChange, RefusalReason};
 use crate::spec::{SkillFrontmatter, SkillSpec};
-use crate::util::{fs_atomic, ownership};
+use crate::util::{fs_atomic, ownership, planning};
 
 const LEDGER_FILE: &str = ".ai-hooker-skills.json";
 const SKILL_MD: &str = "SKILL.md";
@@ -94,6 +95,67 @@ pub(crate) fn install(skills_root: &Path, spec: &SkillSpec) -> Result<InstallRep
     Ok(report)
 }
 
+/// Plan installing or updating a skill directory without mutating disk.
+pub(crate) fn plan_install(
+    skills_root: &Path,
+    spec: &SkillSpec,
+) -> Result<Vec<PlannedChange>, HookerError> {
+    spec.validate()?;
+    for asset in &spec.assets {
+        validate_relative(&asset.relative_path)?;
+    }
+
+    let mut changes = Vec::new();
+    let dir = skill_dir(skills_root, &spec.name);
+    let led = ledger_path(skills_root);
+    let actual_owner = ownership::owner_of(&led, &spec.name)?;
+
+    match (actual_owner.as_deref(), dir.exists()) {
+        (Some(owner), _) if owner != spec.owner_tag => {
+            changes.push(PlannedChange::Refuse {
+                path: Some(led),
+                reason: RefusalReason::OwnerMismatch,
+            });
+            return Ok(changes);
+        }
+        (None, true) => {
+            changes.push(PlannedChange::Refuse {
+                path: Some(dir),
+                reason: RefusalReason::UserInstalledEntry,
+            });
+            return Ok(changes);
+        }
+        _ => {}
+    }
+
+    let skill_md_path = dir.join(SKILL_MD);
+    let skill_md = render_skill_md(&spec.frontmatter, &spec.body);
+    planning::plan_write_file(&mut changes, &skill_md_path, skill_md.as_bytes(), false)?;
+
+    for asset in &spec.assets {
+        let asset_path = dir.join(&asset.relative_path);
+        planning::plan_write_file(&mut changes, &asset_path, &asset.bytes, false)?;
+        if asset.executable {
+            planning::plan_set_permissions(&mut changes, &asset_path, 0o755);
+        }
+    }
+
+    let owner_changed = actual_owner.as_deref() != Some(spec.owner_tag.as_str());
+    let file_would_change = changes.iter().any(|change| {
+        matches!(
+            change,
+            PlannedChange::CreateFile { .. }
+                | PlannedChange::PatchFile { .. }
+                | PlannedChange::SetPermissions { .. }
+        )
+    });
+    if !has_refusal(&changes) && (owner_changed || file_would_change) {
+        planning::plan_write_ledger(&mut changes, &led, &spec.name, &spec.owner_tag);
+    }
+
+    Ok(changes)
+}
+
 /// Uninstall a skill. Refuses on owner mismatch / hand-installed skills.
 pub(crate) fn uninstall(
     skills_root: &Path,
@@ -127,6 +189,57 @@ pub(crate) fn uninstall(
         report.not_installed = true;
     }
     Ok(report)
+}
+
+/// Plan uninstalling a skill directory without mutating disk.
+pub(crate) fn plan_uninstall(
+    skills_root: &Path,
+    name: &str,
+    owner_tag: &str,
+) -> Result<Vec<PlannedChange>, HookerError> {
+    SkillSpec::validate_name(name)?;
+
+    let mut changes = Vec::new();
+    let dir = skill_dir(skills_root, name);
+    let led = ledger_path(skills_root);
+
+    let on_disk = dir.exists();
+    let actual_owner = ownership::owner_of(&led, name)?;
+
+    if !on_disk && actual_owner.is_none() {
+        changes.push(PlannedChange::NoOp {
+            path: dir,
+            reason: "skill is already absent".into(),
+        });
+        return Ok(changes);
+    }
+
+    match (actual_owner.as_deref(), on_disk) {
+        (Some(owner), _) if owner != owner_tag => {
+            changes.push(PlannedChange::Refuse {
+                path: Some(led),
+                reason: RefusalReason::OwnerMismatch,
+            });
+            return Ok(changes);
+        }
+        (None, true) => {
+            changes.push(PlannedChange::Refuse {
+                path: Some(dir),
+                reason: RefusalReason::UserInstalledEntry,
+            });
+            return Ok(changes);
+        }
+        _ => {}
+    }
+
+    if on_disk {
+        changes.push(PlannedChange::RemoveDir { path: dir });
+    }
+    if actual_owner.is_some() {
+        planning::plan_remove_ledger_entry(&mut changes, &led, name);
+    }
+
+    Ok(changes)
 }
 
 /// Reject absolute or `..`-containing relative paths so callers cannot

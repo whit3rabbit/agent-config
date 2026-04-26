@@ -86,6 +86,88 @@ pub enum InstallStatus {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum DriftIssue {
+    /// Ownership ledger contains an entry, but the corresponding config,
+    /// directory, or file entry is missing.
+    LedgerOnly {
+        /// The ledger path that contains the stale entry.
+        path: PathBuf,
+        /// Owner recorded for the entry, when available.
+        owner: Option<String>,
+    },
+    /// Config, directory, or file entry exists without a matching ownership
+    /// ledger entry.
+    ConfigOnly {
+        /// The unowned config, directory, or file path.
+        path: PathBuf,
+    },
+    /// The ledger owner does not match the owner the caller asked to validate
+    /// against.
+    OwnerMismatch {
+        /// Expected owner tag.
+        expected: String,
+        /// Actual owner tag from the ledger.
+        actual: Option<String>,
+        /// Ledger path that recorded the owner.
+        path: Option<PathBuf>,
+    },
+    /// The harness config exists but cannot be parsed or has an unsupported
+    /// shape for validation.
+    MalformedConfig {
+        /// The malformed config path.
+        path: PathBuf,
+        /// Parser or shape error.
+        reason: String,
+    },
+    /// The ai-hooker ownership ledger exists but is not valid ledger JSON.
+    MalformedLedger {
+        /// The malformed ledger path.
+        path: PathBuf,
+        /// Parser or shape error.
+        reason: String,
+    },
+    /// A backup already exists and would block a future first-touch write.
+    BackupCollision {
+        /// The existing backup path.
+        path: PathBuf,
+    },
+    /// A backup that validation expected to be present is missing.
+    MissingBackup {
+        /// The expected backup path.
+        path: PathBuf,
+    },
+    /// A backup exists even though the validated install state does not need
+    /// it.
+    StaleBackup {
+        /// The stale backup path.
+        path: PathBuf,
+    },
+    /// A directory-backed surface is not laid out as expected.
+    UnexpectedDirectoryShape {
+        /// The path with the unexpected shape.
+        path: PathBuf,
+        /// Human-readable shape problem.
+        reason: String,
+    },
+    /// A skill directory exists but the required `SKILL.md` manifest is
+    /// missing.
+    SkillMissingSkillMd {
+        /// The skill directory.
+        dir: PathBuf,
+        /// The expected manifest path.
+        missing: PathBuf,
+    },
+    /// A skill file or symlink resolves outside the skill directory.
+    SkillAssetEscapesRoot {
+        /// The escaping asset path.
+        path: PathBuf,
+        /// The skill directory that should contain all assets.
+        root: PathBuf,
+    },
+    /// A known unsupported surface has files present on disk.
+    UnsupportedButPresent {
+        /// The unsupported path that exists.
+        path: PathBuf,
+    },
     /// A skill directory exists but the required `SKILL.md` manifest is
     /// missing.
     SkillIncomplete {

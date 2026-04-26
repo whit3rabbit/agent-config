@@ -14,6 +14,8 @@
 //! [`HookerError::NotOwnedByCaller`] rather than risk clobbering work this
 //! caller did not perform.
 
+use std::collections::BTreeMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
@@ -92,6 +94,80 @@ pub(crate) fn owner_of(ledger_path: &Path, name: &str) -> Result<Option<String>,
         .and_then(|v| v.get(OWNER_KEY))
         .and_then(Value::as_str)
         .map(str::to_owned))
+}
+
+/// Strict, read-only ledger parse result for validation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum StrictLedgerRead {
+    /// The ledger file is absent.
+    Missing,
+    /// The ledger file is present and has the expected schema.
+    Valid {
+        /// Map of ledger entry name to owner tag.
+        entries: BTreeMap<String, String>,
+    },
+    /// The ledger file is present but not valid ledger JSON.
+    Malformed {
+        /// Human-readable parse or shape error.
+        reason: String,
+    },
+}
+
+/// Read a ledger without repairing or normalizing it.
+///
+/// This is intentionally stricter than the mutating install/uninstall path:
+/// validation must report malformed ledgers as drift and must never rewrite
+/// them as a side effect of checking state.
+pub(crate) fn read_strict(ledger_path: &Path) -> Result<StrictLedgerRead, HookerError> {
+    let bytes = match fs::read(ledger_path) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(StrictLedgerRead::Missing);
+        }
+        Err(e) => return Err(HookerError::io(ledger_path, e)),
+    };
+    if bytes.is_empty() || bytes.iter().all(|b| b.is_ascii_whitespace()) {
+        return Ok(StrictLedgerRead::Malformed {
+            reason: "ledger file is empty".into(),
+        });
+    }
+
+    let root: Value = match serde_json::from_slice(&bytes) {
+        Ok(root) => root,
+        Err(e) => {
+            return Ok(StrictLedgerRead::Malformed {
+                reason: e.to_string(),
+            });
+        }
+    };
+
+    let Some(root_obj) = root.as_object() else {
+        return Ok(StrictLedgerRead::Malformed {
+            reason: "ledger root must be a JSON object".into(),
+        });
+    };
+    if !root_obj.get(VERSION_KEY).is_some_and(Value::is_number) {
+        return Ok(StrictLedgerRead::Malformed {
+            reason: "ledger version must be a number".into(),
+        });
+    }
+    let Some(entries_obj) = root_obj.get(ENTRIES_KEY).and_then(Value::as_object) else {
+        return Ok(StrictLedgerRead::Malformed {
+            reason: "ledger entries must be an object".into(),
+        });
+    };
+
+    let mut entries = BTreeMap::new();
+    for (name, entry) in entries_obj {
+        let Some(owner) = entry.get(OWNER_KEY).and_then(Value::as_str) else {
+            return Ok(StrictLedgerRead::Malformed {
+                reason: format!("ledger entry {name:?} must contain string owner"),
+            });
+        };
+        entries.insert(name.clone(), owner.to_string());
+    }
+
+    Ok(StrictLedgerRead::Valid { entries })
 }
 
 /// True if `name` has any owner recorded in the ledger.

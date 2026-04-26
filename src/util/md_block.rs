@@ -63,6 +63,19 @@ pub(crate) fn contains(host: &str, tag: &str) -> bool {
     find_block(host, &begin, &end).is_some()
 }
 
+/// Returns true when `host` contains an incomplete or duplicate fenced block
+/// for `tag`.
+pub(crate) fn malformed(host: &str, tag: &str) -> bool {
+    let (begin, end) = markers(tag);
+    let begin_count = host.matches(&begin).count();
+    let end_count = host.matches(&end).count();
+    match (begin_count, end_count) {
+        (0, 0) => false,
+        (1, 1) => find_block(host, &begin, &end).is_none(),
+        _ => true,
+    }
+}
+
 /// Remove the tagged block. Returns `(new_contents, removed)` where `removed`
 /// is true if a block was actually stripped.
 ///
@@ -153,6 +166,15 @@ mod tests {
         host = upsert(&host, "beta", "for beta");
         assert!(contains(&host, "alpha"));
         assert!(contains(&host, "beta"));
+    }
+
+    #[test]
+    fn malformed_detects_incomplete_or_duplicate_fence() {
+        assert!(malformed("<!-- BEGIN AI-HOOKER:app -->\nbody\n", "app"));
+        let duplicated = format!("{}\n{}", upsert("", "app", "one"), upsert("", "app", "two"));
+        assert!(malformed(&duplicated, "app"));
+        assert!(!malformed(&upsert("", "app", "ok"), "app"));
+        assert!(!malformed("# no block\n", "app"));
     }
 
     #[test]

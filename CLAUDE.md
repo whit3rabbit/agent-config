@@ -20,6 +20,7 @@ cargo test --lib               # unit tests only
 cargo test --test registry     # integration tests only
 cargo test <test_name>         # run a single test by name
 cargo doc --no-deps            # generate rustdoc
+cargo clippy --all-targets     # lints lib + tests + examples
 ```
 
 No external services or network required. All tests use `tempfile` for isolation.
@@ -30,18 +31,23 @@ No external services or network required. All tests use `tempfile` for isolation
 
 1. Caller builds a `HookSpec`, `McpSpec`, or `SkillSpec`
 2. Looks up an `Integration` by id via `registry::by_id("claude")`
-3. Calls the matching surface method: `install`, `install_mcp`, or
+3. Optionally calls the matching dry-run planner: `plan_install`,
+   `plan_install_mcp`, or `plan_install_skill`
+4. Calls the matching mutation method: `install`, `install_mcp`, or
    `install_skill`
 
 ### Module map
 
 - `lib.rs` — crate root, re-exports public API types
+- `plan.rs` — side-effect-free plan report types, planned changes, statuses,
+  warnings, and refusal reasons
 - `spec.rs` — `HookSpec`, `McpSpec`, `SkillSpec`, builders, transports, events,
   matchers
 - `integration.rs` — `Integration`, `McpSurface`, `SkillSurface` traits +
-  report types
+  report types and plan methods
 - `scope.rs` — `Scope` enum (Global vs Local), `ScopeKind` discriminant
 - `registry.rs` — `all()` and `by_id()` for looking up integrations
+- `status.rs` — status reports, drift issues, and current-state probes
 - `error.rs` — `HookerError` enum (IO, JSON, path resolution, unsupported scope, missing fields, invalid tag, backup collision)
 - `paths.rs` — cross-platform resolution of harness config directories
 
@@ -51,11 +57,15 @@ Each file implements `Integration` for one harness. Agents with extra surfaces
 also implement `McpSurface` and/or `SkillSurface`. `PromptAgent` remains as a
 small reusable prompt-only implementation for future harnesses, but registered
 Roo and Kilo agents are dedicated modules because they also support MCP.
+`src/agents/planning.rs` contains adapters from agent path resolution to the
+shared dry-run helpers.
 
 ### Utility layer (`src/util/`)
 
 Safety-critical primitives shared by all agents:
 - `fs_atomic` — write-to-temp + fsync + rename; first-touch `.bak` backups; identical-content no-op
+- `planning` — pure dry-run helpers for file writes/removals, backups,
+  permissions, ledger changes, tagged JSON, and markdown blocks
 - `json_patch` — tagged insert/remove in JSON arrays (`_ai_hooker_tag` marker); key-order preserving; empty-array pruning
 - `mcp_json_map` — ledger-backed MCP insertion into named JSON/JSONC/JSON5 objects
   (engine for all named-object MCP shapes); takes a path, builder fn, and format
@@ -64,6 +74,47 @@ Safety-critical primitives shared by all agents:
 - `yaml_mcp_map` — ledger-backed MCP insertion into named YAML objects
   (Hermes `mcp_servers`)
 - `md_block` — HTML-comment fenced markdown blocks; upsert/remove with whitespace normalization
+
+### Dry-run planning
+
+Every public surface has a side-effect-free planner:
+
+- Hooks: `Integration::plan_install` and `Integration::plan_uninstall`
+- MCP: `McpSurface::plan_install_mcp` and `McpSurface::plan_uninstall_mcp`
+- Skills: `SkillSurface::plan_install_skill` and
+  `SkillSurface::plan_uninstall_skill`
+
+Plans return `InstallPlan` or `UninstallPlan` with a `PlanTarget`, a list of
+`PlannedChange` values, an `InstallStatus`, and warnings. The root public
+`InstallStatus` and `PlanTarget` names refer to planning. Status-registry
+types are re-exported as `StatusInstallStatus` and `StatusPlanTarget`.
+
+Planning must read current state, compute desired state in memory, compare the
+two, and emit planned changes. Do not implement dry-run by partially running
+install or uninstall code. Predictable refusals return `Ok(plan)` with
+`InstallStatus::Refused`; path resolution failures, unreadable files, and
+invalid caller identifiers remain `Err(HookerError)`.
+
+Ledger effects are represented with `WriteLedger` and `RemoveLedgerEntry`, not
+duplicated as generic file writes. Permission changes are represented with
+`SetPermissions`.
+
+### Status reporting
+
+- `Integration::status(scope, tag)`,
+  `McpSurface::mcp_status(scope, name, expected_owner)`,
+  `SkillSurface::skill_status(scope, name, expected_owner)`.
+- `expected_owner` is the consumer tag the caller compares against — matching
+  ledger entries become `InstalledOwned`, mismatches become
+  `InstalledOtherOwner`. Default `is_*_installed` wrappers pass `self.id()` as
+  a sentinel so any real consumer owner routes through `OtherOwner` and the
+  boolean fold preserves "any owner" semantics.
+- Hooks have no separate ledger (the tag IS the owner), so
+  `Integration::status` takes only `(scope, tag)`.
+- Status probes (`util::*::config_presence`, `tagged_hook_presence`, etc.)
+  catch parse failures and return `ConfigPresence::Invalid { reason }` so
+  `*_status` surfaces them as `DriftIssue::InvalidConfig`. Never propagate
+  `HookerError::JsonInvalid`/`TomlInvalid` from a status probe.
 
 ### Adding a new integration
 
@@ -76,9 +127,10 @@ For a copy-paste starting point, see [`templates/new-harness/`](templates/new-ha
 4. Add `Box::new(...)` to `registry::all()`
 5. If applicable, add it to `registry::mcp_capable()` or
    `registry::skill_capable()`
-6. Add or update public smoke tests in `tests/registry.rs`,
-   `tests/mcp_registry.rs`, or `tests/skill_registry.rs`
-7. Add agent doc to `docs/agents/`
+6. Implement the matching dry-run plan methods for hooks, MCP, and/or skills
+7. Add or update public smoke tests in `tests/registry.rs`,
+   `tests/mcp_registry.rs`, `tests/skill_registry.rs`, or `tests/plan_api.rs`
+8. Add agent doc to `docs/agents/`
 
 ## Surface coverage
 
@@ -203,6 +255,19 @@ hook/plugin install remains deferred because it likely needs a shell-out to
   more precise than `preToolUse` + `Shell` matcher. Already reachable via
   `Event::Custom("beforeShellExecution")` + `Matcher::Regex(...)`.
 
+### Phase 6, Dry-run plan API, DONE
+
+Implemented as public plan report types in [`src/plan.rs`](src/plan.rs) plus
+plan methods on `Integration`, `McpSurface`, and `SkillSurface`.
+
+Internal helpers now expose pure plan phases for atomic files, rules files,
+MCP JSON/JSONC/JSON5/YAML maps, markdown blocks, ownership ledgers, and skill
+directories. Agent modules call those helpers to produce previews before any
+mutation. Tests in [`tests/plan_api.rs`](tests/plan_api.rs) cover registry
+exposure, missing config creation previews, no-op installs, refused owner and
+hand-installed entries, backup collisions, uninstall patch vs removal, chmod
+previews, and dry-run non-mutation.
+
 ## Conventions
 
 - Public errors: `thiserror`-typed (`HookerError`). Internal helpers may use `anyhow`. Never panic on user input.
@@ -215,11 +280,14 @@ hook/plugin install remains deferred because it likely needs a shell-out to
   `_ai_hooker_tag` into harness-owned server or skill payloads.
 - One file per consumer (no shared array) when the harness allows it (Copilot, OpenCode plugins, prompt-only agents). Avoids JSON-array contention and makes uninstall trivially safe.
 - Install/uninstall are idempotent: same tag + same content = no-op. Multiple consumers coexist without conflict.
+- Plan generation is side-effect-free. It must not create config files,
+  ledgers, backups, directories, or chmod targets.
 
 ## Test discipline
 
 - Every agent module has a `#[cfg(test)]` block exercising install + uninstall + idempotency in a tempdir.
 - `tests/registry.rs` is the public-API smoke: every registered id is reachable, basic round-trip works.
+- `tests/plan_api.rs` is the dry-run public-API smoke and acceptance suite.
 - Run `cargo test` (not just `--lib`) before declaring anything done; the integration tests live in `tests/`.
 - `unsafe_code` is forbidden; `missing_docs` is a warning.
 - `#[allow(dead_code)]` markers (e.g. `src/util/mcp_json_array.rs`, the array helpers in `json_patch.rs`) are deliberate scaffolding kept for future surfaces — leave them alone unless explicitly asked to delete.

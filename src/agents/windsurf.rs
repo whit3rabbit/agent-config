@@ -21,13 +21,19 @@ use std::path::PathBuf;
 
 use serde_json::json;
 
+use crate::agents::planning as agent_planning;
 use crate::error::HookerError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
+use crate::plan::{
+    has_refusal, InstallPlan, PlanTarget as DryPlanTarget, RefusalReason, UninstallPlan,
+};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, McpSpec, SkillSpec};
 use crate::status::{ConfigPresence, InstallStatus, PathStatus, PlanTarget, StatusReport};
-use crate::util::{fs_atomic, json_patch, mcp_json_object, ownership, rules_dir, skills_dir};
+use crate::util::{
+    fs_atomic, json_patch, mcp_json_object, ownership, planning, rules_dir, skills_dir,
+};
 
 const RULES_DIR: &str = ".windsurf/rules";
 
@@ -151,6 +157,87 @@ impl Integration for WindsurfAgent {
         })
     }
 
+    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+        HookSpec::validate_tag(&spec.tag)?;
+        let target = DryPlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: spec.tag.clone(),
+        };
+        let root = match self.project_root(scope) {
+            Ok(root) => root,
+            Err(HookerError::UnsupportedScope { .. }) => {
+                return Ok(InstallPlan::refused(
+                    target,
+                    None,
+                    RefusalReason::UnsupportedScope,
+                ));
+            }
+            Err(e) => return Err(e),
+        };
+        let mut changes = Vec::new();
+        if let Some(rules) = &spec.rules {
+            changes.extend(rules_dir::plan_install(
+                root,
+                RULES_DIR,
+                &spec.tag,
+                &rules.content,
+            )?);
+        }
+        if has_refusal(&changes) {
+            return Ok(InstallPlan::from_changes(target, changes));
+        }
+
+        if spec.script.is_some() || spec.rules.is_none() {
+            let event_key = event_to_windsurf(&spec.event);
+            let p = self.hooks_path(scope)?;
+            let entry = json!({
+                "bash": spec.command,
+            });
+            planning::plan_tagged_json_upsert(
+                &mut changes,
+                &p,
+                &[event_key.as_str()],
+                &spec.tag,
+                entry,
+                |_| {},
+            )?;
+        }
+
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+        HookSpec::validate_tag(tag)?;
+        let target = DryPlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: tag.to_string(),
+        };
+        let root = match self.project_root(scope) {
+            Ok(root) => root,
+            Err(HookerError::UnsupportedScope { .. }) => {
+                return Ok(UninstallPlan::refused(
+                    target,
+                    None,
+                    RefusalReason::UnsupportedScope,
+                ));
+            }
+            Err(e) => return Err(e),
+        };
+        let mut changes = rules_dir::plan_uninstall(root, RULES_DIR, tag)?;
+        let p = self.hooks_path(scope)?;
+        planning::plan_tagged_json_remove_under(
+            &mut changes,
+            &p,
+            &[],
+            tag,
+            planning::json_object_empty,
+            false,
+        )?;
+        Ok(UninstallPlan::from_changes(target, changes))
+    }
+
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
         HookSpec::validate_tag(&spec.tag)?;
         let root = self.project_root(scope)?;
@@ -262,6 +349,30 @@ impl McpSurface for WindsurfAgent {
         ))
     }
 
+    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+        agent_planning::mcp_json_object_install(
+            McpSurface::id(self),
+            scope,
+            spec,
+            Self::mcp_path(scope),
+        )
+    }
+
+    fn plan_uninstall_mcp(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::mcp_json_object_uninstall(
+            McpSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::mcp_path(scope),
+        )
+    }
+
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
@@ -310,6 +421,34 @@ impl SkillSurface for WindsurfAgent {
             expected_owner,
             recorded,
         ))
+    }
+
+    fn plan_install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallPlan, HookerError> {
+        agent_planning::skill_install(
+            SkillSurface::id(self),
+            scope,
+            spec,
+            Self::skills_root(scope),
+        )
+    }
+
+    fn plan_uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::skill_uninstall(
+            SkillSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::skills_root(scope),
+        )
     }
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {

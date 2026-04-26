@@ -18,6 +18,7 @@ use std::path::Path;
 
 use crate::error::HookerError;
 use crate::integration::{InstallReport, UninstallReport};
+use crate::plan::PlannedChange;
 use crate::spec::McpSpec;
 use crate::status::ConfigPresence;
 use crate::util::{mcp_json_map, ownership};
@@ -28,6 +29,7 @@ const SERVERS_PATH: &[&str] = &[SERVERS_KEY];
 
 /// Returns true if `name` exists in the ledger sidecar (single source of truth
 /// for "is this currently installed by some consumer").
+#[allow(dead_code)]
 pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, HookerError> {
     ownership::contains(ledger_path, name)
 }
@@ -37,7 +39,12 @@ pub(crate) fn config_presence(
     config_path: &Path,
     name: &str,
 ) -> Result<ConfigPresence, HookerError> {
-    mcp_json_map::config_presence(config_path, SERVERS_PATH, name, mcp_json_map::ConfigFormat::Json)
+    mcp_json_map::config_presence(
+        config_path,
+        SERVERS_PATH,
+        name,
+        mcp_json_map::ConfigFormat::Json,
+    )
 }
 
 /// Install or update an MCP server in the harness config. Records ownership
@@ -48,6 +55,22 @@ pub(crate) fn install(
     spec: &McpSpec,
 ) -> Result<InstallReport, HookerError> {
     mcp_json_map::install(
+        config_path,
+        ledger_path,
+        spec,
+        SERVERS_PATH,
+        mcp_json_map::mcp_servers_value,
+        mcp_json_map::ConfigFormat::Json,
+    )
+}
+
+/// Plan installing or updating an MCP server in the harness config.
+pub(crate) fn plan_install(
+    config_path: &Path,
+    ledger_path: &Path,
+    spec: &McpSpec,
+) -> Result<Vec<PlannedChange>, HookerError> {
+    mcp_json_map::plan_install(
         config_path,
         ledger_path,
         spec,
@@ -68,6 +91,25 @@ pub(crate) fn uninstall(
     kind: &'static str,
 ) -> Result<UninstallReport, HookerError> {
     mcp_json_map::uninstall(
+        config_path,
+        ledger_path,
+        name,
+        owner_tag,
+        kind,
+        SERVERS_PATH,
+        mcp_json_map::ConfigFormat::Json,
+    )
+}
+
+/// Plan uninstalling the server identified by `name`.
+pub(crate) fn plan_uninstall(
+    config_path: &Path,
+    ledger_path: &Path,
+    name: &str,
+    owner_tag: &str,
+    kind: &'static str,
+) -> Result<Vec<PlannedChange>, HookerError> {
+    mcp_json_map::plan_uninstall(
         config_path,
         ledger_path,
         name,

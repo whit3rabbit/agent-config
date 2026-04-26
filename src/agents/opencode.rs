@@ -11,13 +11,15 @@
 
 use std::path::PathBuf;
 
+use crate::agents::planning as agent_planning;
 use crate::error::HookerError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
+use crate::plan::{InstallPlan, PlanTarget, RefusalReason, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{HookSpec, McpSpec, ScriptTemplate, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{fs_atomic, mcp_json_map, ownership, skills_dir};
+use crate::util::{fs_atomic, mcp_json_map, ownership, planning, skills_dir};
 
 /// OpenCode plugin installer.
 pub struct OpenCodeAgent;
@@ -82,6 +84,44 @@ impl Integration for OpenCodeAgent {
         HookSpec::validate_tag(tag)?;
         let p = Self::plugin_path(scope, tag)?;
         Ok(StatusReport::for_file_hook(tag, p))
+    }
+
+    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+        HookSpec::validate_tag(&spec.tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: spec.tag.clone(),
+        };
+        let p = Self::plugin_path(scope, &spec.tag)?;
+        let body = match &spec.script {
+            Some(ScriptTemplate::TypeScript(s)) => s.clone(),
+            Some(ScriptTemplate::Shell(_)) => {
+                return Ok(InstallPlan::refused(
+                    target,
+                    None,
+                    RefusalReason::MissingRequiredSpecField,
+                ));
+            }
+            None => default_plugin_body(&spec.command),
+        };
+        let body = fs_atomic::ensure_trailing_newline(&body);
+        let mut changes = Vec::new();
+        planning::plan_write_file(&mut changes, &p, body.as_bytes(), true)?;
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+        HookSpec::validate_tag(tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: tag.to_string(),
+        };
+        let p = Self::plugin_path(scope, tag)?;
+        let mut changes = Vec::new();
+        planning::plan_remove_file(&mut changes, &p);
+        Ok(UninstallPlan::from_changes(target, changes))
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
@@ -170,6 +210,35 @@ impl McpSurface for OpenCodeAgent {
         ))
     }
 
+    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+        agent_planning::mcp_json_map_install(
+            McpSurface::id(self),
+            scope,
+            spec,
+            Self::config_path(scope),
+            &["mcp"],
+            mcp_json_map::command_array_value,
+            mcp_json_map::ConfigFormat::Jsonc,
+        )
+    }
+
+    fn plan_uninstall_mcp(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::mcp_json_map_uninstall(
+            McpSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::config_path(scope),
+            &["mcp"],
+            mcp_json_map::ConfigFormat::Jsonc,
+        )
+    }
+
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::config_path(scope)?;
@@ -233,6 +302,34 @@ impl SkillSurface for OpenCodeAgent {
             expected_owner,
             recorded,
         ))
+    }
+
+    fn plan_install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallPlan, HookerError> {
+        agent_planning::skill_install(
+            SkillSurface::id(self),
+            scope,
+            spec,
+            Self::skills_root(scope),
+        )
+    }
+
+    fn plan_uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::skill_uninstall(
+            SkillSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::skills_root(scope),
+        )
     }
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {

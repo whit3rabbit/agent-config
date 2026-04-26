@@ -26,13 +26,17 @@ use std::path::PathBuf;
 
 use serde_json::json;
 
+use crate::agents::planning as agent_planning;
 use crate::error::HookerError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
+use crate::plan::{has_refusal, InstallPlan, PlanTarget, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{fs_atomic, json_patch, mcp_json_object, md_block, ownership, skills_dir};
+use crate::util::{
+    fs_atomic, json_patch, mcp_json_object, md_block, ownership, planning, skills_dir,
+};
 
 /// Gemini CLI (Google's official Gemini code agent).
 pub struct GeminiAgent;
@@ -95,6 +99,71 @@ impl Integration for GeminiAgent {
         let p = Self::settings_path(scope)?;
         let presence = json_patch::tagged_hook_presence(&p, &["hooks"], tag)?;
         Ok(StatusReport::for_tagged_hook(tag, p, presence))
+    }
+
+    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+        HookSpec::validate_tag(&spec.tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: spec.tag.clone(),
+        };
+        let p = Self::settings_path(scope)?;
+        let mut changes = Vec::new();
+
+        let event_key = event_to_string(&spec.event);
+        let matcher_str = matcher_to_gemini(&spec.matcher);
+        let entry = json!({
+            "matcher": matcher_str,
+            "hooks": [
+                { "type": "command", "command": spec.command }
+            ],
+        });
+        planning::plan_tagged_json_upsert(
+            &mut changes,
+            &p,
+            &["hooks", event_key.as_str()],
+            &spec.tag,
+            entry,
+            |_| {},
+        )?;
+        if has_refusal(&changes) {
+            return Ok(InstallPlan::from_changes(target, changes));
+        }
+
+        if let Some(rules) = &spec.rules {
+            let memory = Self::memory_path(scope)?;
+            planning::plan_markdown_upsert(&mut changes, &memory, &spec.tag, &rules.content)?;
+        }
+
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+        HookSpec::validate_tag(tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: tag.to_string(),
+        };
+        let mut changes = Vec::new();
+        let p = Self::settings_path(scope)?;
+        planning::plan_tagged_json_remove_under(
+            &mut changes,
+            &p,
+            &["hooks"],
+            tag,
+            planning::json_object_empty,
+            true,
+        )?;
+        if has_refusal(&changes) {
+            return Ok(UninstallPlan::from_changes(target, changes));
+        }
+
+        let memory = Self::memory_path(scope)?;
+        planning::plan_markdown_remove(&mut changes, &memory, tag)?;
+
+        Ok(UninstallPlan::from_changes(target, changes))
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
@@ -234,6 +303,30 @@ impl McpSurface for GeminiAgent {
         ))
     }
 
+    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+        agent_planning::mcp_json_object_install(
+            McpSurface::id(self),
+            scope,
+            spec,
+            Self::mcp_path(scope),
+        )
+    }
+
+    fn plan_uninstall_mcp(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::mcp_json_object_uninstall(
+            McpSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::mcp_path(scope),
+        )
+    }
+
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
@@ -282,6 +375,34 @@ impl SkillSurface for GeminiAgent {
             expected_owner,
             recorded,
         ))
+    }
+
+    fn plan_install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallPlan, HookerError> {
+        agent_planning::skill_install(
+            SkillSurface::id(self),
+            scope,
+            spec,
+            Self::skills_root(scope),
+        )
+    }
+
+    fn plan_uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::skill_uninstall(
+            SkillSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::skills_root(scope),
+        )
     }
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {

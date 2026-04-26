@@ -18,13 +18,15 @@ use std::path::PathBuf;
 
 use serde_json::{json, Value};
 
+use crate::agents::planning as agent_planning;
 use crate::error::HookerError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
+use crate::plan::{InstallPlan, PlanTarget, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{fs_atomic, json_patch, mcp_json_object, ownership, skills_dir};
+use crate::util::{fs_atomic, json_patch, mcp_json_object, ownership, planning, skills_dir};
 
 /// Cursor (the AI editor and CLI).
 pub struct CursorAgent;
@@ -81,6 +83,58 @@ impl Integration for CursorAgent {
         let p = Self::hooks_path(scope)?;
         let presence = json_patch::tagged_hook_presence(&p, &["hooks"], tag)?;
         Ok(StatusReport::for_tagged_hook(tag, p, presence))
+    }
+
+    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+        HookSpec::validate_tag(&spec.tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: spec.tag.clone(),
+        };
+        let p = Self::hooks_path(scope)?;
+        let event_key = event_to_string(&spec.event);
+        let matcher_str = matcher_to_cursor(&spec.matcher);
+        let entry = json!({
+            "command": spec.command,
+            "matcher": matcher_str,
+        });
+        let mut changes = Vec::new();
+        planning::plan_tagged_json_upsert(
+            &mut changes,
+            &p,
+            &["hooks", event_key.as_str()],
+            &spec.tag,
+            entry,
+            |root| {
+                if root.get("version").is_none() {
+                    if let Some(obj) = root.as_object_mut() {
+                        obj.insert("version".into(), json!(1));
+                    }
+                }
+            },
+        )?;
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+        HookSpec::validate_tag(tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: tag.to_string(),
+        };
+        let p = Self::hooks_path(scope)?;
+        let mut changes = Vec::new();
+        planning::plan_tagged_json_remove_under(
+            &mut changes,
+            &p,
+            &["hooks"],
+            tag,
+            is_effectively_empty,
+            true,
+        )?;
+        Ok(UninstallPlan::from_changes(target, changes))
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
@@ -195,6 +249,30 @@ impl McpSurface for CursorAgent {
         ))
     }
 
+    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+        agent_planning::mcp_json_object_install(
+            McpSurface::id(self),
+            scope,
+            spec,
+            Self::mcp_path(scope),
+        )
+    }
+
+    fn plan_uninstall_mcp(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::mcp_json_object_uninstall(
+            McpSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::mcp_path(scope),
+        )
+    }
+
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
@@ -243,6 +321,34 @@ impl SkillSurface for CursorAgent {
             expected_owner,
             recorded,
         ))
+    }
+
+    fn plan_install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallPlan, HookerError> {
+        agent_planning::skill_install(
+            SkillSurface::id(self),
+            scope,
+            spec,
+            Self::skills_root(scope),
+        )
+    }
+
+    fn plan_uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::skill_uninstall(
+            SkillSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::skills_root(scope),
+        )
     }
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {

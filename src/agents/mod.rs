@@ -15,6 +15,7 @@ pub mod hermes;
 pub mod kilocode;
 pub mod openclaw;
 pub mod opencode;
+mod planning;
 #[allow(dead_code)]
 mod prompt;
 pub mod roo;

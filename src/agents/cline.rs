@@ -22,13 +22,18 @@
 
 use std::path::PathBuf;
 
+use crate::agents::planning as agent_planning;
 use crate::error::HookerError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
+use crate::plan::{
+    has_refusal, InstallPlan, PlanTarget as DryPlanTarget, PlannedChange, RefusalReason,
+    UninstallPlan,
+};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, McpSpec, ScriptTemplate, SkillSpec};
 use crate::status::{InstallStatus, PathStatus, PlanTarget, StatusReport, StatusWarning};
-use crate::util::{fs_atomic, mcp_json_object, ownership, rules_dir, skills_dir};
+use crate::util::{fs_atomic, mcp_json_object, ownership, planning, rules_dir, skills_dir};
 
 const RULES_DIR: &str = ".clinerules";
 const HOOKS_SUBDIR: &str = "hooks";
@@ -176,6 +181,144 @@ impl Integration for ClineAgent {
         })
     }
 
+    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+        HookSpec::validate_tag(&spec.tag)?;
+        let target = DryPlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: spec.tag.clone(),
+        };
+        let root = match self.project_root(scope) {
+            Ok(root) => root,
+            Err(HookerError::UnsupportedScope { .. }) => {
+                return Ok(InstallPlan::refused(
+                    target,
+                    None,
+                    RefusalReason::UnsupportedScope,
+                ));
+            }
+            Err(e) => return Err(e),
+        };
+        let mut changes = Vec::new();
+        if let Some(rules) = &spec.rules {
+            changes.extend(rules_dir::plan_install(
+                root,
+                RULES_DIR,
+                &spec.tag,
+                &rules.content,
+            )?);
+        }
+        if has_refusal(&changes) {
+            return Ok(InstallPlan::from_changes(target, changes));
+        }
+
+        if spec.script.is_some() || spec.rules.is_none() {
+            let body = match &spec.script {
+                Some(ScriptTemplate::Shell(s)) => {
+                    fs_atomic::ensure_trailing_newline(&prefix_shebang(s))
+                }
+                Some(ScriptTemplate::TypeScript(_)) => {
+                    return Ok(InstallPlan::refused(
+                        target,
+                        None,
+                        RefusalReason::MissingRequiredSpecField,
+                    ));
+                }
+                None => default_hook_body(&spec.command),
+            };
+            let event_filename = event_to_filename(&spec.event);
+            let path = self.hook_path(scope, &spec.event)?;
+            let ledger = self.ledger_path(scope)?;
+            let actual_owner = ownership::owner_of(&ledger, &event_filename)?;
+            match (actual_owner.as_deref(), path.exists()) {
+                (Some(owner), _) if owner != spec.tag => {
+                    changes.push(PlannedChange::Refuse {
+                        path: Some(ledger),
+                        reason: RefusalReason::OwnerMismatch,
+                    });
+                    return Ok(InstallPlan::from_changes(target, changes));
+                }
+                (None, true) => {
+                    changes.push(PlannedChange::Refuse {
+                        path: Some(path),
+                        reason: RefusalReason::UserInstalledEntry,
+                    });
+                    return Ok(InstallPlan::from_changes(target, changes));
+                }
+                _ => {}
+            }
+            planning::plan_write_file(&mut changes, &path, body.as_bytes(), false)?;
+            planning::plan_set_permissions(&mut changes, &path, 0o755);
+            let owner_changed = actual_owner.as_deref() != Some(spec.tag.as_str());
+            let file_changed = changes.iter().any(|change| {
+                matches!(
+                    change,
+                    PlannedChange::CreateFile { .. } | PlannedChange::PatchFile { .. }
+                )
+            });
+            if owner_changed || file_changed {
+                planning::plan_write_ledger(&mut changes, &ledger, &event_filename, &spec.tag);
+            }
+        }
+
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+        HookSpec::validate_tag(tag)?;
+        let target = DryPlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: tag.to_string(),
+        };
+        let root = match self.project_root(scope) {
+            Ok(root) => root,
+            Err(HookerError::UnsupportedScope { .. }) => {
+                return Ok(UninstallPlan::refused(
+                    target,
+                    None,
+                    RefusalReason::UnsupportedScope,
+                ));
+            }
+            Err(e) => return Err(e),
+        };
+        let mut changes = rules_dir::plan_uninstall(root, RULES_DIR, tag)?;
+        let ledger = self.ledger_path(scope)?;
+        if ledger.exists() {
+            let v = match crate::util::json_patch::read_or_empty(&ledger) {
+                Ok(v) => v,
+                Err(HookerError::JsonInvalid { .. }) => {
+                    changes.push(PlannedChange::Refuse {
+                        path: Some(ledger),
+                        reason: RefusalReason::InvalidConfig,
+                    });
+                    return Ok(UninstallPlan::from_changes(target, changes));
+                }
+                Err(e) => return Err(e),
+            };
+            let owned: Vec<String> = v
+                .get("entries")
+                .and_then(|e| e.as_object())
+                .map(|m| {
+                    m.iter()
+                        .filter(|(_, entry)| {
+                            entry.get("owner").and_then(|o| o.as_str()) == Some(tag)
+                        })
+                        .map(|(k, _)| k.clone())
+                        .collect()
+                })
+                .unwrap_or_default();
+            for filename in owned {
+                let path = self.hooks_dir(scope)?.join(&filename);
+                if path.exists() {
+                    changes.push(PlannedChange::RemoveFile { path });
+                }
+                planning::plan_remove_ledger_entry(&mut changes, &ledger, &filename);
+            }
+        }
+        Ok(UninstallPlan::from_changes(target, changes))
+    }
+
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
         HookSpec::validate_tag(&spec.tag)?;
         let root = self.project_root(scope)?;
@@ -314,6 +457,30 @@ impl McpSurface for ClineAgent {
         ))
     }
 
+    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+        agent_planning::mcp_json_object_install(
+            McpSurface::id(self),
+            scope,
+            spec,
+            Self::mcp_path(scope),
+        )
+    }
+
+    fn plan_uninstall_mcp(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::mcp_json_object_uninstall(
+            McpSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::mcp_path(scope),
+        )
+    }
+
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
@@ -362,6 +529,34 @@ impl SkillSurface for ClineAgent {
             expected_owner,
             recorded,
         ))
+    }
+
+    fn plan_install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallPlan, HookerError> {
+        agent_planning::skill_install(
+            SkillSurface::id(self),
+            scope,
+            spec,
+            Self::skills_root(scope),
+        )
+    }
+
+    fn plan_uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::skill_uninstall(
+            SkillSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::skills_root(scope),
+        )
     }
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {

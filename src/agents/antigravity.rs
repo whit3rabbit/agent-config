@@ -18,9 +18,11 @@
 
 use std::path::PathBuf;
 
+use crate::agents::planning as agent_planning;
 use crate::error::HookerError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
+use crate::plan::{InstallPlan, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{HookSpec, McpSpec, SkillSpec};
 use crate::status::StatusReport;
@@ -91,6 +93,26 @@ impl Integration for AntigravityAgent {
         Ok(StatusReport::for_file_hook(tag, path))
     }
 
+    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+        agent_planning::rules_install(
+            Integration::id(self),
+            scope,
+            spec,
+            self.project_root(scope),
+            RULES_DIR,
+        )
+    }
+
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+        agent_planning::rules_uninstall(
+            Integration::id(self),
+            scope,
+            tag,
+            self.project_root(scope),
+            RULES_DIR,
+        )
+    }
+
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
         HookSpec::validate_tag(&spec.tag)?;
         let root = self.project_root(scope)?;
@@ -136,6 +158,30 @@ impl McpSurface for AntigravityAgent {
             expected_owner,
             recorded,
         ))
+    }
+
+    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+        agent_planning::mcp_json_object_install(
+            McpSurface::id(self),
+            scope,
+            spec,
+            Self::mcp_path(scope),
+        )
+    }
+
+    fn plan_uninstall_mcp(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::mcp_json_object_uninstall(
+            McpSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::mcp_path(scope),
+        )
     }
 
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
@@ -186,6 +232,34 @@ impl SkillSurface for AntigravityAgent {
             expected_owner,
             recorded,
         ))
+    }
+
+    fn plan_install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallPlan, HookerError> {
+        agent_planning::skill_install(
+            SkillSurface::id(self),
+            scope,
+            spec,
+            Self::skills_root(scope),
+        )
+    }
+
+    fn plan_uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::skill_uninstall(
+            SkillSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::skills_root(scope),
+        )
     }
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {

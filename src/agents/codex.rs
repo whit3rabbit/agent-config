@@ -26,13 +26,17 @@ use std::path::PathBuf;
 use serde_json::json;
 use toml_edit::{value, Array, InlineTable, Table};
 
+use crate::agents::planning as agent_planning;
 use crate::error::HookerError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
+use crate::plan::{
+    has_refusal, InstallPlan, PlanTarget, PlannedChange, RefusalReason, UninstallPlan,
+};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec, McpTransport, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{fs_atomic, json_patch, md_block, ownership, skills_dir, toml_patch};
+use crate::util::{fs_atomic, json_patch, md_block, ownership, planning, skills_dir, toml_patch};
 
 /// Codex CLI.
 pub struct CodexAgent;
@@ -98,6 +102,64 @@ impl Integration for CodexAgent {
         let p = Self::hooks_path(scope)?;
         let presence = json_patch::tagged_hook_presence(&p, &["hooks"], tag)?;
         Ok(StatusReport::for_tagged_hook(tag, p, presence))
+    }
+
+    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+        HookSpec::validate_tag(&spec.tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: spec.tag.clone(),
+        };
+        let p = Self::hooks_path(scope)?;
+        let mut changes = Vec::new();
+        let event_key = event_to_string(&spec.event);
+        let matcher_str = matcher_to_codex(&spec.matcher);
+        let entry = json!({
+            "matcher": matcher_str,
+            "hooks": [{ "type": "command", "command": spec.command }],
+        });
+        planning::plan_tagged_json_upsert(
+            &mut changes,
+            &p,
+            &["hooks", event_key.as_str()],
+            &spec.tag,
+            entry,
+            |_| {},
+        )?;
+        if has_refusal(&changes) {
+            return Ok(InstallPlan::from_changes(target, changes));
+        }
+        if let Some(rules) = &spec.rules {
+            let agents = Self::agents_path(scope)?;
+            planning::plan_markdown_upsert(&mut changes, &agents, &spec.tag, &rules.content)?;
+        }
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+        HookSpec::validate_tag(tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: tag.to_string(),
+        };
+        let mut changes = Vec::new();
+        let p = Self::hooks_path(scope)?;
+        planning::plan_tagged_json_remove_under(
+            &mut changes,
+            &p,
+            &["hooks"],
+            tag,
+            planning::json_object_empty,
+            true,
+        )?;
+        if has_refusal(&changes) {
+            return Ok(UninstallPlan::from_changes(target, changes));
+        }
+        let agents = Self::agents_path(scope)?;
+        planning::plan_markdown_remove(&mut changes, &agents, tag)?;
+        Ok(UninstallPlan::from_changes(target, changes))
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
@@ -235,6 +297,139 @@ impl McpSurface for CodexAgent {
         ))
     }
 
+    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+        spec.validate()?;
+        let target = PlanTarget::Mcp {
+            integration_id: McpSurface::id(self),
+            scope: scope.clone(),
+            name: spec.name.clone(),
+            owner: spec.owner_tag.clone(),
+        };
+        let cfg = Self::config_toml_path(scope)?;
+        let ledger = ownership::mcp_ledger_for(&cfg);
+        let mut changes = Vec::new();
+        let mut doc = match toml_patch::read_or_empty(&cfg) {
+            Ok(doc) => doc,
+            Err(HookerError::TomlInvalid { .. }) => {
+                changes.push(PlannedChange::Refuse {
+                    path: Some(cfg),
+                    reason: RefusalReason::InvalidConfig,
+                });
+                return Ok(InstallPlan::from_changes(target, changes));
+            }
+            Err(e) => return Err(e),
+        };
+        let in_config = toml_patch::contains_named_table(&doc, &["mcp_servers"], &spec.name);
+        let prior_owner = ownership::owner_of(&ledger, &spec.name)?;
+        match (prior_owner.as_deref(), in_config) {
+            (Some(owner), _) if owner != spec.owner_tag => {
+                changes.push(PlannedChange::Refuse {
+                    path: Some(ledger),
+                    reason: RefusalReason::OwnerMismatch,
+                });
+                return Ok(InstallPlan::from_changes(target, changes));
+            }
+            (None, true) => {
+                changes.push(PlannedChange::Refuse {
+                    path: Some(cfg),
+                    reason: RefusalReason::UserInstalledEntry,
+                });
+                return Ok(InstallPlan::from_changes(target, changes));
+            }
+            _ => {}
+        }
+
+        let table = build_mcp_table(spec);
+        let changed =
+            toml_patch::upsert_named_table(&mut doc, &["mcp_servers"], &spec.name, table)?;
+        let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
+        if changed {
+            let bytes = toml_patch::to_string(&doc);
+            planning::plan_write_file(&mut changes, &cfg, &bytes, true)?;
+        }
+        if !has_refusal(&changes) && (changed || owner_changed) {
+            planning::plan_write_ledger(&mut changes, &ledger, &spec.name, &spec.owner_tag);
+        }
+        if changes.is_empty() {
+            changes.push(PlannedChange::NoOp {
+                path: cfg,
+                reason: "MCP server is already up to date".into(),
+            });
+        }
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall_mcp(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        McpSpec::validate_name(name)?;
+        HookSpec::validate_tag(owner_tag)?;
+        let target = PlanTarget::Mcp {
+            integration_id: McpSurface::id(self),
+            scope: scope.clone(),
+            name: name.to_string(),
+            owner: owner_tag.to_string(),
+        };
+        let cfg = Self::config_toml_path(scope)?;
+        let ledger = ownership::mcp_ledger_for(&cfg);
+        let mut changes = Vec::new();
+        let mut doc = match toml_patch::read_or_empty(&cfg) {
+            Ok(doc) => doc,
+            Err(HookerError::TomlInvalid { .. }) => {
+                changes.push(PlannedChange::Refuse {
+                    path: Some(cfg),
+                    reason: RefusalReason::InvalidConfig,
+                });
+                return Ok(UninstallPlan::from_changes(target, changes));
+            }
+            Err(e) => return Err(e),
+        };
+        let in_config = toml_patch::contains_named_table(&doc, &["mcp_servers"], name);
+        let actual_owner = ownership::owner_of(&ledger, name)?;
+        if !in_config && actual_owner.is_none() {
+            changes.push(PlannedChange::NoOp {
+                path: cfg,
+                reason: "mcp server is already absent".into(),
+            });
+            return Ok(UninstallPlan::from_changes(target, changes));
+        }
+        match (actual_owner.as_deref(), in_config) {
+            (Some(owner), _) if owner != owner_tag => {
+                changes.push(PlannedChange::Refuse {
+                    path: Some(ledger),
+                    reason: RefusalReason::OwnerMismatch,
+                });
+                return Ok(UninstallPlan::from_changes(target, changes));
+            }
+            (None, true) => {
+                changes.push(PlannedChange::Refuse {
+                    path: Some(cfg),
+                    reason: RefusalReason::UserInstalledEntry,
+                });
+                return Ok(UninstallPlan::from_changes(target, changes));
+            }
+            _ => {}
+        }
+
+        if in_config {
+            let removed = toml_patch::remove_named_table(&mut doc, &["mcp_servers"], name)?;
+            debug_assert!(removed);
+            if doc.as_table().is_empty() {
+                planning::plan_restore_backup_or_remove(&mut changes, &cfg);
+            } else {
+                let bytes = toml_patch::to_string(&doc);
+                planning::plan_write_file(&mut changes, &cfg, &bytes, false)?;
+            }
+        }
+        if actual_owner.is_some() {
+            planning::plan_remove_ledger_entry(&mut changes, &ledger, name);
+        }
+        Ok(UninstallPlan::from_changes(target, changes))
+    }
+
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let mut report = InstallReport::default();
@@ -357,6 +552,34 @@ impl SkillSurface for CodexAgent {
             expected_owner,
             recorded,
         ))
+    }
+
+    fn plan_install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallPlan, HookerError> {
+        agent_planning::skill_install(
+            SkillSurface::id(self),
+            scope,
+            spec,
+            Self::skills_root(scope),
+        )
+    }
+
+    fn plan_uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::skill_uninstall(
+            SkillSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::skills_root(scope),
+        )
     }
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {

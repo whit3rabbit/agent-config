@@ -12,9 +12,11 @@
 use std::path::Path;
 use std::path::PathBuf;
 
+use crate::agents::planning as agent_planning;
 use crate::error::HookerError;
 use crate::integration::{InstallReport, Integration, McpSurface, UninstallReport};
 use crate::paths;
+use crate::plan::{InstallPlan, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{HookSpec, McpSpec};
 use crate::status::StatusReport;
@@ -75,6 +77,26 @@ impl Integration for RooAgent {
         Ok(StatusReport::for_file_hook(tag, path))
     }
 
+    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+        agent_planning::rules_install(
+            Integration::id(self),
+            scope,
+            spec,
+            self.require_local(scope),
+            RULES_DIR,
+        )
+    }
+
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+        agent_planning::rules_uninstall(
+            Integration::id(self),
+            scope,
+            tag,
+            self.require_local(scope),
+            RULES_DIR,
+        )
+    }
+
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
         HookSpec::validate_tag(&spec.tag)?;
         let root = self.require_local(scope)?;
@@ -120,6 +142,30 @@ impl McpSurface for RooAgent {
             expected_owner,
             recorded,
         ))
+    }
+
+    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+        agent_planning::mcp_json_object_install(
+            McpSurface::id(self),
+            scope,
+            spec,
+            Self::mcp_path(scope),
+        )
+    }
+
+    fn plan_uninstall_mcp(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        agent_planning::mcp_json_object_uninstall(
+            McpSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::mcp_path(scope),
+        )
     }
 
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
