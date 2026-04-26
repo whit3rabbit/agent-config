@@ -167,7 +167,7 @@ mod tests {
     #[test]
     fn opencode_plugins_dir_ends_correctly() {
         let p = opencode_plugins_dir().expect("path resolved");
-        assert!(p.to_string_lossy().ends_with(".config/opencode/plugins"));
+        assert!(p.ends_with(PathBuf::from(".config").join("opencode").join("plugins")));
     }
 
     #[test]
@@ -178,24 +178,32 @@ mod tests {
             .ends_with(".claude.json"));
         assert!(kilo_config_file()
             .unwrap()
-            .to_string_lossy()
-            .ends_with(".config/kilo/kilo.jsonc"));
-        assert!(cline_mcp_global_file()
-            .unwrap()
-            .to_string_lossy()
-            .ends_with(
-                "Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
-            ));
-        assert!(roo_mcp_global_file().unwrap().to_string_lossy().ends_with(
-            "Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json"
+            .ends_with(PathBuf::from(".config").join("kilo").join("kilo.jsonc")));
+        assert!(cline_mcp_global_file().unwrap().ends_with(
+            PathBuf::from("Code")
+                .join("User")
+                .join("globalStorage")
+                .join("saoudrizwan.claude-dev")
+                .join("settings")
+                .join("cline_mcp_settings.json")
         ));
-        assert!(antigravity_mcp_global_file()
-            .unwrap()
-            .to_string_lossy()
-            .ends_with(".gemini/antigravity/mcp_config.json"));
-        assert!(windsurf_mcp_global_file()
-            .unwrap()
-            .to_string_lossy()
-            .ends_with(".codeium/windsurf/mcp_config.json"));
+        assert!(roo_mcp_global_file().unwrap().ends_with(
+            PathBuf::from("Code")
+                .join("User")
+                .join("globalStorage")
+                .join("rooveterinaryinc.roo-cline")
+                .join("settings")
+                .join("mcp_settings.json")
+        ));
+        assert!(antigravity_mcp_global_file().unwrap().ends_with(
+            PathBuf::from(".gemini")
+                .join("antigravity")
+                .join("mcp_config.json")
+        ));
+        assert!(windsurf_mcp_global_file().unwrap().ends_with(
+            PathBuf::from(".codeium")
+                .join("windsurf")
+                .join("mcp_config.json")
+        ));
     }
 }

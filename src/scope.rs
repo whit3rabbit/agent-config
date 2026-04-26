@@ -40,7 +40,7 @@ impl Scope {
     /// [`Scope::Local`], canonicalizes both the resolved path's parent and
     /// the project root, then checks the parent starts with the root.
     ///
-    /// Returns [`HookerError::PathResolution`] if the path escapes the root.
+    /// Returns [`crate::HookerError::PathResolution`] if the path escapes the root.
     /// Returns `Ok(())` if the parent directory does not yet exist (a new
     /// file being created under the project root is safe).
     pub fn ensure_contained(&self, path: &Path) -> Result<(), crate::error::HookerError> {

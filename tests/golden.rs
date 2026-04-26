@@ -851,11 +851,10 @@ impl CaseEnv {
         let tmp = TempDir::new().unwrap();
         let project = tmp.path().join("project");
         let home = tmp.path().join("home");
-        let xdg = tmp.path().join("xdg-config");
+        let xdg = home.join("Library").join("Application Support");
         let codex_home = home.join(".codex");
         fs::create_dir_all(&project).unwrap();
         fs::create_dir_all(&home).unwrap();
-        fs::create_dir_all(&xdg).unwrap();
         Self {
             _tmp: tmp,
             project,
@@ -872,7 +871,14 @@ struct EnvGuard {
 
 impl EnvGuard {
     fn apply(env: &CaseEnv) -> Self {
-        let keys = ["HOME", "USERPROFILE", "XDG_CONFIG_HOME", "CODEX_HOME"];
+        let keys = [
+            "HOME",
+            "USERPROFILE",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "XDG_CONFIG_HOME",
+            "CODEX_HOME",
+        ];
         let guard = Self {
             vars: keys
                 .into_iter()
@@ -881,6 +887,8 @@ impl EnvGuard {
         };
         std::env::set_var("HOME", &env.home);
         std::env::set_var("USERPROFILE", &env.home);
+        std::env::set_var("APPDATA", &env.xdg);
+        std::env::set_var("LOCALAPPDATA", env.home.join("AppData").join("Local"));
         std::env::set_var("XDG_CONFIG_HOME", &env.xdg);
         std::env::set_var("CODEX_HOME", &env.codex_home);
         guard
@@ -908,7 +916,10 @@ impl Normalizer {
         let mut replacements = vec![
             (env.project.to_string_lossy().into_owned(), "[ROOT]"),
             (env.home.to_string_lossy().into_owned(), "[HOME]"),
-            (env.xdg.to_string_lossy().into_owned(), "[XDG_CONFIG_HOME]"),
+            (
+                env.xdg.to_string_lossy().into_owned(),
+                "[HOME]/Library/Application Support",
+            ),
             (
                 env.codex_home.to_string_lossy().into_owned(),
                 "[CODEX_HOME]",

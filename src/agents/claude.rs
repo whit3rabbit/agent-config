@@ -676,7 +676,7 @@ mod tests {
         assert!(!r.created.is_empty());
         let path = &r.created[0];
         assert!(path.starts_with(dir.path()));
-        assert!(path.to_string_lossy().ends_with(".claude/settings.json"));
+        assert!(path.ends_with(PathBuf::from(".claude").join("settings.json")));
     }
 
     fn local_mcp_spec(name: &str, owner: &str) -> McpSpec {

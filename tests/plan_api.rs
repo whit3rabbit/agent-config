@@ -1,7 +1,10 @@
 //! Public dry-run plan API coverage.
 
+use std::env;
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use ai_hooker::{
     all, mcp_by_id, mcp_capable, skill_by_id, skill_capable, Event, HookSpec, InstallStatus,
@@ -58,6 +61,92 @@ fn temp_scope(dir: &tempfile::TempDir) -> Scope {
     Scope::Local(dir.path().to_path_buf())
 }
 
+static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+struct IsolatedGlobalEnv {
+    _lock: MutexGuard<'static, ()>,
+    saved: Vec<(&'static str, Option<OsString>)>,
+    home: tempfile::TempDir,
+}
+
+impl IsolatedGlobalEnv {
+    fn new() -> Self {
+        let lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let appdata = home.path().join("AppData").join("Roaming");
+        let localappdata = home.path().join("AppData").join("Local");
+        let xdg_config = home.path().join(".config");
+        fs::create_dir_all(&appdata).unwrap();
+        fs::create_dir_all(&localappdata).unwrap();
+        fs::create_dir_all(&xdg_config).unwrap();
+
+        let vars = [
+            "HOME",
+            "USERPROFILE",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "XDG_CONFIG_HOME",
+            "CODEX_HOME",
+        ];
+        let saved = vars
+            .into_iter()
+            .map(|key| (key, env::var_os(key)))
+            .collect();
+
+        env::set_var("HOME", home.path());
+        env::set_var("USERPROFILE", home.path());
+        env::set_var("APPDATA", &appdata);
+        env::set_var("LOCALAPPDATA", &localappdata);
+        env::set_var("XDG_CONFIG_HOME", &xdg_config);
+        env::set_var("CODEX_HOME", home.path().join(".codex"));
+
+        Self {
+            _lock: lock,
+            saved,
+            home,
+        }
+    }
+
+    fn home_path(&self) -> &Path {
+        self.home.path()
+    }
+}
+
+impl Drop for IsolatedGlobalEnv {
+    fn drop(&mut self) {
+        for (key, value) in &self.saved {
+            match value {
+                Some(value) => env::set_var(key, value),
+                None => env::remove_var(key),
+            }
+        }
+    }
+}
+
+fn scope_label(kind: ScopeKind) -> &'static str {
+    if kind == ScopeKind::Global {
+        "global"
+    } else {
+        "local"
+    }
+}
+
+fn run_for_supported_scopes(kinds: &[ScopeKind], mut run: impl FnMut(ScopeKind, Scope, &Path)) {
+    for &kind in kinds {
+        if kind == ScopeKind::Local {
+            let dir = tempfile::tempdir().unwrap();
+            let scope = temp_scope(&dir);
+            run(kind, scope, dir.path());
+        } else if kind == ScopeKind::Global {
+            #[cfg(not(windows))]
+            {
+                let env = IsolatedGlobalEnv::new();
+                run(kind, Scope::Global, env.home_path());
+            }
+        }
+    }
+}
+
 fn assert_empty_dir(path: &Path) {
     assert!(
         fs::read_dir(path).unwrap().next().is_none(),
@@ -106,6 +195,149 @@ fn has_refusal(changes: &[PlannedChange], expected: RefusalReason) -> bool {
     changes
         .iter()
         .any(|change| matches!(change, PlannedChange::Refuse { reason, .. } if *reason == expected))
+}
+
+fn assert_hook_plan_matches_actual(
+    agent: &dyn ai_hooker::Integration,
+    kind: ScopeKind,
+    scope: &Scope,
+) {
+    let tag = format!("parity-{}-{}", agent.id(), scope_label(kind));
+    let spec = hook_spec(&tag);
+
+    let initial = agent.plan_install(scope, &spec).unwrap();
+    assert!(
+        matches!(initial.status, InstallStatus::WillChange),
+        "{} {} hook install plan should change: {:?}",
+        agent.id(),
+        scope_label(kind),
+        initial.changes
+    );
+
+    agent.install(scope, &spec).unwrap();
+    let reinstall = agent.plan_install(scope, &spec).unwrap();
+    assert!(
+        matches!(reinstall.status, InstallStatus::NoOp),
+        "{} {} hook install plan should match installed state: {:?}",
+        agent.id(),
+        scope_label(kind),
+        reinstall.changes
+    );
+
+    let uninstall = agent.plan_uninstall(scope, &tag).unwrap();
+    assert!(
+        matches!(uninstall.status, InstallStatus::WillChange),
+        "{} {} hook uninstall plan should see installed state: {:?}",
+        agent.id(),
+        scope_label(kind),
+        uninstall.changes
+    );
+
+    agent.uninstall(scope, &tag).unwrap();
+    let already_absent = agent.plan_uninstall(scope, &tag).unwrap();
+    assert!(
+        matches!(already_absent.status, InstallStatus::NoOp),
+        "{} {} hook uninstall plan should match absent state: {:?}",
+        agent.id(),
+        scope_label(kind),
+        already_absent.changes
+    );
+}
+
+fn assert_mcp_plan_matches_actual(
+    agent: &dyn ai_hooker::McpSurface,
+    kind: ScopeKind,
+    scope: &Scope,
+) {
+    let name = format!("parity-{}-{}", agent.id(), scope_label(kind));
+    let owner = "plan-app";
+    let spec = mcp_spec(&name, owner);
+
+    let initial = agent.plan_install_mcp(scope, &spec).unwrap();
+    assert!(
+        matches!(initial.status, InstallStatus::WillChange),
+        "{} {} MCP install plan should change: {:?}",
+        agent.id(),
+        scope_label(kind),
+        initial.changes
+    );
+
+    agent.install_mcp(scope, &spec).unwrap();
+    let reinstall = agent.plan_install_mcp(scope, &spec).unwrap();
+    assert!(
+        matches!(reinstall.status, InstallStatus::NoOp),
+        "{} {} MCP install plan should match installed state: {:?}",
+        agent.id(),
+        scope_label(kind),
+        reinstall.changes
+    );
+
+    let uninstall = agent.plan_uninstall_mcp(scope, &name, owner).unwrap();
+    assert!(
+        matches!(uninstall.status, InstallStatus::WillChange),
+        "{} {} MCP uninstall plan should see installed state: {:?}",
+        agent.id(),
+        scope_label(kind),
+        uninstall.changes
+    );
+
+    agent.uninstall_mcp(scope, &name, owner).unwrap();
+    let already_absent = agent.plan_uninstall_mcp(scope, &name, owner).unwrap();
+    assert!(
+        matches!(already_absent.status, InstallStatus::NoOp),
+        "{} {} MCP uninstall plan should match absent state: {:?}",
+        agent.id(),
+        scope_label(kind),
+        already_absent.changes
+    );
+}
+
+fn assert_skill_plan_matches_actual(
+    agent: &dyn ai_hooker::SkillSurface,
+    kind: ScopeKind,
+    scope: &Scope,
+) {
+    let name = format!("parity-{}-{}", agent.id(), scope_label(kind));
+    let owner = "plan-app";
+    let spec = skill_spec(&name, owner);
+
+    let initial = agent.plan_install_skill(scope, &spec).unwrap();
+    assert!(
+        matches!(initial.status, InstallStatus::WillChange),
+        "{} {} skill install plan should change: {:?}",
+        agent.id(),
+        scope_label(kind),
+        initial.changes
+    );
+
+    agent.install_skill(scope, &spec).unwrap();
+    let reinstall = agent.plan_install_skill(scope, &spec).unwrap();
+    assert!(
+        matches!(reinstall.status, InstallStatus::NoOp),
+        "{} {} skill install plan should match installed state: {:?}",
+        agent.id(),
+        scope_label(kind),
+        reinstall.changes
+    );
+
+    let uninstall = agent.plan_uninstall_skill(scope, &name, owner).unwrap();
+    assert!(
+        matches!(uninstall.status, InstallStatus::WillChange),
+        "{} {} skill uninstall plan should see installed state: {:?}",
+        agent.id(),
+        scope_label(kind),
+        uninstall.changes
+    );
+
+    agent.uninstall_skill(scope, &name, owner).unwrap();
+    let already_absent = agent.plan_uninstall_skill(scope, &name, owner).unwrap();
+    assert!(
+        matches!(already_absent.status, InstallStatus::NoOp),
+        "{} {} skill uninstall plan should match absent state: {:?}",
+        agent.id(),
+        scope_label(kind),
+        already_absent.changes
+    );
 }
 
 #[test]
@@ -380,55 +612,29 @@ fn copilot_mcp_plan_matches_installed_shape() {
 }
 
 #[test]
-fn local_mcp_plan_matches_actual_install_for_every_capable_agent() {
+fn hook_plan_matches_actual_for_every_supported_agent_scope() {
+    for agent in all() {
+        run_for_supported_scopes(agent.supported_scopes(), |kind, scope, _root| {
+            assert_hook_plan_matches_actual(agent.as_ref(), kind, &scope);
+        });
+    }
+}
+
+#[test]
+fn mcp_plan_matches_actual_for_every_supported_agent_scope() {
     for agent in mcp_capable() {
-        if !agent.supported_mcp_scopes().contains(&ScopeKind::Local) {
-            continue;
-        }
+        run_for_supported_scopes(agent.supported_mcp_scopes(), |kind, scope, _root| {
+            assert_mcp_plan_matches_actual(agent.as_ref(), kind, &scope);
+        });
+    }
+}
 
-        let dir = tempfile::tempdir().unwrap();
-        let scope = temp_scope(&dir);
-        let spec = mcp_spec("parity-server", "plan-app");
-
-        let initial = agent.plan_install_mcp(&scope, &spec).unwrap();
-        assert!(
-            matches!(initial.status, InstallStatus::WillChange),
-            "{} initial MCP install plan should change: {:?}",
-            agent.id(),
-            initial.changes
-        );
-
-        agent.install_mcp(&scope, &spec).unwrap();
-        let reinstall = agent.plan_install_mcp(&scope, &spec).unwrap();
-        assert!(
-            matches!(reinstall.status, InstallStatus::NoOp),
-            "{} MCP install plan should match installed state: {:?}",
-            agent.id(),
-            reinstall.changes
-        );
-
-        let uninstall = agent
-            .plan_uninstall_mcp(&scope, "parity-server", "plan-app")
-            .unwrap();
-        assert!(
-            matches!(uninstall.status, InstallStatus::WillChange),
-            "{} MCP uninstall plan should see installed state: {:?}",
-            agent.id(),
-            uninstall.changes
-        );
-
-        agent
-            .uninstall_mcp(&scope, "parity-server", "plan-app")
-            .unwrap();
-        let already_absent = agent
-            .plan_uninstall_mcp(&scope, "parity-server", "plan-app")
-            .unwrap();
-        assert!(
-            matches!(already_absent.status, InstallStatus::NoOp),
-            "{} MCP uninstall plan should match absent state: {:?}",
-            agent.id(),
-            already_absent.changes
-        );
+#[test]
+fn skill_plan_matches_actual_for_every_supported_agent_scope() {
+    for agent in skill_capable() {
+        run_for_supported_scopes(agent.supported_skill_scopes(), |kind, scope, _root| {
+            assert_skill_plan_matches_actual(agent.as_ref(), kind, &scope);
+        });
     }
 }
 
@@ -545,4 +751,72 @@ fn executable_skill_asset_plan_reports_set_permissions() {
     assert!(matches!(plan.status, InstallStatus::WillChange));
     assert!(has_set_permissions(&plan.changes));
     assert_empty_dir(dir.path());
+}
+
+#[test]
+#[cfg(unix)]
+fn local_hook_install_rejects_symlinked_config_parent_escape() {
+    use std::os::unix::fs::symlink;
+
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().join("project");
+    let outside = dir.path().join("outside");
+    fs::create_dir_all(&project).unwrap();
+    fs::create_dir_all(&outside).unwrap();
+    symlink(&outside, project.join(".claude")).unwrap();
+
+    let scope = Scope::Local(project.clone());
+    let err = ai_hooker::by_id("claude")
+        .unwrap()
+        .install(&scope, &hook_spec("symlink-escape"))
+        .unwrap_err();
+
+    assert!(matches!(err, ai_hooker::HookerError::PathResolution(_)));
+    assert!(!outside.join("settings.json").exists());
+    assert!(!project.join("CLAUDE.md").exists());
+}
+
+#[test]
+#[cfg(unix)]
+fn local_mcp_install_rejects_symlinked_config_parent_escape() {
+    use std::os::unix::fs::symlink;
+
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().join("project");
+    let outside = dir.path().join("outside");
+    fs::create_dir_all(&project).unwrap();
+    fs::create_dir_all(&outside).unwrap();
+    symlink(&outside, project.join(".cursor")).unwrap();
+
+    let scope = Scope::Local(project);
+    let err = mcp_by_id("cursor")
+        .unwrap()
+        .install_mcp(&scope, &mcp_spec("symlink-escape", "plan-app"))
+        .unwrap_err();
+
+    assert!(matches!(err, ai_hooker::HookerError::PathResolution(_)));
+    assert!(!outside.join("mcp.json").exists());
+    assert!(!outside.join(".ai-hooker-mcp.json").exists());
+}
+
+#[test]
+#[cfg(unix)]
+fn local_skill_install_rejects_symlinked_skill_parent_escape() {
+    use std::os::unix::fs::symlink;
+
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().join("project");
+    let outside = dir.path().join("outside");
+    fs::create_dir_all(&project).unwrap();
+    fs::create_dir_all(&outside).unwrap();
+    symlink(&outside, project.join(".claude")).unwrap();
+
+    let scope = Scope::Local(project);
+    let err = skill_by_id("claude")
+        .unwrap()
+        .install_skill(&scope, &skill_spec("symlink-escape", "plan-app"))
+        .unwrap_err();
+
+    assert!(matches!(err, ai_hooker::HookerError::PathResolution(_)));
+    assert!(!outside.join("skills").exists());
 }

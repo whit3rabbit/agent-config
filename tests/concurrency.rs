@@ -9,27 +9,39 @@ use ai_hooker::{Event, HookSpec, HookerError, Matcher, McpSpec, Scope, SkillSpec
 use serde_json::Value;
 
 fn hook_spec(tag: &str) -> HookSpec {
+    hook_spec_with_rules(tag, format!("Rules for {tag}."))
+}
+
+fn hook_spec_with_rules(tag: &str, rules: impl Into<String>) -> HookSpec {
     HookSpec::builder(tag)
         .command("echo concurrency")
         .matcher(Matcher::Bash)
         .event(Event::PreToolUse)
-        .rules(format!("Rules for {tag}."))
+        .rules(rules)
         .build()
 }
 
 fn mcp_spec(name: &str, owner: &str) -> McpSpec {
+    mcp_spec_with_env(name, owner, name)
+}
+
+fn mcp_spec_with_env(name: &str, owner: &str, value: &str) -> McpSpec {
     McpSpec::builder(name)
         .owner(owner)
         .stdio("npx", ["-y", "@example/server"])
-        .env("AI_HOOKER_TEST", name)
+        .env("AI_HOOKER_TEST", value)
         .build()
 }
 
 fn skill_spec(name: &str, owner: &str) -> SkillSpec {
+    skill_spec_with_body(name, owner, format!("## Goal\nInstall {name}.\n"))
+}
+
+fn skill_spec_with_body(name: &str, owner: &str, body: impl Into<String>) -> SkillSpec {
     SkillSpec::builder(name)
         .owner(owner)
         .description(format!("Use during concurrency test for {name}."))
-        .body(format!("## Goal\nInstall {name}.\n"))
+        .body(body)
         .build()
 }
 
@@ -187,6 +199,48 @@ fn different_hook_tags_share_markdown_file_under_race() {
 }
 
 #[test]
+fn same_hook_tag_markdown_update_remains_valid_under_race() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().to_path_buf();
+    let scope = Scope::Local(root.clone());
+    ai_hooker::by_id("claude")
+        .unwrap()
+        .install(
+            &scope,
+            &hook_spec_with_rules("updated-hook", "Rules variant base."),
+        )
+        .unwrap();
+
+    let scope_a = Scope::Local(root.clone());
+    let scope_b = Scope::Local(root);
+    let spec_a = hook_spec_with_rules("updated-hook", "Rules variant A.");
+    let spec_b = hook_spec_with_rules("updated-hook", "Rules variant B.");
+
+    let (a, b) = run_two(
+        move || {
+            ai_hooker::by_id("claude")
+                .unwrap()
+                .install(&scope_a, &spec_a)
+        },
+        move || {
+            ai_hooker::by_id("claude")
+                .unwrap()
+                .install(&scope_b, &spec_b)
+        },
+    );
+
+    assert_ok(a);
+    assert_ok(b);
+    let settings = read_json(&dir.path().join(".claude/settings.json"));
+    assert_no_duplicate_hook(&settings, "updated-hook");
+    let memory = dir.path().join("CLAUDE.md");
+    assert_eq!(markdown_block_count(&memory, "updated-hook"), 1);
+    let text = fs::read_to_string(&memory).unwrap();
+    assert!(text.contains("Rules variant A.") || text.contains("Rules variant B."));
+    assert!(!text.contains("Rules variant base."));
+}
+
+#[test]
 fn different_mcp_names_share_config_and_ledger_under_race() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().to_path_buf();
@@ -252,6 +306,45 @@ fn same_mcp_name_same_owner_same_content_is_idempotent_under_race() {
     let entries = ledger["entries"].as_object().unwrap();
     assert_eq!(entries.len(), 1);
     assert_eq!(entries["shared-mcp"]["owner"], "same-owner");
+}
+
+#[test]
+fn same_mcp_name_same_owner_updates_remain_valid_under_race() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().to_path_buf();
+    let scope = Scope::Local(root.clone());
+    ai_hooker::mcp_by_id("claude")
+        .unwrap()
+        .install_mcp(&scope, &mcp_spec_with_env("updated-mcp", "owner-a", "base"))
+        .unwrap();
+
+    let scope_a = Scope::Local(root.clone());
+    let scope_b = Scope::Local(root);
+    let spec_a = mcp_spec_with_env("updated-mcp", "owner-a", "value-a");
+    let spec_b = mcp_spec_with_env("updated-mcp", "owner-a", "value-b");
+
+    let (a, b) = run_two(
+        move || {
+            ai_hooker::mcp_by_id("claude")
+                .unwrap()
+                .install_mcp(&scope_a, &spec_a)
+        },
+        move || {
+            ai_hooker::mcp_by_id("claude")
+                .unwrap()
+                .install_mcp(&scope_b, &spec_b)
+        },
+    );
+
+    assert_ok(a);
+    assert_ok(b);
+    let cfg = read_json(&dir.path().join(".mcp.json"));
+    let value = cfg["mcpServers"]["updated-mcp"]["env"]["AI_HOOKER_TEST"]
+        .as_str()
+        .unwrap();
+    assert!(matches!(value, "value-a" | "value-b"));
+    let ledger = read_ledger(&dir.path().join(".ai-hooker-mcp.json"));
+    assert_eq!(ledger["entries"]["updated-mcp"]["owner"], "owner-a");
 }
 
 #[test]
@@ -435,6 +528,47 @@ fn same_skill_same_owner_is_idempotent_under_race() {
     let entries = ledger["entries"].as_object().unwrap();
     assert_eq!(entries.len(), 1);
     assert_eq!(entries["shared-skill"]["owner"], "same-owner");
+}
+
+#[test]
+fn same_skill_same_owner_updates_remain_valid_under_race() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().to_path_buf();
+    let scope = Scope::Local(root.clone());
+    ai_hooker::skill_by_id("claude")
+        .unwrap()
+        .install_skill(
+            &scope,
+            &skill_spec_with_body("updated-skill", "owner-a", "## Goal\nBase.\n"),
+        )
+        .unwrap();
+
+    let scope_a = Scope::Local(root.clone());
+    let scope_b = Scope::Local(root);
+    let spec_a = skill_spec_with_body("updated-skill", "owner-a", "## Goal\nVariant A.\n");
+    let spec_b = skill_spec_with_body("updated-skill", "owner-a", "## Goal\nVariant B.\n");
+
+    let (a, b) = run_two(
+        move || {
+            ai_hooker::skill_by_id("claude")
+                .unwrap()
+                .install_skill(&scope_a, &spec_a)
+        },
+        move || {
+            ai_hooker::skill_by_id("claude")
+                .unwrap()
+                .install_skill(&scope_b, &spec_b)
+        },
+    );
+
+    assert_ok(a);
+    assert_ok(b);
+    let skill_md =
+        fs::read_to_string(dir.path().join(".claude/skills/updated-skill/SKILL.md")).unwrap();
+    assert!(skill_md.contains("Variant A") || skill_md.contains("Variant B"));
+    assert!(!skill_md.contains("Base."));
+    let ledger = read_ledger(&dir.path().join(".claude/skills/.ai-hooker-skills.json"));
+    assert_eq!(ledger["entries"]["updated-skill"]["owner"], "owner-a");
 }
 
 #[test]

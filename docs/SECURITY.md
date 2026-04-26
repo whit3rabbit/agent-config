@@ -88,6 +88,13 @@ directory and verifies it remains within the project root. This prevents:
 If the canonicalized path escapes the project root, the operation fails with
 `HookerError::PathResolution`.
 
+`Scope::Local(root)` is a caller-supplied trust boundary. The library verifies
+that resolved write targets stay under the canonicalized root, but it does not
+decide whether that root is the intended project directory. If a caller passes
+a symlinked root or a root containing `..`, the canonical destination is treated
+as the project root. Consumers should pass a project root they have already
+chosen intentionally.
+
 `Scope::Global` writes are not containment-checked; they target the user's
 home or config directories by design.
 

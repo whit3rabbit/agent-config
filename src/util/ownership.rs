@@ -82,7 +82,10 @@ pub(crate) fn record_install(
         let mut entry = Map::new();
         entry.insert(OWNER_KEY.to_string(), Value::String(owner.to_string()));
         if let Some(hash) = content_hash {
-            entry.insert(CONTENT_HASH_KEY.to_string(), Value::String(hash.to_string()));
+            entry.insert(
+                CONTENT_HASH_KEY.to_string(),
+                Value::String(hash.to_string()),
+            );
         }
         entries.insert(name.to_string(), Value::Object(entry));
         fs_atomic::write_atomic(ledger_path, &json_patch::to_pretty(&root), false)?;
