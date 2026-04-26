@@ -26,7 +26,7 @@ Ok(
             "[ROOT]/.codebuddy/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.codebuddy/skills/.ai-hooker-skills.json",
+            "[ROOT]/.codebuddy/skills/.agent-config-skills.json",
         ),
         files: [
             Exists {
@@ -64,7 +64,7 @@ directories:
 - .codebuddy/skills
 - .codebuddy/skills/golden-skill
 files:
-- .codebuddy/skills/.ai-hooker-skills.json
+- .codebuddy/skills/.agent-config-skills.json
   content:
 ```text
 {

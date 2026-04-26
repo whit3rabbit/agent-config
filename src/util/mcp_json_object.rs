@@ -11,12 +11,12 @@
 //! For HTTP/SSE transports the shape is `{ "url": "...", "headers": {...} }`
 //! (with no `command`/`args`).
 //!
-//! Ownership is tracked in a sidecar `.ai-hooker-mcp.json` next to the config
+//! Ownership is tracked in a sidecar `.agent-config-mcp.json` next to the config
 //! file so the harness config never carries unknown keys.
 
 use std::path::Path;
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, UninstallReport};
 use crate::plan::PlannedChange;
 use crate::spec::McpSpec;
@@ -30,7 +30,7 @@ const SERVERS_PATH: &[&str] = &[SERVERS_KEY];
 /// Returns true if `name` exists in the ledger sidecar (single source of truth
 /// for "is this currently installed by some consumer").
 #[allow(dead_code)]
-pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, HookerError> {
+pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, AgentConfigError> {
     ownership::contains(ledger_path, name)
 }
 
@@ -38,7 +38,7 @@ pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, Hooke
 pub(crate) fn config_presence(
     config_path: &Path,
     name: &str,
-) -> Result<ConfigPresence, HookerError> {
+) -> Result<ConfigPresence, AgentConfigError> {
     mcp_json_map::config_presence(
         config_path,
         SERVERS_PATH,
@@ -53,7 +53,7 @@ pub(crate) fn install(
     config_path: &Path,
     ledger_path: &Path,
     spec: &McpSpec,
-) -> Result<InstallReport, HookerError> {
+) -> Result<InstallReport, AgentConfigError> {
     mcp_json_map::install(
         config_path,
         ledger_path,
@@ -69,7 +69,7 @@ pub(crate) fn plan_install(
     config_path: &Path,
     ledger_path: &Path,
     spec: &McpSpec,
-) -> Result<Vec<PlannedChange>, HookerError> {
+) -> Result<Vec<PlannedChange>, AgentConfigError> {
     mcp_json_map::plan_install(
         config_path,
         ledger_path,
@@ -89,7 +89,7 @@ pub(crate) fn uninstall(
     name: &str,
     owner_tag: &str,
     kind: &'static str,
-) -> Result<UninstallReport, HookerError> {
+) -> Result<UninstallReport, AgentConfigError> {
     mcp_json_map::uninstall(
         config_path,
         ledger_path,
@@ -108,7 +108,7 @@ pub(crate) fn plan_uninstall(
     name: &str,
     owner_tag: &str,
     kind: &'static str,
-) -> Result<Vec<PlannedChange>, HookerError> {
+) -> Result<Vec<PlannedChange>, AgentConfigError> {
     mcp_json_map::plan_uninstall(
         config_path,
         ledger_path,
@@ -156,7 +156,7 @@ mod tests {
     }
 
     fn paths(dir: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
-        (dir.join("mcp.json"), dir.join(".ai-hooker-mcp.json"))
+        (dir.join("mcp.json"), dir.join(".agent-config-mcp.json"))
     }
 
     fn stdio_spec(name: &str, owner: &str) -> McpSpec {
@@ -210,7 +210,7 @@ mod tests {
         let (cfg, led) = paths(dir.path());
         install(&cfg, &led, &stdio_spec("github", "appA")).unwrap();
         let err = install(&cfg, &led, &stdio_spec("github", "appB")).unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
         assert_eq!(
             ownership::owner_of(&led, "github").unwrap().as_deref(),
             Some("appA")
@@ -229,7 +229,7 @@ mod tests {
         let err = install(&cfg, &led, &stdio_spec("github", "myapp")).unwrap_err();
         assert!(matches!(
             err,
-            HookerError::NotOwnedByCaller { actual: None, .. }
+            AgentConfigError::NotOwnedByCaller { actual: None, .. }
         ));
         let v: Value = serde_json::from_slice(&std::fs::read(&cfg).unwrap()).unwrap();
         assert_eq!(v["mcpServers"]["github"]["command"], json!("user-cmd"));
@@ -288,7 +288,7 @@ mod tests {
         let err = uninstall(&cfg, &led, "github", "appB", "mcp server").unwrap_err();
         assert!(matches!(
             err,
-            HookerError::NotOwnedByCaller {
+            AgentConfigError::NotOwnedByCaller {
                 actual: Some(_),
                 ..
             }
@@ -311,7 +311,7 @@ mod tests {
         let err = uninstall(&cfg, &led, "user-thing", "myapp", "mcp server").unwrap_err();
         assert!(matches!(
             err,
-            HookerError::NotOwnedByCaller { actual: None, .. }
+            AgentConfigError::NotOwnedByCaller { actual: None, .. }
         ));
     }
 

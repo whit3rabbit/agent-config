@@ -1,6 +1,6 @@
 # Amp
 
-ID: `amp` — `ai_hooker::by_id("amp")`
+ID: `amp` — `agent_config::by_id("amp")`
 
 ## Surfaces
 
@@ -40,7 +40,7 @@ the canonical `AGENTS.md`. Set `HookSpec::rules` to inject a `RulesBlock`.
 }
 ```
 
-Ownership is recorded in a sidecar `<config-dir>/.ai-hooker-mcp.json` ledger.
+Ownership is recorded in a sidecar `<config-dir>/.agent-config-mcp.json` ledger.
 
 ## Skills
 

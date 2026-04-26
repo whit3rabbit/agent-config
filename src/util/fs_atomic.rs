@@ -13,7 +13,7 @@ use std::fs;
 use std::io::Write as _;
 use std::path::{Component, Path, PathBuf};
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 
 /// Result of [`write_atomic`] / [`patch_in_place`].
 #[derive(Debug, Default, Clone)]
@@ -35,11 +35,11 @@ pub(crate) struct WriteOutcome {
 /// first unless that backup already exists.
 /// Creates parent directories if they don't exist. If `content` is byte-equal
 /// to the existing file, this is a no-op (no temp file, no backup).
-pub(crate) fn write_atomic(
+pub(super) fn write_atomic(
     path: &Path,
     content: &[u8],
     make_backup: bool,
-) -> Result<WriteOutcome, HookerError> {
+) -> Result<WriteOutcome, AgentConfigError> {
     let existed = match fs::read(path) {
         Ok(current) => {
             if current == content {
@@ -53,19 +53,19 @@ pub(crate) fn write_atomic(
             true
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
-        Err(e) => return Err(HookerError::io(path, e)),
+        Err(e) => return Err(AgentConfigError::io(path, e)),
     };
 
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() && !parent.exists() {
-            fs::create_dir_all(parent).map_err(|e| HookerError::io(parent, e))?;
+            fs::create_dir_all(parent).map_err(|e| AgentConfigError::io(parent, e))?;
         }
     }
 
     let backup_path = if existed && make_backup && !backup_path(path).exists() {
         match create_backup(path) {
             Ok(backup) => Some(backup),
-            Err(HookerError::BackupExists(_)) => None,
+            Err(AgentConfigError::BackupExists(_)) => None,
             Err(e) => return Err(e),
         }
     } else {
@@ -80,7 +80,9 @@ pub(crate) fn write_atomic(
 
     let file_name = path
         .file_name()
-        .ok_or_else(|| HookerError::PathResolution(format!("path has no file name: {path:?}")))?
+        .ok_or_else(|| {
+            AgentConfigError::PathResolution(format!("path has no file name: {path:?}"))
+        })?
         .to_string_lossy()
         .into_owned();
 
@@ -89,16 +91,16 @@ pub(crate) fn write_atomic(
         .prefix(&format!(".{file_name}."))
         .suffix(".tmp")
         .tempfile_in(&parent)
-        .map_err(|e| HookerError::io(&parent, e))?;
+        .map_err(|e| AgentConfigError::io(&parent, e))?;
 
     tmp.write_all(content)
-        .map_err(|e| HookerError::io(tmp.path(), e))?;
+        .map_err(|e| AgentConfigError::io(tmp.path(), e))?;
     tmp.as_file_mut()
         .sync_all()
-        .map_err(|e| HookerError::io(tmp.path(), e))?;
+        .map_err(|e| AgentConfigError::io(tmp.path(), e))?;
 
     tmp.persist(path)
-        .map_err(|e| HookerError::io(path, e.error))?;
+        .map_err(|e| AgentConfigError::io(path, e.error))?;
 
     Ok(WriteOutcome {
         path: path.to_path_buf(),
@@ -109,81 +111,81 @@ pub(crate) fn write_atomic(
 }
 
 /// Copy `path` → `<path>.bak`, refusing if a backup already exists.
-fn create_backup(path: &Path) -> Result<PathBuf, HookerError> {
+fn create_backup(path: &Path) -> Result<PathBuf, AgentConfigError> {
     let mut bak = path.as_os_str().to_owned();
     bak.push(".bak");
     let bak = PathBuf::from(bak);
 
-    let mut src = fs::File::open(path).map_err(|e| HookerError::io(path, e))?;
+    let mut src = fs::File::open(path).map_err(|e| AgentConfigError::io(path, e))?;
     let mut dst = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&bak)
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::AlreadyExists {
-                HookerError::BackupExists(bak.clone())
+                AgentConfigError::BackupExists(bak.clone())
             } else {
-                HookerError::io(&bak, e)
+                AgentConfigError::io(&bak, e)
             }
         })?;
-    std::io::copy(&mut src, &mut dst).map_err(|e| HookerError::io(&bak, e))?;
-    dst.sync_all().map_err(|e| HookerError::io(&bak, e))?;
+    std::io::copy(&mut src, &mut dst).map_err(|e| AgentConfigError::io(&bak, e))?;
+    dst.sync_all().map_err(|e| AgentConfigError::io(&bak, e))?;
     Ok(bak)
 }
 
 /// Set Unix mode on a file. No-op on non-Unix platforms.
 #[cfg(unix)]
-pub(crate) fn chmod(path: &Path, mode: u32) -> Result<(), HookerError> {
+pub(super) fn chmod(path: &Path, mode: u32) -> Result<(), AgentConfigError> {
     use std::os::unix::fs::PermissionsExt;
     let mut p = fs::metadata(path)
-        .map_err(|e| HookerError::io(path, e))?
+        .map_err(|e| AgentConfigError::io(path, e))?
         .permissions();
     p.set_mode(mode);
-    fs::set_permissions(path, p).map_err(|e| HookerError::io(path, e))?;
+    fs::set_permissions(path, p).map_err(|e| AgentConfigError::io(path, e))?;
     Ok(())
 }
 
 /// No-op on Windows.
 #[cfg(not(unix))]
-pub(crate) fn chmod(_path: &Path, _mode: u32) -> Result<(), HookerError> {
+pub(super) fn chmod(_path: &Path, _mode: u32) -> Result<(), AgentConfigError> {
     Ok(())
 }
 
 /// Remove a file, ignoring NotFound. Returns true if a file was actually removed.
-pub(crate) fn remove_if_exists(path: &Path) -> Result<bool, HookerError> {
+pub(super) fn remove_if_exists(path: &Path) -> Result<bool, AgentConfigError> {
     match fs::remove_file(path) {
         Ok(()) => Ok(true),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(e) => Err(HookerError::io(path, e)),
+        Err(e) => Err(AgentConfigError::io(path, e)),
     }
 }
 
 /// Read `path` as UTF-8, returning an empty string if the file does not exist.
 /// Avoids the TOCTOU `exists()` + `read_to_string` two-syscall pattern.
-pub(crate) fn read_to_string_or_empty(path: &Path) -> Result<String, HookerError> {
+pub(crate) fn read_to_string_or_empty(path: &Path) -> Result<String, AgentConfigError> {
     match fs::read_to_string(path) {
         Ok(s) => Ok(s),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
-        Err(e) => Err(HookerError::io(path, e)),
+        Err(e) => Err(AgentConfigError::io(path, e)),
     }
 }
 
 /// Restore `<path>.bak` over `path` only when the backup already matches the
 /// desired post-uninstall bytes. No-op if no backup exists or the backup is
 /// stale for the desired state.
-pub(crate) fn restore_backup_if_matches(
+pub(super) fn restore_backup_if_matches(
     path: &Path,
     desired_content: &[u8],
-) -> Result<bool, HookerError> {
+) -> Result<bool, AgentConfigError> {
     let bak = backup_path(path);
     if !bak.exists() {
         return Ok(false);
     }
-    let backup_content = fs::read(&bak).map_err(|e| HookerError::io(&bak, e))?;
+    let backup_content = fs::read(&bak).map_err(|e| AgentConfigError::io(&bak, e))?;
     if backup_content != desired_content {
         return Ok(false);
     }
-    fs::rename(&bak, path).map_err(|e| HookerError::io(&bak, e))?;
+    fs::rename(&bak, path).map_err(|e| AgentConfigError::io(&bak, e))?;
     Ok(true)
 }
 
@@ -192,11 +194,6 @@ pub(crate) fn backup_path(path: &Path) -> PathBuf {
     let mut bak = path.as_os_str().to_owned();
     bak.push(".bak");
     PathBuf::from(bak)
-}
-
-/// Remove `<path>.bak` if it exists. Returns true if a file was actually removed.
-pub(crate) fn remove_backup_if_exists(path: &Path) -> Result<bool, HookerError> {
-    remove_if_exists(&backup_path(path))
 }
 
 /// Append a newline if `s` does not already end with one.
@@ -215,8 +212,8 @@ pub(crate) fn ensure_trailing_newline(s: &str) -> String {
 /// Missing tail components are allowed, but the deepest existing ancestor must
 /// still canonicalize under `root`. Existing symlink targets are rejected too,
 /// since backup/write paths would otherwise follow the link.
-pub(crate) fn ensure_contained(path: &Path, root: &Path) -> Result<(), HookerError> {
-    let canonical_root = fs::canonicalize(root).map_err(|e| HookerError::io(root, e))?;
+pub(crate) fn ensure_contained(path: &Path, root: &Path) -> Result<(), AgentConfigError> {
+    let canonical_root = fs::canonicalize(root).map_err(|e| AgentConfigError::io(root, e))?;
     let root_abs = lexical_absolute(root)?;
     let path_abs = lexical_absolute(path)?;
 
@@ -228,10 +225,10 @@ pub(crate) fn ensure_contained(path: &Path, root: &Path) -> Result<(), HookerErr
         deepest_existing_ancestor(&path_abs)?
     };
 
-    let canonical_existing =
-        fs::canonicalize(&deepest_existing).map_err(|e| HookerError::io(&deepest_existing, e))?;
+    let canonical_existing = fs::canonicalize(&deepest_existing)
+        .map_err(|e| AgentConfigError::io(&deepest_existing, e))?;
     if !canonical_existing.starts_with(&canonical_root) {
-        return Err(HookerError::PathResolution(format!(
+        return Err(AgentConfigError::PathResolution(format!(
             "resolved path {} escapes project root {}",
             canonical_existing.display(),
             canonical_root.display()
@@ -240,27 +237,27 @@ pub(crate) fn ensure_contained(path: &Path, root: &Path) -> Result<(), HookerErr
     Ok(())
 }
 
-fn lexical_absolute(path: &Path) -> Result<PathBuf, HookerError> {
+fn lexical_absolute(path: &Path) -> Result<PathBuf, AgentConfigError> {
     if path.is_absolute() {
         Ok(path.to_path_buf())
     } else {
-        let cwd = std::env::current_dir().map_err(|e| HookerError::io(Path::new("."), e))?;
+        let cwd = std::env::current_dir().map_err(|e| AgentConfigError::io(Path::new("."), e))?;
         Ok(cwd.join(path))
     }
 }
 
-fn validate_relative_components(relative: &Path) -> Result<(), HookerError> {
+fn validate_relative_components(relative: &Path) -> Result<(), AgentConfigError> {
     for component in relative.components() {
         match component {
             Component::Normal(_) | Component::CurDir => {}
             Component::ParentDir => {
-                return Err(HookerError::PathResolution(format!(
+                return Err(AgentConfigError::PathResolution(format!(
                     "path {} escapes project root via parent directory component",
                     relative.display()
                 )));
             }
             Component::Prefix(_) | Component::RootDir => {
-                return Err(HookerError::PathResolution(format!(
+                return Err(AgentConfigError::PathResolution(format!(
                     "expected relative path beneath project root, got {}",
                     relative.display()
                 )));
@@ -270,7 +267,7 @@ fn validate_relative_components(relative: &Path) -> Result<(), HookerError> {
     Ok(())
 }
 
-fn deepest_existing_descendant(root: &Path, relative: &Path) -> Result<PathBuf, HookerError> {
+fn deepest_existing_descendant(root: &Path, relative: &Path) -> Result<PathBuf, AgentConfigError> {
     validate_relative_components(relative)?;
 
     let mut current = root.to_path_buf();
@@ -286,14 +283,14 @@ fn deepest_existing_descendant(root: &Path, relative: &Path) -> Result<PathBuf, 
 
         match fs::symlink_metadata(&current) {
             Ok(meta) if meta.file_type().is_symlink() => {
-                return Err(HookerError::PathResolution(format!(
+                return Err(AgentConfigError::PathResolution(format!(
                     "refusing to access path through symlink at {}",
                     current.display()
                 )));
             }
             Ok(meta) => {
                 if index + 1 < components.len() && !meta.is_dir() {
-                    return Err(HookerError::PathResolution(format!(
+                    return Err(AgentConfigError::PathResolution(format!(
                         "path component {} is not a directory",
                         current.display()
                     )));
@@ -301,19 +298,19 @@ fn deepest_existing_descendant(root: &Path, relative: &Path) -> Result<PathBuf, 
                 deepest = current.clone();
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => break,
-            Err(e) => return Err(HookerError::io(&current, e)),
+            Err(e) => return Err(AgentConfigError::io(&current, e)),
         }
     }
 
     Ok(deepest)
 }
 
-fn deepest_existing_ancestor(path: &Path) -> Result<PathBuf, HookerError> {
+fn deepest_existing_ancestor(path: &Path) -> Result<PathBuf, AgentConfigError> {
     let mut current = path.to_path_buf();
     loop {
         match fs::symlink_metadata(&current) {
             Ok(meta) if meta.file_type().is_symlink() => {
-                return Err(HookerError::PathResolution(format!(
+                return Err(AgentConfigError::PathResolution(format!(
                     "refusing to access path through symlink at {}",
                     current.display()
                 )));
@@ -321,13 +318,13 @@ fn deepest_existing_ancestor(path: &Path) -> Result<PathBuf, HookerError> {
             Ok(_) => return Ok(current),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 if !current.pop() {
-                    return Err(HookerError::PathResolution(format!(
+                    return Err(AgentConfigError::PathResolution(format!(
                         "could not find existing ancestor for {}",
                         path.display()
                     )));
                 }
             }
-            Err(e) => return Err(HookerError::io(&current, e)),
+            Err(e) => return Err(AgentConfigError::io(&current, e)),
         }
     }
 }
@@ -335,17 +332,16 @@ fn deepest_existing_ancestor(path: &Path) -> Result<PathBuf, HookerError> {
 /// Reject the path if it is a symlink.
 ///
 /// Uses `fs::symlink_metadata` to detect symlinks without following them.
-/// Returns [`HookerError::PathResolution`] if `path` is a symlink.
+/// Returns [`AgentConfigError::PathResolution`] if `path` is a symlink.
 #[allow(dead_code)]
-pub(crate) fn reject_symlink(path: &Path) -> Result<(), HookerError> {
+pub(crate) fn reject_symlink(path: &Path) -> Result<(), AgentConfigError> {
     match fs::symlink_metadata(path) {
-        Ok(meta) if meta.file_type().is_symlink() => Err(HookerError::PathResolution(format!(
-            "refusing to write through symlink at {}",
-            path.display()
-        ))),
+        Ok(meta) if meta.file_type().is_symlink() => Err(AgentConfigError::PathResolution(
+            format!("refusing to write through symlink at {}", path.display()),
+        )),
         Ok(_) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(HookerError::io(path, e)),
+        Err(e) => Err(AgentConfigError::io(path, e)),
     }
 }
 
@@ -358,7 +354,7 @@ pub(crate) fn write_atomic_contained(
     content: &[u8],
     make_backup: bool,
     root: &Path,
-) -> Result<WriteOutcome, HookerError> {
+) -> Result<WriteOutcome, AgentConfigError> {
     reject_symlink(path)?;
     ensure_contained(path, root)?;
     write_atomic(path, content, make_backup)
@@ -569,7 +565,7 @@ mod tests {
         let root = dir.path().join("inside");
         fs::create_dir_all(&root).unwrap();
         let err = ensure_contained(&file, &root).unwrap_err();
-        assert!(matches!(err, HookerError::PathResolution(_)));
+        assert!(matches!(err, AgentConfigError::PathResolution(_)));
     }
 
     #[test]
@@ -594,7 +590,9 @@ mod tests {
         symlink(&escape, &link).unwrap();
         let target = link.join("config.json");
         let err = ensure_contained(&target, &project).unwrap_err();
-        assert!(matches!(err, HookerError::PathResolution(ref msg) if msg.contains("symlink")));
+        assert!(
+            matches!(err, AgentConfigError::PathResolution(ref msg) if msg.contains("symlink"))
+        );
     }
 
     #[test]
@@ -613,7 +611,9 @@ mod tests {
         let target = link.join("plugins").join("hook.ts");
         assert!(!target.parent().unwrap().exists());
         let err = ensure_contained(&target, &project).unwrap_err();
-        assert!(matches!(err, HookerError::PathResolution(ref msg) if msg.contains("symlink")));
+        assert!(
+            matches!(err, AgentConfigError::PathResolution(ref msg) if msg.contains("symlink"))
+        );
     }
 
     #[test]
@@ -632,7 +632,9 @@ mod tests {
         symlink(&outside_file, &link).unwrap();
 
         let err = ensure_contained(&link, &project).unwrap_err();
-        assert!(matches!(err, HookerError::PathResolution(ref msg) if msg.contains("symlink")));
+        assert!(
+            matches!(err, AgentConfigError::PathResolution(ref msg) if msg.contains("symlink"))
+        );
     }
 
     #[test]
@@ -650,7 +652,9 @@ mod tests {
 
         let target = link.join("plugins").join("hook.ts");
         let err = write_atomic_contained(&target, b"export {}", true, &project).unwrap_err();
-        assert!(matches!(err, HookerError::PathResolution(ref msg) if msg.contains("symlink")));
+        assert!(
+            matches!(err, AgentConfigError::PathResolution(ref msg) if msg.contains("symlink"))
+        );
         assert!(!escape.join("plugins").exists());
     }
 
@@ -664,7 +668,9 @@ mod tests {
         let link = dir.path().join("link");
         symlink(&target, &link).unwrap();
         let err = reject_symlink(&link).unwrap_err();
-        assert!(matches!(err, HookerError::PathResolution(ref msg) if msg.contains("symlink")));
+        assert!(
+            matches!(err, AgentConfigError::PathResolution(ref msg) if msg.contains("symlink"))
+        );
     }
 
     #[test]

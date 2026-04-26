@@ -24,14 +24,14 @@ Ok(
             "[ROOT]/.tabnine/agent/settings.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.tabnine/agent/.ai-hooker-mcp.json",
+            "[ROOT]/.tabnine/agent/.agent-config-mcp.json",
         ),
         files: [
             Missing {
                 path: "[ROOT]/.tabnine/agent/settings.json",
             },
             Missing {
-                path: "[ROOT]/.tabnine/agent/.ai-hooker-mcp.json",
+                path: "[ROOT]/.tabnine/agent/.agent-config-mcp.json",
             },
         ],
         warnings: [],

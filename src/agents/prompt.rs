@@ -7,7 +7,7 @@
 use std::path::Path;
 
 use crate::agents::planning as agent_planning;
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, Integration, UninstallReport};
 use crate::plan::{InstallPlan, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
@@ -43,10 +43,10 @@ impl PromptAgent {
         }
     }
 
-    fn require_local<'a>(&self, scope: &'a Scope) -> Result<&'a Path, HookerError> {
+    fn require_local<'a>(&self, scope: &'a Scope) -> Result<&'a Path, AgentConfigError> {
         match scope {
             Scope::Local(p) => Ok(p),
-            Scope::Global => Err(HookerError::UnsupportedScope {
+            Scope::Global => Err(AgentConfigError::UnsupportedScope {
                 id: self.id,
                 scope: ScopeKind::Global,
             }),
@@ -67,19 +67,23 @@ impl Integration for PromptAgent {
         &[ScopeKind::Local]
     }
 
-    fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError> {
+    fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, AgentConfigError> {
         let root = self.require_local(scope)?;
         rules_dir::is_installed(root, self.rules_dir, tag)
     }
 
-    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let root = self.require_local(scope)?;
         let path = rules_dir::target_path(root, self.rules_dir, tag);
         Ok(StatusReport::for_file_hook(tag, path))
     }
 
-    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install(
+        &self,
+        scope: &Scope,
+        spec: &HookSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::rules_install(
             self.id(),
             scope,
@@ -89,7 +93,7 @@ impl Integration for PromptAgent {
         )
     }
 
-    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::rules_uninstall(
             self.id(),
             scope,
@@ -99,17 +103,24 @@ impl Integration for PromptAgent {
         )
     }
 
-    fn install(&self, spec_scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
+    fn install(
+        &self,
+        spec_scope: &Scope,
+        spec: &HookSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let root = self.require_local(spec_scope)?;
-        let rules = spec.rules.as_ref().ok_or(HookerError::MissingSpecField {
-            id: self.id,
-            field: "rules",
-        })?;
+        let rules = spec
+            .rules
+            .as_ref()
+            .ok_or(AgentConfigError::MissingSpecField {
+                id: self.id,
+                field: "rules",
+            })?;
         rules_dir::install(root, self.rules_dir, &spec.tag, &rules.content)
     }
 
-    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, HookerError> {
+    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let root = self.require_local(scope)?;
         rules_dir::uninstall(root, self.rules_dir, tag)
@@ -181,7 +192,7 @@ mod tests {
     fn rejects_global_scope() {
         let agent = PromptAgent::roo();
         let err = agent.is_installed(&Scope::Global, "a").unwrap_err();
-        assert!(matches!(err, HookerError::UnsupportedScope { .. }));
+        assert!(matches!(err, AgentConfigError::UnsupportedScope { .. }));
     }
 
     #[test]
@@ -195,7 +206,7 @@ mod tests {
         let err = agent.install(&scope, &no_rules).unwrap_err();
         assert!(matches!(
             err,
-            HookerError::MissingSpecField { field: "rules", .. }
+            AgentConfigError::MissingSpecField { field: "rules", .. }
         ));
     }
 }

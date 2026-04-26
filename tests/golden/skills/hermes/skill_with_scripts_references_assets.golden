@@ -6,10 +6,10 @@ install_result:
 Ok(
     InstallReport {
         created: [
-            "[HOME]/.hermes/skills/ai-hooker/golden-skill/SKILL.md",
-            "[HOME]/.hermes/skills/ai-hooker/golden-skill/scripts/run.sh",
-            "[HOME]/.hermes/skills/ai-hooker/golden-skill/references/notes.md",
-            "[HOME]/.hermes/skills/ai-hooker/golden-skill/assets/sample.txt",
+            "[HOME]/.hermes/skills/agent-config/golden-skill/SKILL.md",
+            "[HOME]/.hermes/skills/agent-config/golden-skill/scripts/run.sh",
+            "[HOME]/.hermes/skills/agent-config/golden-skill/references/notes.md",
+            "[HOME]/.hermes/skills/agent-config/golden-skill/assets/sample.txt",
         ],
         patched: [],
         backed_up: [],
@@ -26,17 +26,17 @@ Ok(
             owner: "golden-owner",
         },
         config_path: Some(
-            "[HOME]/.hermes/skills/ai-hooker/golden-skill",
+            "[HOME]/.hermes/skills/agent-config/golden-skill",
         ),
         ledger_path: Some(
-            "[HOME]/.hermes/skills/ai-hooker/.ai-hooker-skills.json",
+            "[HOME]/.hermes/skills/agent-config/.agent-config-skills.json",
         ),
         files: [
             Exists {
-                path: "[HOME]/.hermes/skills/ai-hooker/golden-skill",
+                path: "[HOME]/.hermes/skills/agent-config/golden-skill",
             },
             Exists {
-                path: "[HOME]/.hermes/skills/ai-hooker/golden-skill/SKILL.md",
+                path: "[HOME]/.hermes/skills/agent-config/golden-skill/SKILL.md",
             },
         ],
         warnings: [],
@@ -66,13 +66,13 @@ HOME tree:
 directories:
 - .hermes
 - .hermes/skills
-- .hermes/skills/ai-hooker
-- .hermes/skills/ai-hooker/golden-skill
-- .hermes/skills/ai-hooker/golden-skill/assets
-- .hermes/skills/ai-hooker/golden-skill/references
-- .hermes/skills/ai-hooker/golden-skill/scripts
+- .hermes/skills/agent-config
+- .hermes/skills/agent-config/golden-skill
+- .hermes/skills/agent-config/golden-skill/assets
+- .hermes/skills/agent-config/golden-skill/references
+- .hermes/skills/agent-config/golden-skill/scripts
 files:
-- .hermes/skills/ai-hooker/.ai-hooker-skills.json
+- .hermes/skills/agent-config/.agent-config-skills.json
   content:
 ```text
 {
@@ -85,7 +85,7 @@ files:
   "version": 2
 }
 ```
-- .hermes/skills/ai-hooker/golden-skill/SKILL.md
+- .hermes/skills/agent-config/golden-skill/SKILL.md
   content:
 ```text
 ---
@@ -96,18 +96,18 @@ description: Use during golden snapshot tests with assets.
 ## Goal
 Preserve the full skill directory.
 ```
-- .hermes/skills/ai-hooker/golden-skill/assets/sample.txt
+- .hermes/skills/agent-config/golden-skill/assets/sample.txt
   content:
 ```text
 asset payload
 ```
-- .hermes/skills/ai-hooker/golden-skill/references/notes.md
+- .hermes/skills/agent-config/golden-skill/references/notes.md
   content:
 ```text
 # Notes
 Keep this reference.
 ```
-- .hermes/skills/ai-hooker/golden-skill/scripts/run.sh
+- .hermes/skills/agent-config/golden-skill/scripts/run.sh
   mode: 755
   content:
 ```text

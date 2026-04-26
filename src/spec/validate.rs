@@ -1,9 +1,9 @@
 //! Shared identifier validation used by every spec builder in this module.
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 
 /// Which identifier we are validating; controls the wording of
-/// [`HookerError::InvalidTag::reason`].
+/// [`AgentConfigError::InvalidTag::reason`].
 #[derive(Copy, Clone)]
 pub(super) enum IdentifierKind {
     Tag,
@@ -15,7 +15,10 @@ pub(super) enum IdentifierKind {
 /// Shared identifier validator. Hook tags, owner tags, and MCP names allow
 /// ASCII alphanumerics, `_`, and `-`; skill names follow the stricter Agent
 /// Skills kebab-case contract.
-pub(super) fn validate_identifier(value: &str, kind: IdentifierKind) -> Result<(), HookerError> {
+pub(super) fn validate_identifier(
+    value: &str,
+    kind: IdentifierKind,
+) -> Result<(), AgentConfigError> {
     let (empty, illegal) = match kind {
         IdentifierKind::Tag => (
             "tag must not be empty",
@@ -35,7 +38,7 @@ pub(super) fn validate_identifier(value: &str, kind: IdentifierKind) -> Result<(
         ),
     };
     if value.is_empty() {
-        return Err(HookerError::InvalidTag {
+        return Err(AgentConfigError::InvalidTag {
             tag: value.into(),
             reason: empty,
         });
@@ -47,7 +50,7 @@ pub(super) fn validate_identifier(value: &str, kind: IdentifierKind) -> Result<(
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
     if !ok {
-        return Err(HookerError::InvalidTag {
+        return Err(AgentConfigError::InvalidTag {
             tag: value.into(),
             reason: illegal,
         });
@@ -55,11 +58,11 @@ pub(super) fn validate_identifier(value: &str, kind: IdentifierKind) -> Result<(
     Ok(())
 }
 
-fn validate_skill_name(name: &str) -> Result<(), HookerError> {
+fn validate_skill_name(name: &str) -> Result<(), AgentConfigError> {
     const ILLEGAL: &str =
         "skill name must be lowercase ASCII letters/digits with single '-' separators";
     if name.len() > 64 {
-        return Err(HookerError::InvalidTag {
+        return Err(AgentConfigError::InvalidTag {
             tag: name.into(),
             reason: "skill name must be 64 characters or fewer",
         });
@@ -68,14 +71,14 @@ fn validate_skill_name(name: &str) -> Result<(), HookerError> {
     for (i, c) in name.chars().enumerate() {
         let ok = c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-';
         if !ok {
-            return Err(HookerError::InvalidTag {
+            return Err(AgentConfigError::InvalidTag {
                 tag: name.into(),
                 reason: ILLEGAL,
             });
         }
         if c == '-' {
             if i == 0 || prev_hyphen {
-                return Err(HookerError::InvalidTag {
+                return Err(AgentConfigError::InvalidTag {
                     tag: name.into(),
                     reason: ILLEGAL,
                 });
@@ -86,7 +89,7 @@ fn validate_skill_name(name: &str) -> Result<(), HookerError> {
         }
     }
     if prev_hyphen {
-        return Err(HookerError::InvalidTag {
+        return Err(AgentConfigError::InvalidTag {
             tag: name.into(),
             reason: ILLEGAL,
         });

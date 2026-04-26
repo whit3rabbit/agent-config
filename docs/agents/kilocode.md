@@ -1,6 +1,6 @@
 # Kilo Code
 
-ID: `kilocode` — `ai_hooker::by_id("kilocode")`
+ID: `kilocode` — `agent_config::by_id("kilocode")`
 
 ## Hooks
 
@@ -12,43 +12,17 @@ Not supported. Prompt-level integration only.
 
 | | |
 | --- | --- |
-| Primary file | `<root>/AGENTS.md` (open standard, case-sensitive uppercase) |
-| Rules directory | `.kilo/rules/` (markdown files, alphabetical load order) |
-| Configuration | `kilo.jsonc` with `instructions` array |
-| Format | Markdown preferred, `.txt` accepted |
+| File | `<root>/.kilocode/rules/<tag>.md` |
+| Mechanism | One markdown file per consumer |
+| Format | Plain markdown |
 
-### AGENTS.md (Primary)
-
-Kilo Code uses `AGENTS.md` as the primary configuration file (not `KILO.md`).
-
-| | |
-| --- | --- |
-| File | `<root>/AGENTS.md` or `<root>/AGENT.md` (fallback) |
-| Format | Standard Markdown |
-| Protection | Write-protected in Kilo UI |
-
-### Load order (priority)
-
-1. Agent-specific prompt (`agent.<name>.prompt`)
-2. Project `kilo.jsonc` `instructions` key
-3. Project root `AGENTS.md`
-4. Global `kilo.jsonc` `instructions` key
-
-### Example kilo.jsonc
-
-```jsonc
-{
-  "instructions": [
-    ".kilo/rules/formatting.md",
-    ".kilo/rules/*.md"
-  ]
-}
-```
+Kilo Code can also read root-level `AGENTS.md` and `kilo.jsonc`
+instruction paths, but v0.1 writes only the per-consumer rules directory above.
 
 ### User scope (`Scope::Global`)
 
 Not supported in v0.1. Kilo's global rules live at `~/.kilo/rules/`.
-Calling with `Scope::Global` returns `HookerError::UnsupportedScope`.
+Calling with `Scope::Global` returns `AgentConfigError::UnsupportedScope`.
 
 ## MCP servers
 
@@ -92,7 +66,7 @@ Calling with `Scope::Global` returns `HookerError::UnsupportedScope`.
 | Project | `.kilo/skills/<name>/` |
 
 Kilo Code also supports `.claude/skills` and `.agents/skills` compatibility
-directories in the CLI. `ai-hooker` writes the native Kilo path.
+directories in the CLI. `agent-config` writes the native Kilo path.
 
 ## References
 

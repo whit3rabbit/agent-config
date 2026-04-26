@@ -1,6 +1,6 @@
 # Cline
 
-ID: `cline` — `ai_hooker::by_id("cline")`
+ID: `cline` — `agent_config::by_id("cline")`
 
 Cline v3.36+ (January 2026) supports hooks via executable scripts. Earlier versions
 support prompt-level rules only.
@@ -9,11 +9,9 @@ support prompt-level rules only.
 
 ### User scope (`Scope::Global`)
 
-| | |
-| --- | --- |
-| Path | `~/Documents/Cline/Hooks/` (macOS/Linux) |
-| Format | Executable shell scripts (no extension on Unix) |
-| Input/Output | JSON via stdin/stdout |
+Not supported in v0.1. Cline exposes a user-level hooks directory on some
+platforms, but this crate only writes project-local hooks because the global
+path is platform-specific and less stable.
 
 ### Project scope (`Scope::Local(<root>)`)
 
@@ -67,7 +65,7 @@ echo '{"cancel": false}'
 
 Not supported in v0.1. Cline reads global rules from a per-OS Cline Rules
 directory (e.g., `~/Documents/Cline/Rules/`). Calling with `Scope::Global`
-returns `HookerError::UnsupportedScope`.
+returns `AgentConfigError::UnsupportedScope`.
 
 ### Project scope (`Scope::Local(<root>)`)
 
@@ -120,7 +118,7 @@ extension.
 | Project | `.cline/skills/<name>/` |
 
 Each skill is a directory containing `SKILL.md`. Cline also supports
-`.clinerules/skills` and `.claude/skills` project locations, but `ai-hooker`
+`.clinerules/skills` and `.claude/skills` project locations, but `agent-config`
 writes the native `.cline/skills` path.
 
 ## References

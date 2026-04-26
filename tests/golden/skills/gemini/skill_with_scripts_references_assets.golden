@@ -29,7 +29,7 @@ Ok(
             "[ROOT]/.gemini/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.gemini/skills/.ai-hooker-skills.json",
+            "[ROOT]/.gemini/skills/.agent-config-skills.json",
         ),
         files: [
             Exists {
@@ -70,7 +70,7 @@ directories:
 - .gemini/skills/golden-skill/references
 - .gemini/skills/golden-skill/scripts
 files:
-- .gemini/skills/.ai-hooker-skills.json
+- .gemini/skills/.agent-config-skills.json
   content:
 ```text
 {

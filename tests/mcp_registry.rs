@@ -1,6 +1,8 @@
+#![allow(unused_must_use)]
+
 //! Public-API smoke test for the MCP surface — parallel to `tests/registry.rs`.
 
-use ai_hooker::{mcp_by_id, mcp_capable, McpSpec, Scope, ScopeKind};
+use agent_config::{mcp_by_id, mcp_capable, McpSpec, Scope, ScopeKind};
 use std::collections::HashSet;
 
 #[test]
@@ -38,7 +40,7 @@ fn mcp_capable_includes_every_file_backed_agent() {
 #[test]
 fn mcp_capable_subset_of_all_integrations() {
     // Every MCP-capable id must also exist in the main registry.
-    let main_ids: HashSet<_> = ai_hooker::all().into_iter().map(|i| i.id()).collect();
+    let main_ids: HashSet<_> = agent_config::all().into_iter().map(|i| i.id()).collect();
     for agent in mcp_capable() {
         assert!(
             main_ids.contains(agent.id()),
@@ -187,7 +189,7 @@ fn mcp_install_rejects_unsupported_scope() {
         assert!(
             matches!(
                 err,
-                ai_hooker::HookerError::UnsupportedScope {
+                agent_config::AgentConfigError::UnsupportedScope {
                     scope: ScopeKind::Local,
                     ..
                 }
@@ -210,7 +212,10 @@ fn invalid_mcp_name_rejected() {
     let err = agent
         .uninstall_mcp(&scope, "bad name with spaces", "myapp")
         .unwrap_err();
-    assert!(matches!(err, ai_hooker::HookerError::InvalidTag { .. }));
+    assert!(matches!(
+        err,
+        agent_config::AgentConfigError::InvalidTag { .. }
+    ));
 }
 
 #[test]
@@ -221,5 +226,8 @@ fn invalid_owner_tag_rejected() {
     let err = agent
         .uninstall_mcp(&scope, "ok-name", "bad owner")
         .unwrap_err();
-    assert!(matches!(err, ai_hooker::HookerError::InvalidTag { .. }));
+    assert!(matches!(
+        err,
+        agent_config::AgentConfigError::InvalidTag { .. }
+    ));
 }

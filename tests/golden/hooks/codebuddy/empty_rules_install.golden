@@ -71,7 +71,7 @@ files:
             "command": "golden hook"
           }
         ],
-        "_ai_hooker_tag": "golden-hook"
+        "_agent_config_tag": "golden-hook"
       }
     ]
   }
@@ -80,9 +80,9 @@ files:
 - CLAUDE.md
   content:
 ```text
-<!-- BEGIN AI-HOOKER:golden-hook -->
+<!-- BEGIN AGENT-CONFIG:golden-hook -->
 Use golden hook rules.
-<!-- END AI-HOOKER:golden-hook -->
+<!-- END AGENT-CONFIG:golden-hook -->
 ```
 
 HOME tree:

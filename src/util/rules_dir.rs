@@ -8,7 +8,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, UninstallReport};
 use crate::plan::PlannedChange;
 use crate::util::planning;
@@ -20,7 +20,11 @@ pub(crate) fn target_path(root: &Path, rules_dir: &str, tag: &str) -> PathBuf {
 }
 
 /// Returns true if a per-tag rule file already exists.
-pub(crate) fn is_installed(root: &Path, rules_dir: &str, tag: &str) -> Result<bool, HookerError> {
+pub(crate) fn is_installed(
+    root: &Path,
+    rules_dir: &str,
+    tag: &str,
+) -> Result<bool, AgentConfigError> {
     Ok(target_path(root, rules_dir, tag).exists())
 }
 
@@ -30,7 +34,7 @@ pub(crate) fn install(
     rules_dir: &str,
     tag: &str,
     body: &str,
-) -> Result<InstallReport, HookerError> {
+) -> Result<InstallReport, AgentConfigError> {
     let lock_target = lock_target(root);
     file_lock::with_lock(&lock_target, || {
         let path = target_path(root, rules_dir, tag);
@@ -58,7 +62,7 @@ pub(crate) fn plan_install(
     rules_dir: &str,
     tag: &str,
     body: &str,
-) -> Result<Vec<PlannedChange>, HookerError> {
+) -> Result<Vec<PlannedChange>, AgentConfigError> {
     let path = target_path(root, rules_dir, tag);
     let body = fs_atomic::ensure_trailing_newline(body);
     let mut changes = Vec::new();
@@ -72,7 +76,7 @@ pub(crate) fn uninstall(
     root: &Path,
     rules_dir: &str,
     tag: &str,
-) -> Result<UninstallReport, HookerError> {
+) -> Result<UninstallReport, AgentConfigError> {
     let lock_target = lock_target(root);
     file_lock::with_lock(&lock_target, || {
         let path = target_path(root, rules_dir, tag);
@@ -107,7 +111,7 @@ pub(crate) fn uninstall(
 }
 
 fn lock_target(root: &Path) -> PathBuf {
-    root.join(".ai-hooker-rules")
+    root.join(".agent-config-rules")
 }
 
 /// Plan removal of the per-tag rule file and any empty parent directories.
@@ -115,7 +119,7 @@ pub(crate) fn plan_uninstall(
     root: &Path,
     rules_dir: &str,
     tag: &str,
-) -> Result<Vec<PlannedChange>, HookerError> {
+) -> Result<Vec<PlannedChange>, AgentConfigError> {
     let path = target_path(root, rules_dir, tag);
     let mut changes = Vec::new();
     if !path.exists() {

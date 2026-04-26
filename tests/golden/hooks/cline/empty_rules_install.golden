@@ -26,7 +26,7 @@ Ok(
             "[ROOT]/.clinerules/golden-hook.md",
         ),
         ledger_path: Some(
-            "[ROOT]/.clinerules/hooks/.ai-hooker-hooks.json",
+            "[ROOT]/.clinerules/hooks/.agent-config-hooks.json",
         ),
         files: [
             Exists {

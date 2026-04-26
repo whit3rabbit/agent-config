@@ -24,14 +24,14 @@ Ok(
             "[ROOT]/.iflow/settings.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.iflow/.ai-hooker-mcp.json",
+            "[ROOT]/.iflow/.agent-config-mcp.json",
         ),
         files: [
             Exists {
                 path: "[ROOT]/.iflow/settings.json",
             },
             Exists {
-                path: "[ROOT]/.iflow/.ai-hooker-mcp.json",
+                path: "[ROOT]/.iflow/.agent-config-mcp.json",
             },
         ],
         warnings: [],
@@ -60,7 +60,7 @@ ROOT tree:
 directories:
 - .iflow
 files:
-- .iflow/.ai-hooker-mcp.json
+- .iflow/.agent-config-mcp.json
   content:
 ```text
 {

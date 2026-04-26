@@ -13,7 +13,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::util::{fs_atomic, md_block};
 
 /// What kind of install the [`StatusReport`] describes.
@@ -40,7 +40,7 @@ pub enum PlanTarget {
 /// High-level installation state.
 ///
 /// Each variant maps to a single concrete combination of (harness-config
-/// presence, ai-hooker ledger ownership). Callers can match on this directly
+/// presence, agent-config ledger ownership). Callers can match on this directly
 /// to choose between install, repair, or skip.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -61,7 +61,7 @@ pub enum InstallStatus {
     },
     /// Present in the harness config but no ledger entry claims it. Likely
     /// hand-installed by the user or installed by a tool that does not
-    /// participate in the ai-hooker ownership protocol.
+    /// participate in the agent-config ownership protocol.
     PresentUnowned,
     /// Recorded in the ledger but missing from the harness config. The most
     /// common cause is that the user (or another tool) deleted the entry
@@ -80,7 +80,7 @@ pub enum InstallStatus {
     },
     /// State could not be determined (e.g., a probe encountered a soft I/O
     /// failure). Reserved for non-fatal cases. Hard errors propagate as
-    /// [`HookerError`] instead.
+    /// [`AgentConfigError`] instead.
     Unknown,
 }
 
@@ -121,7 +121,7 @@ pub enum DriftIssue {
         /// Parser or shape error.
         reason: String,
     },
-    /// The ai-hooker ownership ledger exists but is not valid ledger JSON.
+    /// The agent-config ownership ledger exists but is not valid ledger JSON.
     MalformedLedger {
         /// The malformed ledger path.
         path: PathBuf,
@@ -237,6 +237,7 @@ pub enum PathStatus {
 
 /// Full report returned by `Integration::status`, `McpSurface::mcp_status`,
 /// and `SkillSurface::skill_status`.
+#[must_use]
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct StatusReport {
@@ -248,8 +249,8 @@ pub struct StatusReport {
     /// `~/.claude/settings.json`, `~/.codex/config.toml`). `None` for
     /// surfaces with no single canonical config file.
     pub config_path: Option<PathBuf>,
-    /// Path to the ai-hooker ownership ledger that backs this surface.
-    /// `None` for hook surfaces that embed `_ai_hooker_tag` markers
+    /// Path to the agent-config ownership ledger that backs this surface.
+    /// `None` for hook surfaces that embed `_agent_config_tag` markers
     /// directly into the harness config (no separate ledger).
     pub ledger_path: Option<PathBuf>,
     /// Per-file status for paths the report inspected. Useful for rendering
@@ -308,12 +309,12 @@ impl StatusReport {
         )
     }
 
-    /// Build a report for a hook entry that embeds `_ai_hooker_tag` into the
+    /// Build a report for a hook entry that embeds `_agent_config_tag` into the
     /// harness config (no ledger). This shape covers
     /// claude/cursor/gemini/codex/copilot/opencode/windsurf hooks.
     ///
     /// `present_in_config` is true when the array contains an object with
-    /// `_ai_hooker_tag` equal to the caller's tag. Parse failures should be
+    /// `_agent_config_tag` equal to the caller's tag. Parse failures should be
     /// passed via [`ConfigPresence::Invalid`].
     pub(crate) fn for_tagged_hook(
         tag: &str,
@@ -416,12 +417,12 @@ impl StatusReport {
         }
     }
 
-    /// Build a report for a prompt-rule hook stored as an AI-HOOKER fenced
+    /// Build a report for a prompt-rule hook stored as an AGENT-CONFIG fenced
     /// markdown block inside a shared file.
     pub(crate) fn for_markdown_block_hook(
         tag: &str,
         file_path: PathBuf,
-    ) -> Result<Self, HookerError> {
+    ) -> Result<Self, AgentConfigError> {
         let target = PlanTarget::Hook {
             tag: tag.to_string(),
         };
@@ -434,12 +435,12 @@ impl StatusReport {
             if md_block::malformed(&host, tag) {
                 files.push(PathStatus::Invalid {
                     path: file_path.clone(),
-                    reason: "malformed ai-hooker markdown fence".into(),
+                    reason: "malformed agent-config markdown fence".into(),
                 });
                 InstallStatus::Drifted {
                     issues: vec![DriftIssue::MalformedConfig {
                         path: file_path.clone(),
-                        reason: "malformed ai-hooker markdown fence".into(),
+                        reason: "malformed agent-config markdown fence".into(),
                     }],
                 }
             } else {
@@ -671,7 +672,7 @@ mod tests {
     fn for_mcp_owned_when_owner_matches() {
         let dir = tempdir().unwrap();
         let cfg = dir.path().join("mcp.json");
-        let led = dir.path().join(".ai-hooker-mcp.json");
+        let led = dir.path().join(".agent-config-mcp.json");
         std::fs::write(&cfg, b"{}").unwrap();
         std::fs::write(&led, b"{}").unwrap();
         let r = StatusReport::for_mcp(
@@ -698,7 +699,7 @@ mod tests {
     fn for_mcp_other_owner_when_recorded_differs() {
         let dir = tempdir().unwrap();
         let cfg = dir.path().join("mcp.json");
-        let led = dir.path().join(".ai-hooker-mcp.json");
+        let led = dir.path().join(".agent-config-mcp.json");
         let r = StatusReport::for_mcp(
             "github",
             cfg,

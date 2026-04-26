@@ -13,7 +13,7 @@ back to other project instruction files. This crate writes `.hermes.md`.
 | --- | --- |
 | Local | `<root>/.hermes.md` |
 
-`ai-hooker` inserts a fenced markdown block keyed by the consumer tag. Global
+`agent-config` inserts a fenced markdown block keyed by the consumer tag. Global
 prompt install is unsupported, and this crate does not modify `SOUL.md`.
 
 ## MCP
@@ -26,14 +26,14 @@ Hermes reads MCP server config from `~/.hermes/config.yaml` under
 | Global | `~/.hermes/config.yaml` | `mcp_servers.<name>` |
 
 MCP is global-only in this crate. Local MCP install returns
-`HookerError::UnsupportedScope`.
+`AgentConfigError::UnsupportedScope`.
 
 Transport mapping:
 
 - `Stdio`: `command`, `args`, optional `env`
 - `Http` / `Sse`: `url`, optional `headers`
 
-Ownership is recorded in `.ai-hooker-mcp.json` beside `config.yaml`.
+Ownership is recorded in `.agent-config-mcp.json` beside `config.yaml`.
 
 ## Skills
 
@@ -42,7 +42,7 @@ directories. This crate writes a dedicated category:
 
 | Scope | Root |
 | --- | --- |
-| Global | `~/.hermes/skills/ai-hooker/<name>/` |
+| Global | `~/.hermes/skills/agent-config/<name>/` |
 
 Local skill install is unsupported. External shared skill directories can be
 configured in Hermes separately, but this crate does not edit

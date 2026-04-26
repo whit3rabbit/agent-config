@@ -24,14 +24,14 @@ Ok(
             "[ROOT]/.gemini/settings.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.gemini/.ai-hooker-mcp.json",
+            "[ROOT]/.gemini/.agent-config-mcp.json",
         ),
         files: [
             Missing {
                 path: "[ROOT]/.gemini/settings.json",
             },
             Missing {
-                path: "[ROOT]/.gemini/.ai-hooker-mcp.json",
+                path: "[ROOT]/.gemini/.agent-config-mcp.json",
             },
         ],
         warnings: [],

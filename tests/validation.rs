@@ -1,6 +1,8 @@
+#![allow(unused_must_use)]
+
 //! Public-API acceptance tests for drift validation.
 
-use ai_hooker::{
+use agent_config::{
     by_id, mcp_by_id, skill_by_id, DriftIssue, Event, HookSpec, McpSpec, Scope, SkillSpec,
 };
 
@@ -137,7 +139,7 @@ fn mcp_validation_reports_malformed_ledger_without_modifying_it() {
         r#"{ "mcpServers": { "smoketest-server": { "command": "npx" } } }"#,
     )
     .unwrap();
-    let ledger = dir.path().join(".ai-hooker-mcp.json");
+    let ledger = dir.path().join(".agent-config-mcp.json");
     std::fs::write(&ledger, b"{not valid ledger").unwrap();
     let before = std::fs::read(&ledger).unwrap();
 
@@ -169,7 +171,7 @@ fn mcp_validation_reports_malformed_ledger_shape() {
     )
     .unwrap();
     std::fs::write(
-        dir.path().join(".ai-hooker-mcp.json"),
+        dir.path().join(".agent-config-mcp.json"),
         r#"{ "version": 1, "entries": [] }"#,
     )
     .unwrap();
@@ -296,7 +298,7 @@ fn hook_validation_reports_malformed_markdown_fence() {
     let scope = Scope::Local(dir.path().to_path_buf());
     std::fs::write(
         dir.path().join("AGENTS.md"),
-        "<!-- BEGIN AI-HOOKER:broken -->\nmissing end\n",
+        "<!-- BEGIN AGENT-CONFIG:broken -->\nmissing end\n",
     )
     .unwrap();
 
@@ -329,7 +331,7 @@ fn validation_does_not_create_missing_files() {
         report.issues
     );
     assert!(!dir.path().join(".mcp.json").exists());
-    assert!(!dir.path().join(".ai-hooker-mcp.json").exists());
+    assert!(!dir.path().join(".agent-config-mcp.json").exists());
 }
 
 #[test]
@@ -337,7 +339,7 @@ fn validation_accepts_valid_empty_ledger() {
     let dir = tempfile::tempdir().unwrap();
     let scope = Scope::Local(dir.path().to_path_buf());
     std::fs::write(
-        dir.path().join(".ai-hooker-mcp.json"),
+        dir.path().join(".agent-config-mcp.json"),
         r#"{ "version": 1, "entries": {} }"#,
     )
     .unwrap();

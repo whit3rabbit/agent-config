@@ -1,6 +1,6 @@
 # CodeBuddy CLI
 
-ID: `codebuddy` — `ai_hooker::by_id("codebuddy")`
+ID: `codebuddy` — `agent_config::by_id("codebuddy")`
 
 Tencent CodeBuddy mirrors the Claude Code config envelope.
 
@@ -43,7 +43,7 @@ ahead of the project file. This crate writes the project-shared file.
       {
         "matcher": "Bash",
         "hooks": [{ "type": "command", "command": "myapp hook codebuddy" }],
-        "_ai_hooker_tag": "myapp"
+        "_agent_config_tag": "myapp"
       }
     ]
   }

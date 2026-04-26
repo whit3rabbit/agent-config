@@ -1,15 +1,17 @@
 # Agent reference
 
-One file per supported AI coding harness. Each entry documents:
+One file per supported AI coding harness. See
+[`../support-matrix.md`](../support-matrix.md) for the release-facing support
+contract across all integrations. Each entry documents:
 
-- **ID** — the string passed to `ai_hooker::by_id`.
+- **ID** — the string passed to `agent_config::by_id`.
 - **Hooks** — install path and JSON/script format, broken out by scope.
 - **Prompt** — optional rules-markdown surface, if the harness supports one.
-- **MCP** and **Skills** — implemented where there is a confirmed file-backed
-  or documented config-backed contract.
+- **MCP** and **Skills** — implemented where this crate has a file-backed or
+  config-backed contract and tests for the emitted shape.
 
 **Last updated:** 2026-04-26. MCP and skills coverage reflects the current
-file-backed locations documented by each harness.
+file-backed locations implemented by this crate.
 
 ## Implemented
 
@@ -41,11 +43,11 @@ file-backed locations documented by each harness.
 ## Conventions
 
 - A *scope* is either `Global` (the user's home dir) or `Local(<project>)`.
-- Hook JSON entries include `"_ai_hooker_tag": "<your tag>"` so multiple
+- Hook JSON entries include `"_agent_config_tag": "<your tag>"` so multiple
   consumers can coexist and each can find its own work to remove.
 - MCP servers and skills use sidecar ownership ledgers instead of embedding
-  ai-hooker metadata in the harness payload.
+  agent-config metadata in the harness payload.
 - Prompt-markdown injections are wrapped in HTML-comment fences keyed on the
-  tag: `<!-- BEGIN AI-HOOKER:<tag> --> ... <!-- END AI-HOOKER:<tag> -->`.
+  tag: `<!-- BEGIN AGENT-CONFIG:<tag> --> ... <!-- END AGENT-CONFIG:<tag> -->`.
 - Any pre-existing file we modify gets a one-time `<path>.bak` sibling on
   first patch.

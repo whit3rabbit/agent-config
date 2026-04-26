@@ -24,7 +24,7 @@ Ok(
             "[ROOT]/.gemini/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.gemini/skills/.ai-hooker-skills.json",
+            "[ROOT]/.gemini/skills/.agent-config-skills.json",
         ),
         files: [
             Missing {
@@ -62,7 +62,7 @@ directories:
 - .gemini/skills
 - .gemini/skills/sibling-skill
 files:
-- .gemini/skills/.ai-hooker-skills.json
+- .gemini/skills/.agent-config-skills.json
   content:
 ```text
 {

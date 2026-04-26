@@ -1,3 +1,5 @@
+#![allow(unused_must_use)]
+
 //! Public dry-run plan API coverage.
 
 use std::env;
@@ -6,9 +8,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
-use ai_hooker::{
-    all, mcp_by_id, mcp_capable, skill_by_id, skill_capable, Event, HookSpec, InstallStatus,
-    Matcher, McpSpec, PlannedChange, RefusalReason, Scope, ScopeKind, SkillAsset, SkillSpec,
+use agent_config::{
+    all, mcp_by_id, mcp_capable, skill_by_id, skill_capable, Event, HookSpec, Matcher, McpSpec,
+    PlanStatus, PlannedChange, RefusalReason, Scope, ScopeKind, SkillAsset, SkillSpec,
 };
 
 fn hook_spec(tag: &str) -> HookSpec {
@@ -79,12 +81,12 @@ fn local_mcp_inline_secret_is_refused_by_default() {
     let err = claude.install_mcp(&scope, &spec).unwrap_err();
     assert!(matches!(
         err,
-        ai_hooker::HookerError::InlineSecretInLocalScope { key, .. } if key == "GITHUB_TOKEN"
+        agent_config::AgentConfigError::InlineSecretInLocalScope { key, .. } if key == "GITHUB_TOKEN"
     ));
     assert!(!dir.path().join(".mcp.json").exists());
 
     let plan = claude.plan_install_mcp(&scope, &spec).unwrap();
-    assert!(matches!(plan.status, InstallStatus::Refused));
+    assert!(matches!(plan.status, PlanStatus::Refused));
     assert!(has_refusal(
         &plan.changes,
         RefusalReason::InlineSecretInLocalScope
@@ -112,7 +114,7 @@ fn local_mcp_inline_secret_can_use_placeholder_or_explicit_allow() {
         .allow_local_inline_secrets()
         .build();
     let plan = claude.plan_install_mcp(&scope, &allowed).unwrap();
-    assert!(matches!(plan.status, InstallStatus::WillChange));
+    assert!(matches!(plan.status, PlanStatus::WillChange));
     assert!(plan
         .warnings
         .iter()
@@ -267,7 +269,7 @@ fn has_refusal(changes: &[PlannedChange], expected: RefusalReason) -> bool {
 }
 
 fn assert_hook_plan_matches_actual(
-    agent: &dyn ai_hooker::Integration,
+    agent: &dyn agent_config::Integration,
     kind: ScopeKind,
     scope: &Scope,
 ) {
@@ -276,7 +278,7 @@ fn assert_hook_plan_matches_actual(
 
     let initial = agent.plan_install(scope, &spec).unwrap();
     assert!(
-        matches!(initial.status, InstallStatus::WillChange),
+        matches!(initial.status, PlanStatus::WillChange),
         "{} {} hook install plan should change: {:?}",
         agent.id(),
         scope_label(kind),
@@ -286,7 +288,7 @@ fn assert_hook_plan_matches_actual(
     agent.install(scope, &spec).unwrap();
     let reinstall = agent.plan_install(scope, &spec).unwrap();
     assert!(
-        matches!(reinstall.status, InstallStatus::NoOp),
+        matches!(reinstall.status, PlanStatus::NoOp),
         "{} {} hook install plan should match installed state: {:?}",
         agent.id(),
         scope_label(kind),
@@ -295,7 +297,7 @@ fn assert_hook_plan_matches_actual(
 
     let uninstall = agent.plan_uninstall(scope, &tag).unwrap();
     assert!(
-        matches!(uninstall.status, InstallStatus::WillChange),
+        matches!(uninstall.status, PlanStatus::WillChange),
         "{} {} hook uninstall plan should see installed state: {:?}",
         agent.id(),
         scope_label(kind),
@@ -305,7 +307,7 @@ fn assert_hook_plan_matches_actual(
     agent.uninstall(scope, &tag).unwrap();
     let already_absent = agent.plan_uninstall(scope, &tag).unwrap();
     assert!(
-        matches!(already_absent.status, InstallStatus::NoOp),
+        matches!(already_absent.status, PlanStatus::NoOp),
         "{} {} hook uninstall plan should match absent state: {:?}",
         agent.id(),
         scope_label(kind),
@@ -314,7 +316,7 @@ fn assert_hook_plan_matches_actual(
 }
 
 fn assert_mcp_plan_matches_actual(
-    agent: &dyn ai_hooker::McpSurface,
+    agent: &dyn agent_config::McpSurface,
     kind: ScopeKind,
     scope: &Scope,
 ) {
@@ -324,7 +326,7 @@ fn assert_mcp_plan_matches_actual(
 
     let initial = agent.plan_install_mcp(scope, &spec).unwrap();
     assert!(
-        matches!(initial.status, InstallStatus::WillChange),
+        matches!(initial.status, PlanStatus::WillChange),
         "{} {} MCP install plan should change: {:?}",
         agent.id(),
         scope_label(kind),
@@ -334,7 +336,7 @@ fn assert_mcp_plan_matches_actual(
     agent.install_mcp(scope, &spec).unwrap();
     let reinstall = agent.plan_install_mcp(scope, &spec).unwrap();
     assert!(
-        matches!(reinstall.status, InstallStatus::NoOp),
+        matches!(reinstall.status, PlanStatus::NoOp),
         "{} {} MCP install plan should match installed state: {:?}",
         agent.id(),
         scope_label(kind),
@@ -343,7 +345,7 @@ fn assert_mcp_plan_matches_actual(
 
     let uninstall = agent.plan_uninstall_mcp(scope, &name, owner).unwrap();
     assert!(
-        matches!(uninstall.status, InstallStatus::WillChange),
+        matches!(uninstall.status, PlanStatus::WillChange),
         "{} {} MCP uninstall plan should see installed state: {:?}",
         agent.id(),
         scope_label(kind),
@@ -353,7 +355,7 @@ fn assert_mcp_plan_matches_actual(
     agent.uninstall_mcp(scope, &name, owner).unwrap();
     let already_absent = agent.plan_uninstall_mcp(scope, &name, owner).unwrap();
     assert!(
-        matches!(already_absent.status, InstallStatus::NoOp),
+        matches!(already_absent.status, PlanStatus::NoOp),
         "{} {} MCP uninstall plan should match absent state: {:?}",
         agent.id(),
         scope_label(kind),
@@ -362,7 +364,7 @@ fn assert_mcp_plan_matches_actual(
 }
 
 fn assert_skill_plan_matches_actual(
-    agent: &dyn ai_hooker::SkillSurface,
+    agent: &dyn agent_config::SkillSurface,
     kind: ScopeKind,
     scope: &Scope,
 ) {
@@ -372,7 +374,7 @@ fn assert_skill_plan_matches_actual(
 
     let initial = agent.plan_install_skill(scope, &spec).unwrap();
     assert!(
-        matches!(initial.status, InstallStatus::WillChange),
+        matches!(initial.status, PlanStatus::WillChange),
         "{} {} skill install plan should change: {:?}",
         agent.id(),
         scope_label(kind),
@@ -382,7 +384,7 @@ fn assert_skill_plan_matches_actual(
     agent.install_skill(scope, &spec).unwrap();
     let reinstall = agent.plan_install_skill(scope, &spec).unwrap();
     assert!(
-        matches!(reinstall.status, InstallStatus::NoOp),
+        matches!(reinstall.status, PlanStatus::NoOp),
         "{} {} skill install plan should match installed state: {:?}",
         agent.id(),
         scope_label(kind),
@@ -391,7 +393,7 @@ fn assert_skill_plan_matches_actual(
 
     let uninstall = agent.plan_uninstall_skill(scope, &name, owner).unwrap();
     assert!(
-        matches!(uninstall.status, InstallStatus::WillChange),
+        matches!(uninstall.status, PlanStatus::WillChange),
         "{} {} skill uninstall plan should see installed state: {:?}",
         agent.id(),
         scope_label(kind),
@@ -401,7 +403,7 @@ fn assert_skill_plan_matches_actual(
     agent.uninstall_skill(scope, &name, owner).unwrap();
     let already_absent = agent.plan_uninstall_skill(scope, &name, owner).unwrap();
     assert!(
-        matches!(already_absent.status, InstallStatus::NoOp),
+        matches!(already_absent.status, PlanStatus::NoOp),
         "{} {} skill uninstall plan should match absent state: {:?}",
         agent.id(),
         scope_label(kind),
@@ -418,7 +420,7 @@ fn hook_plan_methods_are_exposed_for_every_registered_agent() {
 
         let install = agent.plan_install(&scope, &hook_spec(&tag)).unwrap();
         assert!(
-            !matches!(install.status, InstallStatus::Refused),
+            !matches!(install.status, PlanStatus::Refused),
             "{} hook install plan was refused: {:?}",
             agent.id(),
             install.changes
@@ -426,7 +428,7 @@ fn hook_plan_methods_are_exposed_for_every_registered_agent() {
 
         let uninstall = agent.plan_uninstall(&scope, &tag).unwrap();
         assert!(
-            !matches!(uninstall.status, InstallStatus::Refused),
+            !matches!(uninstall.status, PlanStatus::Refused),
             "{} hook uninstall plan was refused: {:?}",
             agent.id(),
             uninstall.changes
@@ -446,17 +448,13 @@ fn mcp_plan_methods_are_exposed_for_every_capable_agent() {
 
         if agent.supported_mcp_scopes().contains(&ScopeKind::Local) {
             assert!(
-                !matches!(plan.status, InstallStatus::Refused),
+                !matches!(plan.status, PlanStatus::Refused),
                 "{} local MCP plan was refused: {:?}",
                 agent.id(),
                 plan.changes
             );
         } else {
-            assert!(
-                matches!(plan.status, InstallStatus::Refused),
-                "{}",
-                agent.id()
-            );
+            assert!(matches!(plan.status, PlanStatus::Refused), "{}", agent.id());
             assert!(has_refusal(&plan.changes, RefusalReason::UnsupportedScope));
         }
 
@@ -465,14 +463,14 @@ fn mcp_plan_methods_are_exposed_for_every_capable_agent() {
             .unwrap();
         if agent.supported_mcp_scopes().contains(&ScopeKind::Local) {
             assert!(
-                !matches!(uninstall.status, InstallStatus::Refused),
+                !matches!(uninstall.status, PlanStatus::Refused),
                 "{} local MCP uninstall plan was refused: {:?}",
                 agent.id(),
                 uninstall.changes
             );
         } else {
             assert!(
-                matches!(uninstall.status, InstallStatus::Refused),
+                matches!(uninstall.status, PlanStatus::Refused),
                 "{}",
                 agent.id()
             );
@@ -496,17 +494,13 @@ fn skill_plan_methods_are_exposed_for_every_capable_agent() {
 
         if agent.supported_skill_scopes().contains(&ScopeKind::Local) {
             assert!(
-                !matches!(plan.status, InstallStatus::Refused),
+                !matches!(plan.status, PlanStatus::Refused),
                 "{} local skill plan was refused: {:?}",
                 agent.id(),
                 plan.changes
             );
         } else {
-            assert!(
-                matches!(plan.status, InstallStatus::Refused),
-                "{}",
-                agent.id()
-            );
+            assert!(matches!(plan.status, PlanStatus::Refused), "{}", agent.id());
             assert!(has_refusal(&plan.changes, RefusalReason::UnsupportedScope));
         }
 
@@ -515,14 +509,14 @@ fn skill_plan_methods_are_exposed_for_every_capable_agent() {
             .unwrap();
         if agent.supported_skill_scopes().contains(&ScopeKind::Local) {
             assert!(
-                !matches!(uninstall.status, InstallStatus::Refused),
+                !matches!(uninstall.status, PlanStatus::Refused),
                 "{} local skill uninstall plan was refused: {:?}",
                 agent.id(),
                 uninstall.changes
             );
         } else {
             assert!(
-                matches!(uninstall.status, InstallStatus::Refused),
+                matches!(uninstall.status, PlanStatus::Refused),
                 "{}",
                 agent.id()
             );
@@ -539,11 +533,11 @@ fn skill_plan_methods_are_exposed_for_every_capable_agent() {
 fn missing_hook_config_reports_create_dir_and_create_file_without_mutation() {
     let dir = tempfile::tempdir().unwrap();
     let scope = temp_scope(&dir);
-    let claude = ai_hooker::by_id("claude").unwrap();
+    let claude = agent_config::by_id("claude").unwrap();
 
     let plan = claude.plan_install(&scope, &hook_spec("dryrun")).unwrap();
 
-    assert!(matches!(plan.status, InstallStatus::WillChange));
+    assert!(matches!(plan.status, PlanStatus::WillChange));
     assert!(has_create_dir(&plan.changes));
     assert!(has_create_file(&plan.changes));
     assert!(!dir.path().join(".claude").exists());
@@ -568,11 +562,11 @@ fn existing_mcp_config_with_unrelated_entries_reports_patch_not_overwrite() {
         .plan_install_mcp(&scope, &mcp_spec("github", "plan-app"))
         .unwrap();
 
-    assert!(matches!(plan.status, InstallStatus::WillChange));
+    assert!(matches!(plan.status, PlanStatus::WillChange));
     assert!(has_patch_file(&plan.changes, &cfg));
     assert!(!has_remove_file(&plan.changes, &cfg));
     assert_eq!(fs::read_to_string(&cfg).unwrap(), original);
-    assert!(!dir.path().join(".ai-hooker-mcp.json").exists());
+    assert!(!dir.path().join(".agent-config-mcp.json").exists());
 }
 
 #[test]
@@ -585,7 +579,7 @@ fn identical_mcp_install_reports_noop() {
     claude.install_mcp(&scope, &spec).unwrap();
     let plan = claude.plan_install_mcp(&scope, &spec).unwrap();
 
-    assert!(matches!(plan.status, InstallStatus::NoOp));
+    assert!(matches!(plan.status, PlanStatus::NoOp));
     assert!(plan
         .changes
         .iter()
@@ -605,7 +599,7 @@ fn mcp_owner_mismatch_is_refused_in_plan() {
         .plan_install_mcp(&scope, &mcp_spec("github", "app-b"))
         .unwrap();
 
-    assert!(matches!(plan.status, InstallStatus::Refused));
+    assert!(matches!(plan.status, PlanStatus::Refused));
     assert!(has_refusal(&plan.changes, RefusalReason::OwnerMismatch));
 }
 
@@ -625,7 +619,7 @@ fn hand_installed_mcp_entry_is_refused_in_plan() {
         .plan_install_mcp(&scope, &mcp_spec("github", "plan-app"))
         .unwrap();
 
-    assert!(matches!(plan.status, InstallStatus::Refused));
+    assert!(matches!(plan.status, PlanStatus::Refused));
     assert!(has_refusal(
         &plan.changes,
         RefusalReason::UserInstalledEntry
@@ -649,7 +643,7 @@ fn existing_backup_allows_patch_without_new_backup_in_plan() {
         .plan_install_mcp(&scope, &mcp_spec("github", "plan-app"))
         .unwrap();
 
-    assert!(matches!(plan.status, InstallStatus::WillChange));
+    assert!(matches!(plan.status, PlanStatus::WillChange));
     assert!(has_patch_file(&plan.changes, &cfg));
     assert!(!has_create_backup(&plan.changes));
     assert!(!has_refusal(
@@ -668,12 +662,12 @@ fn copilot_mcp_plan_matches_installed_shape() {
     copilot.install_mcp(&scope, &spec).unwrap();
 
     let reinstall = copilot.plan_install_mcp(&scope, &spec).unwrap();
-    assert!(matches!(reinstall.status, InstallStatus::NoOp));
+    assert!(matches!(reinstall.status, PlanStatus::NoOp));
 
     let uninstall = copilot
         .plan_uninstall_mcp(&scope, "github", "plan-app")
         .unwrap();
-    assert!(matches!(uninstall.status, InstallStatus::WillChange));
+    assert!(matches!(uninstall.status, PlanStatus::WillChange));
     assert!(has_remove_file(
         &uninstall.changes,
         &dir.path().join(".mcp.json")
@@ -718,7 +712,7 @@ fn mcp_plan_rejects_hostile_names_without_mutation() {
             .plan_uninstall_mcp(&scope, bad, "plan-app")
             .unwrap_err();
         assert!(
-            matches!(err, ai_hooker::HookerError::InvalidTag { .. }),
+            matches!(err, agent_config::AgentConfigError::InvalidTag { .. }),
             "expected invalid MCP name for {bad:?}"
         );
         assert_empty_dir(dir.path());
@@ -745,7 +739,7 @@ fn skill_plan_rejects_hostile_asset_paths_without_mutation() {
 
         let err = claude.plan_install_skill(&scope, &spec).unwrap_err();
         assert!(
-            matches!(err, ai_hooker::HookerError::Other(_)),
+            matches!(err, agent_config::AgentConfigError::Other(_)),
             "expected unsafe asset path rejection for {bad:?}"
         );
         assert_empty_dir(dir.path());
@@ -766,7 +760,7 @@ fn uninstall_final_mcp_entry_reports_config_removal() {
         .plan_uninstall_mcp(&scope, "github", "plan-app")
         .unwrap();
 
-    assert!(matches!(plan.status, InstallStatus::WillChange));
+    assert!(matches!(plan.status, PlanStatus::WillChange));
     assert!(has_remove_file(&plan.changes, &cfg));
 }
 
@@ -787,7 +781,7 @@ fn uninstall_one_of_many_mcp_entries_reports_patch_not_removal() {
         .plan_uninstall_mcp(&scope, "alpha", "plan-app")
         .unwrap();
 
-    assert!(matches!(plan.status, InstallStatus::WillChange));
+    assert!(matches!(plan.status, PlanStatus::WillChange));
     assert!(has_patch_file(&plan.changes, &cfg));
     assert!(!has_remove_file(&plan.changes, &cfg));
 }
@@ -796,13 +790,13 @@ fn uninstall_one_of_many_mcp_entries_reports_patch_not_removal() {
 fn cline_hook_script_plan_reports_set_permissions() {
     let dir = tempfile::tempdir().unwrap();
     let scope = temp_scope(&dir);
-    let cline = ai_hooker::by_id("cline").unwrap();
+    let cline = agent_config::by_id("cline").unwrap();
 
     let plan = cline
         .plan_install(&scope, &bare_hook_spec("cline-script"))
         .unwrap();
 
-    assert!(matches!(plan.status, InstallStatus::WillChange));
+    assert!(matches!(plan.status, PlanStatus::WillChange));
     assert!(has_set_permissions(&plan.changes));
     assert_empty_dir(dir.path());
 }
@@ -817,9 +811,49 @@ fn executable_skill_asset_plan_reports_set_permissions() {
         .plan_install_skill(&scope, &executable_skill_spec("plan-skill", "plan-app"))
         .unwrap();
 
-    assert!(matches!(plan.status, InstallStatus::WillChange));
+    assert!(matches!(plan.status, PlanStatus::WillChange));
     assert!(has_set_permissions(&plan.changes));
     assert_empty_dir(dir.path());
+}
+
+#[test]
+fn root_exports_distinguish_plan_status_from_install_status() {
+    let dir = tempfile::tempdir().unwrap();
+    let scope = temp_scope(&dir);
+    let claude = agent_config::by_id("claude").unwrap();
+
+    let plan = claude
+        .plan_install(&scope, &hook_spec("status-names"))
+        .unwrap();
+    assert!(matches!(plan.status, PlanStatus::WillChange));
+
+    let status = claude.status(&scope, "status-names").unwrap();
+    assert!(matches!(status.status, agent_config::InstallStatus::Absent));
+}
+
+#[test]
+#[cfg(unix)]
+fn global_hook_install_rejects_symlinked_config_file_before_locking() {
+    use std::os::unix::fs::symlink;
+
+    let env = IsolatedGlobalEnv::new();
+    let claude_dir = env.home_path().join(".claude");
+    fs::create_dir_all(&claude_dir).unwrap();
+    let outside = env.home_path().join("outside-settings.json");
+    fs::write(&outside, b"outside").unwrap();
+    symlink(&outside, claude_dir.join("settings.json")).unwrap();
+
+    let err = agent_config::by_id("claude")
+        .unwrap()
+        .install(&Scope::Global, &hook_spec("global-symlink"))
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        agent_config::AgentConfigError::PathResolution(_)
+    ));
+    assert_eq!(fs::read(&outside).unwrap(), b"outside");
+    assert!(!claude_dir.join(".settings.json.agent-config.lock").exists());
 }
 
 #[test]
@@ -835,12 +869,15 @@ fn local_hook_install_rejects_symlinked_config_parent_escape() {
     symlink(&outside, project.join(".claude")).unwrap();
 
     let scope = Scope::Local(project.clone());
-    let err = ai_hooker::by_id("claude")
+    let err = agent_config::by_id("claude")
         .unwrap()
         .install(&scope, &hook_spec("symlink-escape"))
         .unwrap_err();
 
-    assert!(matches!(err, ai_hooker::HookerError::PathResolution(_)));
+    assert!(matches!(
+        err,
+        agent_config::AgentConfigError::PathResolution(_)
+    ));
     assert!(!outside.join("settings.json").exists());
     assert!(!project.join("CLAUDE.md").exists());
 }
@@ -863,9 +900,12 @@ fn local_mcp_install_rejects_symlinked_config_parent_escape() {
         .install_mcp(&scope, &mcp_spec("symlink-escape", "plan-app"))
         .unwrap_err();
 
-    assert!(matches!(err, ai_hooker::HookerError::PathResolution(_)));
+    assert!(matches!(
+        err,
+        agent_config::AgentConfigError::PathResolution(_)
+    ));
     assert!(!outside.join("mcp.json").exists());
-    assert!(!outside.join(".ai-hooker-mcp.json").exists());
+    assert!(!outside.join(".agent-config-mcp.json").exists());
 }
 
 #[test]
@@ -886,7 +926,10 @@ fn local_skill_install_rejects_symlinked_skill_parent_escape() {
         .install_skill(&scope, &skill_spec("symlink-escape", "plan-app"))
         .unwrap_err();
 
-    assert!(matches!(err, ai_hooker::HookerError::PathResolution(_)));
+    assert!(matches!(
+        err,
+        agent_config::AgentConfigError::PathResolution(_)
+    ));
     assert!(!outside.join("skills").exists());
 }
 
@@ -903,12 +946,15 @@ fn local_hook_install_rejects_symlinked_ancestor_when_deeper_parent_is_missing()
     symlink(&outside, project.join(".opencode")).unwrap();
 
     let scope = Scope::Local(project);
-    let err = ai_hooker::by_id("opencode")
+    let err = agent_config::by_id("opencode")
         .unwrap()
         .install(&scope, &bare_hook_spec("symlink-escape"))
         .unwrap_err();
 
-    assert!(matches!(err, ai_hooker::HookerError::PathResolution(_)));
+    assert!(matches!(
+        err,
+        agent_config::AgentConfigError::PathResolution(_)
+    ));
     assert!(!outside.join("plugins").exists());
 }
 
@@ -931,12 +977,15 @@ fn local_hook_install_rejects_symlinked_backup_target() {
     symlink(&outside_file, &link).unwrap();
 
     let scope = Scope::Local(project.clone());
-    let err = ai_hooker::by_id("opencode")
+    let err = agent_config::by_id("opencode")
         .unwrap()
         .install(&scope, &bare_hook_spec("symlink-escape"))
         .unwrap_err();
 
-    assert!(matches!(err, ai_hooker::HookerError::PathResolution(_)));
+    assert!(matches!(
+        err,
+        agent_config::AgentConfigError::PathResolution(_)
+    ));
     assert_eq!(fs::read(&outside_file).unwrap(), b"outside");
     assert!(!project
         .join(".opencode")

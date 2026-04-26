@@ -1,10 +1,10 @@
 //! Insert/remove/lookup of tagged objects inside a JSON array. Each entry
-//! carries an `_ai_hooker_tag` marker so multiple consumers coexist without
+//! carries an `_agent_config_tag` marker so multiple consumers coexist without
 //! stepping on one another.
 
 use serde_json::Value;
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 
 use super::common::{
     ensure_array, find_tagged_index, matches_tag, prune_empty_path, traverse_array,
@@ -12,19 +12,19 @@ use super::common::{
 };
 
 /// Insert `entry` into the array at `path`, replacing any existing entry that
-/// carries the same `_ai_hooker_tag`. Returns `true` if a change was made.
+/// carries the same `_agent_config_tag`. Returns `true` if a change was made.
 ///
-/// Tags the entry with `_ai_hooker_tag = tag` before inserting.
+/// Tags the entry with `_agent_config_tag = tag` before inserting.
 pub(crate) fn upsert_tagged_array_entry(
     root: &mut Value,
     path: &[&str],
     tag: &str,
     mut entry: Value,
-) -> Result<bool, HookerError> {
+) -> Result<bool, AgentConfigError> {
     if let Some(obj) = entry.as_object_mut() {
         obj.insert(TAG_KEY.into(), Value::String(tag.into()));
     } else {
-        return Err(HookerError::Other(anyhow::anyhow!(
+        return Err(AgentConfigError::Other(anyhow::anyhow!(
             "tagged array entries must be JSON objects"
         )));
     }
@@ -47,7 +47,7 @@ pub(crate) fn remove_tagged_array_entry(
     root: &mut Value,
     path: &[&str],
     tag: &str,
-) -> Result<bool, HookerError> {
+) -> Result<bool, AgentConfigError> {
     let Some(arr) = traverse_array_mut(root, path) else {
         return Ok(false);
     };
@@ -63,7 +63,7 @@ pub(crate) fn remove_tagged_array_entry(
     Ok(true)
 }
 
-/// True if an entry with `_ai_hooker_tag == tag` exists at `path`.
+/// True if an entry with `_agent_config_tag == tag` exists at `path`.
 #[allow(dead_code)]
 pub(crate) fn contains_tagged(root: &Value, path: &[&str], tag: &str) -> bool {
     let Some(arr) = traverse_array(root, path) else {
@@ -97,7 +97,7 @@ pub(crate) fn remove_tagged_array_entries_under(
     root: &mut Value,
     parent_path: &[&str],
     tag: &str,
-) -> Result<bool, HookerError> {
+) -> Result<bool, AgentConfigError> {
     let Some(parent) = traverse_object(root, parent_path) else {
         return Ok(false);
     };
@@ -145,7 +145,7 @@ mod tests {
             json!({
                 "hooks": {
                     "PreToolUse": [
-                        { "matcher": "Bash", "command": "do", "_ai_hooker_tag": "alpha" }
+                        { "matcher": "Bash", "command": "do", "_agent_config_tag": "alpha" }
                     ]
                 }
             })
@@ -156,7 +156,7 @@ mod tests {
     fn upsert_replaces_same_tag_in_place() {
         let mut root = json!({
             "hooks": { "PreToolUse": [
-                { "matcher": "Bash", "command": "old", "_ai_hooker_tag": "alpha" }
+                { "matcher": "Bash", "command": "old", "_agent_config_tag": "alpha" }
             ]}
         });
         let changed = upsert_tagged_array_entry(
@@ -192,8 +192,8 @@ mod tests {
     fn remove_strips_only_tagged_entry() {
         let mut root = json!({
             "hooks": { "PreToolUse": [
-                { "matcher": "Bash", "command": "user", "_ai_hooker_tag": "user" },
-                { "matcher": "Bash", "command": "ours", "_ai_hooker_tag": "alpha" }
+                { "matcher": "Bash", "command": "user", "_agent_config_tag": "user" },
+                { "matcher": "Bash", "command": "ours", "_agent_config_tag": "alpha" }
             ]}
         });
         let removed =
@@ -201,14 +201,14 @@ mod tests {
         assert!(removed);
         let arr = root["hooks"]["PreToolUse"].as_array().unwrap();
         assert_eq!(arr.len(), 1);
-        assert_eq!(arr[0]["_ai_hooker_tag"], json!("user"));
+        assert_eq!(arr[0]["_agent_config_tag"], json!("user"));
     }
 
     #[test]
     fn remove_prunes_empty_arrays_and_parents() {
         let mut root = json!({
             "hooks": { "PreToolUse": [
-                { "matcher": "Bash", "_ai_hooker_tag": "alpha" }
+                { "matcher": "Bash", "_agent_config_tag": "alpha" }
             ]}
         });
         remove_tagged_array_entry(&mut root, &["hooks", "PreToolUse"], "alpha").unwrap();
@@ -218,7 +218,7 @@ mod tests {
     #[test]
     fn remove_unknown_tag_is_noop() {
         let mut root = json!({ "hooks": { "PreToolUse": [
-            { "_ai_hooker_tag": "alpha" }
+            { "_agent_config_tag": "alpha" }
         ]}});
         let removed =
             remove_tagged_array_entry(&mut root, &["hooks", "PreToolUse"], "ghost").unwrap();
@@ -228,7 +228,7 @@ mod tests {
     #[test]
     fn contains_tagged_finds_entry() {
         let root = json!({
-            "hooks": { "PreToolUse": [{ "_ai_hooker_tag": "alpha" }]}
+            "hooks": { "PreToolUse": [{ "_agent_config_tag": "alpha" }]}
         });
         assert!(contains_tagged(&root, &["hooks", "PreToolUse"], "alpha"));
         assert!(!contains_tagged(&root, &["hooks", "PreToolUse"], "beta"));
@@ -240,7 +240,7 @@ mod tests {
         let root = json!({
             "version": 1,
             "hooks": {
-                "customEvent": [{ "_ai_hooker_tag": "alpha" }],
+                "customEvent": [{ "_agent_config_tag": "alpha" }],
                 "preToolUse": []
             }
         });
@@ -261,8 +261,8 @@ mod tests {
         let mut root = json!({
             "version": 1,
             "hooks": {
-                "customEvent": [{ "_ai_hooker_tag": "alpha" }],
-                "preToolUse": [{ "_ai_hooker_tag": "beta" }]
+                "customEvent": [{ "_agent_config_tag": "alpha" }],
+                "preToolUse": [{ "_agent_config_tag": "beta" }]
             }
         });
         let changed = remove_tagged_array_entries_under(&mut root, &["hooks"], "alpha").unwrap();
@@ -270,7 +270,7 @@ mod tests {
         assert_eq!(root["version"], json!(1));
         assert!(root["hooks"]["customEvent"].is_null());
         assert_eq!(
-            root["hooks"]["preToolUse"][0]["_ai_hooker_tag"],
+            root["hooks"]["preToolUse"][0]["_agent_config_tag"],
             json!("beta")
         );
     }

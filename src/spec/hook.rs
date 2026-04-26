@@ -1,6 +1,6 @@
 //! Hook spec, builder, and supporting types.
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 
 use super::validate::{validate_identifier, IdentifierKind};
 
@@ -57,7 +57,7 @@ impl HookSpec {
     }
 
     /// Validate that the tag is non-empty and contains only safe characters.
-    pub(crate) fn validate_tag(tag: &str) -> Result<(), HookerError> {
+    pub(crate) fn validate_tag(tag: &str) -> Result<(), AgentConfigError> {
         validate_identifier(tag, IdentifierKind::Tag)
     }
 }
@@ -149,9 +149,9 @@ impl HookSpecBuilder {
     }
 
     /// Fallible variant of [`build`](Self::build).
-    pub fn try_build(self) -> Result<HookSpec, HookerError> {
+    pub fn try_build(self) -> Result<HookSpec, AgentConfigError> {
         HookSpec::validate_tag(&self.tag)?;
-        let command = self.command.ok_or(HookerError::MissingSpecField {
+        let command = self.command.ok_or(AgentConfigError::MissingSpecField {
             id: "<builder>",
             field: "command",
         })?;
@@ -224,11 +224,11 @@ impl HookCommand {
         }
     }
 
-    fn validate(&self) -> Result<(), HookerError> {
+    fn validate(&self) -> Result<(), AgentConfigError> {
         match self {
             Self::Program { program, args } => {
                 if program.is_empty() {
-                    return Err(HookerError::InvalidCommand {
+                    return Err(AgentConfigError::InvalidCommand {
                         reason: "program must not be empty",
                     });
                 }
@@ -239,7 +239,7 @@ impl HookCommand {
             }
             Self::ShellUnchecked { command } => {
                 if command.trim().is_empty() {
-                    return Err(HookerError::InvalidCommand {
+                    return Err(AgentConfigError::InvalidCommand {
                         reason: "shell command must not be empty",
                     });
                 }
@@ -250,9 +250,9 @@ impl HookCommand {
     }
 }
 
-fn validate_no_nul(value: &str) -> Result<(), HookerError> {
+fn validate_no_nul(value: &str) -> Result<(), AgentConfigError> {
     if value.contains('\0') {
-        return Err(HookerError::InvalidCommand {
+        return Err(AgentConfigError::InvalidCommand {
             reason: "command values must not contain NUL bytes",
         });
     }
@@ -339,7 +339,7 @@ mod tests {
             .try_build()
             .unwrap_err();
         assert!(
-            matches!(err, HookerError::InvalidTag { reason, .. } if reason == "tag must not be empty")
+            matches!(err, AgentConfigError::InvalidTag { reason, .. } if reason == "tag must not be empty")
         );
     }
 
@@ -349,7 +349,9 @@ mod tests {
             .command_program("x", [] as [&str; 0])
             .try_build()
             .unwrap_err();
-        assert!(matches!(err, HookerError::InvalidTag { reason, .. } if reason.contains("ASCII")));
+        assert!(
+            matches!(err, AgentConfigError::InvalidTag { reason, .. } if reason.contains("ASCII"))
+        );
     }
 
     #[test]
@@ -360,7 +362,7 @@ mod tests {
                 .try_build()
                 .unwrap_err();
             assert!(
-                matches!(err, HookerError::InvalidTag { .. }),
+                matches!(err, AgentConfigError::InvalidTag { .. }),
                 "expected InvalidTag for {bad:?}"
             );
         }
@@ -379,7 +381,9 @@ mod tests {
     #[test]
     fn try_build_rejects_missing_command() {
         let err = HookSpec::builder("ok").try_build().unwrap_err();
-        assert!(matches!(err, HookerError::MissingSpecField { field, .. } if field == "command"));
+        assert!(
+            matches!(err, AgentConfigError::MissingSpecField { field, .. } if field == "command")
+        );
     }
 
     #[test]
@@ -463,18 +467,24 @@ mod tests {
             .command_program("", [] as [&str; 0])
             .try_build()
             .unwrap_err();
-        assert!(matches!(empty_program, HookerError::InvalidCommand { .. }));
+        assert!(matches!(
+            empty_program,
+            AgentConfigError::InvalidCommand { .. }
+        ));
 
         let nul_arg = HookSpec::builder("myapp")
             .command_program("myapp", ["bad\0arg"])
             .try_build()
             .unwrap_err();
-        assert!(matches!(nul_arg, HookerError::InvalidCommand { .. }));
+        assert!(matches!(nul_arg, AgentConfigError::InvalidCommand { .. }));
 
         let empty_shell = HookSpec::builder("myapp")
             .command_shell_unchecked(" ")
             .try_build()
             .unwrap_err();
-        assert!(matches!(empty_shell, HookerError::InvalidCommand { .. }));
+        assert!(matches!(
+            empty_shell,
+            AgentConfigError::InvalidCommand { .. }
+        ));
     }
 }

@@ -1,17 +1,19 @@
+#![allow(unused_must_use)]
+
 //! Golden config-shape coverage for hooks, MCP, and skills.
 //!
 //! Fixtures live under `tests/golden/<surface>/<agent>/<scenario>.golden`.
 //! Update them deliberately with:
 //!
 //! ```text
-//! AI_HOOKER_UPDATE_GOLDENS=1 cargo test --test golden
+//! AGENT_CONFIG_UPDATE_GOLDENS=1 cargo test --test golden
 //! ```
 
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ai_hooker::{
+use agent_config::{
     all, by_id, mcp_by_id, mcp_capable, skill_by_id, skill_capable, Event, HookSpec, Matcher,
     McpSpec, Scope, ScopeKind, SkillAsset, SkillSpec,
 };
@@ -427,7 +429,7 @@ fn run_skill_goldens(agent_id: &str) {
 fn mcp_case(
     agent_id: &str,
     scenario: &str,
-    run: impl FnOnce(&dyn ai_hooker::McpSurface, &Scope, &CaseEnv) -> String,
+    run: impl FnOnce(&dyn agent_config::McpSurface, &Scope, &CaseEnv) -> String,
 ) {
     run_case("mcp", agent_id, scenario, |env| {
         let agent = mcp_by_id(agent_id).expect(agent_id);
@@ -443,7 +445,7 @@ fn mcp_case(
 fn hook_case(
     agent_id: &str,
     scenario: &str,
-    run: impl FnOnce(&dyn ai_hooker::Integration, &Scope, &CaseEnv) -> String,
+    run: impl FnOnce(&dyn agent_config::Integration, &Scope, &CaseEnv) -> String,
 ) {
     run_case("hooks", agent_id, scenario, |env| {
         let agent = by_id(agent_id).expect(agent_id);
@@ -459,7 +461,7 @@ fn hook_case(
 fn skill_case(
     agent_id: &str,
     scenario: &str,
-    run: impl FnOnce(&dyn ai_hooker::SkillSurface, &Scope, &CaseEnv) -> String,
+    run: impl FnOnce(&dyn agent_config::SkillSurface, &Scope, &CaseEnv) -> String,
 ) {
     run_case("skills", agent_id, scenario, |env| {
         let agent = skill_by_id(agent_id).expect(agent_id);
@@ -492,12 +494,12 @@ fn run_case(surface: &str, agent_id: &str, scenario: &str, run: impl FnOnce(&Cas
 }
 
 fn format_mcp_result<T: std::fmt::Debug>(
-    agent: &dyn ai_hooker::McpSurface,
+    agent: &dyn agent_config::McpSurface,
     scope: &Scope,
     name: &str,
     owner: &str,
     operation: &str,
-    result: Result<T, ai_hooker::HookerError>,
+    result: Result<T, agent_config::AgentConfigError>,
 ) -> String {
     let mut out = format!("{operation}_result:\n{:#?}\n", result);
     out.push_str(&format!(
@@ -512,11 +514,11 @@ fn format_mcp_result<T: std::fmt::Debug>(
 }
 
 fn format_hook_result<T: std::fmt::Debug>(
-    agent: &dyn ai_hooker::Integration,
+    agent: &dyn agent_config::Integration,
     scope: &Scope,
     tag: &str,
     operation: &str,
-    result: Result<T, ai_hooker::HookerError>,
+    result: Result<T, agent_config::AgentConfigError>,
 ) -> String {
     let mut out = format!("{operation}_result:\n{:#?}\n", result);
     out.push_str(&format!("status:\n{:#?}\n", agent.status(scope, tag)));
@@ -525,12 +527,12 @@ fn format_hook_result<T: std::fmt::Debug>(
 }
 
 fn format_skill_result<T: std::fmt::Debug>(
-    agent: &dyn ai_hooker::SkillSurface,
+    agent: &dyn agent_config::SkillSurface,
     scope: &Scope,
     name: &str,
     owner: &str,
     operation: &str,
-    result: Result<T, ai_hooker::HookerError>,
+    result: Result<T, agent_config::AgentConfigError>,
 ) -> String {
     let mut out = format!("{operation}_result:\n{:#?}\n", result);
     out.push_str(&format!(
@@ -648,14 +650,14 @@ fn skill_escape(name: &str, owner: &str) -> SkillSpec {
         .build()
 }
 
-fn remove_mcp_ledger(agent: &dyn ai_hooker::McpSurface, scope: &Scope, name: &str, owner: &str) {
+fn remove_mcp_ledger(agent: &dyn agent_config::McpSurface, scope: &Scope, name: &str, owner: &str) {
     if let Some(path) = agent.mcp_status(scope, name, owner).unwrap().ledger_path {
         let _ = fs::remove_file(path);
     }
 }
 
 fn remove_skill_ledger(
-    agent: &dyn ai_hooker::SkillSurface,
+    agent: &dyn agent_config::SkillSurface,
     scope: &Scope,
     name: &str,
     owner: &str,
@@ -748,7 +750,7 @@ fn collect_entries(root: &Path, current: &Path, dirs: &mut Vec<PathBuf>, files: 
         let entry = entry.unwrap();
         let path = entry.path();
         let name = entry.file_name();
-        if name.to_string_lossy().contains(".ai-hooker.lock") {
+        if name.to_string_lossy().contains(".agent-config.lock") {
             continue;
         }
         let rel = path.strip_prefix(root).unwrap().to_path_buf();
@@ -766,7 +768,7 @@ fn canonical_file_text(path: &Path, text: &str) -> String {
     let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
         return text;
     };
-    if matches!(name, ".ai-hooker-mcp.json" | ".ai-hooker-skills.json") {
+    if matches!(name, ".agent-config-mcp.json" | ".agent-config-skills.json") {
         if let Ok(value) = serde_json::from_str::<Value>(&text) {
             return serde_json::to_string_pretty(&sort_json(value)).unwrap() + "\n";
         }
@@ -820,7 +822,7 @@ fn assert_golden(surface: &str, agent_id: &str, scenario: &str, actual: &str) {
         .join(agent_id)
         .join(format!("{scenario}.golden"));
 
-    if std::env::var_os("AI_HOOKER_UPDATE_GOLDENS").as_deref() == Some("1".as_ref()) {
+    if std::env::var_os("AGENT_CONFIG_UPDATE_GOLDENS").as_deref() == Some("1".as_ref()) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, actual).unwrap();
         return;
@@ -828,7 +830,7 @@ fn assert_golden(surface: &str, agent_id: &str, scenario: &str, actual: &str) {
 
     let expected = fs::read_to_string(&path).unwrap_or_else(|e| {
         panic!(
-            "missing or unreadable golden fixture {}: {e}. Run AI_HOOKER_UPDATE_GOLDENS=1 cargo test --test golden to refresh deliberately.",
+            "missing or unreadable golden fixture {}: {e}. Run AGENT_CONFIG_UPDATE_GOLDENS=1 cargo test --test golden to refresh deliberately.",
             path.display()
         )
     });

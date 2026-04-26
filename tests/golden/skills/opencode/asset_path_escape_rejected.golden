@@ -19,7 +19,7 @@ Ok(
             "[ROOT]/.opencode/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.opencode/skills/.ai-hooker-skills.json",
+            "[ROOT]/.opencode/skills/.agent-config-skills.json",
         ),
         files: [
             Missing {

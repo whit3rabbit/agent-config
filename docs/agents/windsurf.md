@@ -1,6 +1,6 @@
 # Windsurf
 
-ID: `windsurf` — `ai_hooker::by_id("windsurf")`
+ID: `windsurf` — `agent_config::by_id("windsurf")`
 
 (Windsurf is Codeium's AI editor; the agent is called Cascade.)
 
@@ -8,11 +8,8 @@ ID: `windsurf` — `ai_hooker::by_id("windsurf")`
 
 ### User scope (`Scope::Global`)
 
-| | |
-| --- | --- |
-| File | `~/.codeium/windsurf/hooks.json` (VS Code) or `~/.codeium/hooks.json` (JetBrains) |
-| Format | JSON |
-| Mechanism | Pre/post response hooks with blocking capability |
+Not supported in v0.1. Windsurf has user-level hook locations that vary by
+client family, so this crate only writes the project-local hook file.
 
 ### Project scope (`Scope::Local(<root>)`)
 
@@ -71,7 +68,7 @@ Uninstall removes the file and prunes empty parent directories.
 Not supported in v0.1. Windsurf's global rules live at
 `~/.codeium/windsurf/memories/global_rules.md` (a single file, no
 frontmatter). Calling with `Scope::Global` returns
-`HookerError::UnsupportedScope`.
+`AgentConfigError::UnsupportedScope`.
 
 ## MCP servers
 
@@ -116,7 +113,7 @@ Supports stdio, Streamable HTTP, and SSE transports. Variable interpolation via
 | User | `~/.codeium/windsurf/skills/<name>/` |
 | Project | `.windsurf/skills/<name>/` |
 
-Windsurf also discovers `.agents/skills`; `ai-hooker` writes the native
+Windsurf also discovers `.agents/skills`; `agent-config` writes the native
 Windsurf path for this integration.
 
 ## References

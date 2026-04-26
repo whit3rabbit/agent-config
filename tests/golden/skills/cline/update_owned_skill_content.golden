@@ -26,7 +26,7 @@ Ok(
             "[ROOT]/.cline/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.cline/skills/.ai-hooker-skills.json",
+            "[ROOT]/.cline/skills/.agent-config-skills.json",
         ),
         files: [
             Exists {
@@ -64,7 +64,7 @@ directories:
 - .cline/skills
 - .cline/skills/golden-skill
 files:
-- .cline/skills/.ai-hooker-skills.json
+- .cline/skills/.agent-config-skills.json
   content:
 ```text
 {

@@ -1,34 +1,34 @@
 //! Shared primitives for the per-shape patch helpers: I/O, path traversal,
-//! pruning, and the `_ai_hooker_tag` marker constant.
+//! pruning, and the `_agent_config_tag` marker constant.
 
 use std::fs;
 use std::path::Path;
 
 use serde_json::{Map, Value};
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 
 /// The marker key embedded in every object we insert. Lets us locate and
 /// uninstall our own entries without touching user-authored ones.
-pub(crate) const TAG_KEY: &str = "_ai_hooker_tag";
+pub(crate) const TAG_KEY: &str = "_agent_config_tag";
 
 /// Read a JSON file, returning `Value::Object(empty)` when the file is missing.
 ///
 /// Errors propagate verbatim if the file exists but is invalid JSON; the
 /// caller should surface this rather than overwriting potentially-precious
 /// user config.
-pub(crate) fn read_or_empty(path: &Path) -> Result<Value, HookerError> {
+pub(crate) fn read_or_empty(path: &Path) -> Result<Value, AgentConfigError> {
     let bytes = match fs::read(path) {
         Ok(b) => b,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             return Ok(Value::Object(Map::new()));
         }
-        Err(e) => return Err(HookerError::io(path, e)),
+        Err(e) => return Err(AgentConfigError::io(path, e)),
     };
     if bytes.is_empty() || bytes.iter().all(|b| b.is_ascii_whitespace()) {
         return Ok(Value::Object(Map::new()));
     }
-    serde_json::from_slice(&bytes).map_err(|e| HookerError::json(path, e))
+    serde_json::from_slice(&bytes).map_err(|e| AgentConfigError::json(path, e))
 }
 
 /// Pretty-serialize a JSON value (2-space indent, trailing newline).
@@ -42,11 +42,11 @@ pub(crate) fn to_pretty(value: &Value) -> Vec<u8> {
 /// needed. Returns a mutable reference to the leaf object.
 ///
 /// The leaf is forced to be an object; if anything along the path is a
-/// non-object value, returns a [`HookerError::Other`].
+/// non-object value, returns a [`AgentConfigError::Other`].
 pub(crate) fn ensure_object<'a>(
     root: &'a mut Value,
     path: &[&str],
-) -> Result<&'a mut Map<String, Value>, HookerError> {
+) -> Result<&'a mut Map<String, Value>, AgentConfigError> {
     if !root.is_object() {
         *root = Value::Object(Map::new());
     }
@@ -55,7 +55,7 @@ pub(crate) fn ensure_object<'a>(
         if !cur.contains_key(*key) {
             cur.insert((*key).to_string(), Value::Object(Map::new()));
         } else if !cur[*key].is_object() {
-            return Err(HookerError::Other(anyhow::anyhow!(
+            return Err(AgentConfigError::Other(anyhow::anyhow!(
                 "expected object at JSON path segment {:?}, found {:?}",
                 key,
                 cur[*key]
@@ -71,9 +71,9 @@ pub(crate) fn ensure_object<'a>(
 pub(crate) fn ensure_array<'a>(
     root: &'a mut Value,
     path: &[&str],
-) -> Result<&'a mut Vec<Value>, HookerError> {
+) -> Result<&'a mut Vec<Value>, AgentConfigError> {
     if path.is_empty() {
-        return Err(HookerError::Other(anyhow::anyhow!(
+        return Err(AgentConfigError::Other(anyhow::anyhow!(
             "ensure_array requires a non-empty path"
         )));
     }
@@ -84,7 +84,7 @@ pub(crate) fn ensure_array<'a>(
         .or_insert_with(|| Value::Array(Vec::new()));
     match entry {
         Value::Array(a) => Ok(a),
-        other => Err(HookerError::Other(anyhow::anyhow!(
+        other => Err(AgentConfigError::Other(anyhow::anyhow!(
             "expected array at JSON path segment {:?}, found {:?}",
             last,
             other
@@ -185,14 +185,14 @@ mod tests {
         let p = dir.path().join("bad.json");
         std::fs::write(&p, b"{not valid").unwrap();
         let err = read_or_empty(&p).unwrap_err();
-        assert!(matches!(err, HookerError::JsonInvalid { .. }));
+        assert!(matches!(err, AgentConfigError::JsonInvalid { .. }));
     }
 
     #[test]
     fn ensure_object_rejects_non_object_collision() {
         let mut root = json!({ "hooks": "oops a string" });
         let err = ensure_object(&mut root, &["hooks"]).unwrap_err();
-        assert!(matches!(err, HookerError::Other(_)));
+        assert!(matches!(err, AgentConfigError::Other(_)));
     }
 
     #[test]

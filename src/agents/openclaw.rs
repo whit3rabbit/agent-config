@@ -18,14 +18,14 @@ use std::path::{Path, PathBuf};
 use serde_json::{Map, Value};
 
 use crate::agents::planning as agent_planning;
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
 use crate::plan::{InstallPlan, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{HookSpec, McpSpec, McpTransport, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{file_lock, fs_atomic, mcp_json_map, md_block, ownership, skills_dir};
+use crate::util::{file_lock, fs_atomic, mcp_json_map, md_block, ownership, safe_fs, skills_dir};
 
 /// OpenClaw file-backed installer.
 pub struct OpenClawAgent;
@@ -36,17 +36,17 @@ impl OpenClawAgent {
         Self
     }
 
-    fn require_local(scope: &Scope) -> Result<&Path, HookerError> {
+    fn require_local(scope: &Scope) -> Result<&Path, AgentConfigError> {
         match scope {
             Scope::Local(p) => Ok(p),
-            Scope::Global => Err(HookerError::UnsupportedScope {
+            Scope::Global => Err(AgentConfigError::UnsupportedScope {
                 id: "openclaw",
                 scope: ScopeKind::Global,
             }),
         }
     }
 
-    fn prompt_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn prompt_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(Self::require_local(scope)?.join("AGENTS.md"))
     }
 
@@ -58,10 +58,10 @@ impl OpenClawAgent {
         Self::openclaw_home_from_home(home).join("openclaw.json")
     }
 
-    fn mcp_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         match scope {
             Scope::Global => Ok(Self::mcp_config_path_from_home(&paths::home_dir()?)),
-            Scope::Local(_) => Err(HookerError::UnsupportedScope {
+            Scope::Local(_) => Err(AgentConfigError::UnsupportedScope {
                 id: "openclaw",
                 scope: ScopeKind::Local,
             }),
@@ -72,7 +72,7 @@ impl OpenClawAgent {
         Self::openclaw_home_from_home(home).join("skills")
     }
 
-    fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => Self::skills_root_from_home(&paths::home_dir()?),
             Scope::Local(p) => p.join(".agents").join("skills"),
@@ -82,7 +82,7 @@ impl OpenClawAgent {
     fn install_mcp_config(
         config_path: &Path,
         spec: &McpSpec,
-    ) -> Result<InstallReport, HookerError> {
+    ) -> Result<InstallReport, AgentConfigError> {
         let ledger = ownership::mcp_ledger_for(config_path);
         mcp_json_map::install(
             config_path,
@@ -98,7 +98,7 @@ impl OpenClawAgent {
         config_path: &Path,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         let ledger = ownership::mcp_ledger_for(config_path);
         mcp_json_map::uninstall(
             config_path,
@@ -131,13 +131,17 @@ impl Integration for OpenClawAgent {
         &[ScopeKind::Local]
     }
 
-    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let path = Self::prompt_path(scope)?;
         StatusReport::for_markdown_block_hook(tag, path)
     }
 
-    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install(
+        &self,
+        scope: &Scope,
+        spec: &HookSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::markdown_install(
             Integration::id(self),
             scope,
@@ -147,7 +151,7 @@ impl Integration for OpenClawAgent {
         )
     }
 
-    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::markdown_uninstall(
             Integration::id(self),
             scope,
@@ -156,19 +160,22 @@ impl Integration for OpenClawAgent {
         )
     }
 
-    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
+    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
-        let rules = spec.rules.as_ref().ok_or(HookerError::MissingSpecField {
-            id: "openclaw",
-            field: "rules",
-        })?;
+        let rules = spec
+            .rules
+            .as_ref()
+            .ok_or(AgentConfigError::MissingSpecField {
+                id: "openclaw",
+                field: "rules",
+            })?;
         let path = Self::prompt_path(scope)?;
         let mut report = InstallReport::default();
         scope.ensure_contained(&path)?;
         file_lock::with_lock(&path, || {
             let host = fs_atomic::read_to_string_or_empty(&path)?;
             let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
-            let outcome = fs_atomic::write_atomic(&path, new_host.as_bytes(), true)?;
+            let outcome = safe_fs::write(scope, &path, new_host.as_bytes(), true)?;
             if outcome.no_change {
                 report.already_installed = true;
             } else if outcome.existed {
@@ -179,12 +186,12 @@ impl Integration for OpenClawAgent {
             if let Some(b) = outcome.backup {
                 report.backed_up.push(b);
             }
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
         Ok(report)
     }
 
-    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, HookerError> {
+    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let path = Self::prompt_path(scope)?;
         let mut report = UninstallReport::default();
@@ -199,17 +206,17 @@ impl Integration for OpenClawAgent {
             }
 
             if stripped.trim().is_empty() {
-                if fs_atomic::restore_backup_if_matches(&path, stripped.as_bytes())? {
+                if safe_fs::restore_backup_if_matches(scope, &path, stripped.as_bytes())? {
                     report.restored.push(path.clone());
                 } else {
-                    fs_atomic::remove_if_exists(&path)?;
+                    safe_fs::remove_file(scope, &path)?;
                     report.removed.push(path.clone());
                 }
             } else {
-                fs_atomic::write_atomic(&path, stripped.as_bytes(), false)?;
+                safe_fs::write(scope, &path, stripped.as_bytes(), false)?;
                 report.patched.push(path.clone());
             }
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
         Ok(report)
     }
@@ -229,7 +236,7 @@ impl McpSurface for OpenClawAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         let cfg = Self::mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -250,7 +257,11 @@ impl McpSurface for OpenClawAgent {
         ))
     }
 
-    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::mcp_json_map_install(
             McpSurface::id(self),
             scope,
@@ -267,7 +278,7 @@ impl McpSurface for OpenClawAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::mcp_json_map_uninstall(
             McpSurface::id(self),
             scope,
@@ -279,14 +290,18 @@ impl McpSurface for OpenClawAgent {
         )
     }
 
-    fn is_mcp_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+    fn is_mcp_installed(&self, scope: &Scope, name: &str) -> Result<bool, AgentConfigError> {
         McpSpec::validate_name(name)?;
         let cfg = Self::mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_map::is_installed(&ledger, name)
     }
 
-    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
+    fn install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
         spec.validate_local_secret_policy(scope)?;
@@ -298,7 +313,7 @@ impl McpSurface for OpenClawAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::mcp_path(scope)?;
@@ -320,7 +335,7 @@ impl SkillSurface for OpenClawAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
         let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
@@ -339,7 +354,7 @@ impl SkillSurface for OpenClawAgent {
         &self,
         scope: &Scope,
         spec: &SkillSpec,
-    ) -> Result<InstallPlan, HookerError> {
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::skill_install(
             SkillSurface::id(self),
             scope,
@@ -353,7 +368,7 @@ impl SkillSurface for OpenClawAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::skill_uninstall(
             SkillSurface::id(self),
             scope,
@@ -363,12 +378,16 @@ impl SkillSurface for OpenClawAgent {
         )
     }
 
-    fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+    fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         skills_dir::is_installed(&root, name)
     }
 
-    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+    fn install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
@@ -379,7 +398,7 @@ impl SkillSurface for OpenClawAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
@@ -465,7 +484,7 @@ mod tests {
             .unwrap();
 
         let body = std::fs::read_to_string(dir.path().join("AGENTS.md")).unwrap();
-        assert!(body.contains("BEGIN AI-HOOKER:alpha"));
+        assert!(body.contains("BEGIN AGENT-CONFIG:alpha"));
         assert!(body.contains("Use the test rules."));
         assert!(agent.is_installed(&scope, "alpha").unwrap());
     }
@@ -533,7 +552,7 @@ mod tests {
         let err = agent
             .install_skill(&scope, &skill("alpha-skill", "app-b"))
             .unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
     }
 
     #[test]
@@ -599,7 +618,7 @@ mod tests {
 
         OpenClawAgent::install_mcp_config(&cfg, &mcp_spec("github", "app-a")).unwrap();
         let err = OpenClawAgent::uninstall_mcp_config(&cfg, "github", "app-b").unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
     }
 
     #[test]
@@ -612,7 +631,7 @@ mod tests {
             .unwrap_err();
         assert!(matches!(
             err,
-            HookerError::UnsupportedScope {
+            AgentConfigError::UnsupportedScope {
                 scope: ScopeKind::Local,
                 ..
             }

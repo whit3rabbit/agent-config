@@ -31,7 +31,7 @@ Per-agent config-shape fixtures live under `tests/golden/<surface>/<agent>/`.
 Regenerate after adding a harness or changing serialization:
 
 ```bash
-AI_HOOKER_UPDATE_GOLDENS=1 cargo test --test golden
+AGENT_CONFIG_UPDATE_GOLDENS=1 cargo test --test golden
 ```
 
 Inspect the diff before committing.
@@ -48,7 +48,7 @@ Linux container check used during the concurrency work:
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" \
   -e CARGO_HOME=/tmp/cargo \
-  -e CARGO_TARGET_DIR=/tmp/ai-hooker-target \
+  -e CARGO_TARGET_DIR=/tmp/agent-config-target \
   -e HOME=/tmp \
   -v "$PWD":/work -w /work \
   rust:latest \
@@ -82,7 +82,7 @@ updating toolchains.
 - `scope.rs` — `Scope` enum (Global vs Local), `ScopeKind` discriminant
 - `registry.rs` — `all()` and `by_id()` for looking up integrations
 - `status.rs` — status reports, drift issues, and current-state probes
-- `error.rs` — `HookerError` enum (IO, JSON, path resolution, unsupported scope, missing fields, invalid tag, backup collision)
+- `error.rs` — `AgentConfigError` enum (IO, JSON, path resolution, unsupported scope, missing fields, invalid tag, backup collision)
 - `paths.rs` — cross-platform resolution of harness config directories
 
 ### Agents (`src/agents/`)
@@ -100,7 +100,7 @@ Safety-critical primitives shared by all agents:
 - `fs_atomic` — write-to-temp + fsync + rename; first-touch `.bak` backups; identical-content no-op
 - `planning` — pure dry-run helpers for file writes/removals, backups,
   permissions, ledger changes, tagged JSON, and markdown blocks
-- `json_patch` — tagged insert/remove in JSON arrays (`_ai_hooker_tag` marker); key-order preserving; empty-array pruning
+- `json_patch` — tagged insert/remove in JSON arrays (`_agent_config_tag` marker); key-order preserving; empty-array pruning
 - `mcp_json_map` — ledger-backed MCP insertion into named JSON/JSONC/JSON5 objects
   (engine for all named-object MCP shapes); takes a path, builder fn, and format
 - `mcp_json_object` — thin shim over `mcp_json_map` for the standard
@@ -119,15 +119,16 @@ Every public surface has a side-effect-free planner:
   `SkillSurface::plan_uninstall_skill`
 
 Plans return `InstallPlan` or `UninstallPlan` with a `PlanTarget`, a list of
-`PlannedChange` values, an `InstallStatus`, and warnings. The root public
-`InstallStatus` and `PlanTarget` names refer to planning. Status-registry
-types are re-exported as `StatusInstallStatus` and `StatusPlanTarget`.
+`PlannedChange` values, a `PlanStatus`, and warnings. The root public
+`PlanStatus` name refers to planning, while root `InstallStatus` refers to
+actual on-disk status. Status-registry `PlanTarget` is re-exported as
+`StatusPlanTarget`.
 
 Planning must read current state, compute desired state in memory, compare the
 two, and emit planned changes. Do not implement dry-run by partially running
 install or uninstall code. Predictable refusals return `Ok(plan)` with
-`InstallStatus::Refused`; path resolution failures, unreadable files, and
-invalid caller identifiers remain `Err(HookerError)`.
+`PlanStatus::Refused`; path resolution failures, unreadable files, and
+invalid caller identifiers remain `Err(AgentConfigError)`.
 
 Ledger effects are represented with `WriteLedger` and `RemoveLedgerEntry`, not
 duplicated as generic file writes. Permission changes are represented with
@@ -148,7 +149,7 @@ duplicated as generic file writes. Permission changes are represented with
 - Status probes (`util::*::config_presence`, `tagged_hook_presence`, etc.)
   catch parse failures and return `ConfigPresence::Invalid { reason }` so
   `*_status` surfaces them as `DriftIssue::InvalidConfig`. Never propagate
-  `HookerError::JsonInvalid`/`TomlInvalid` from a status probe.
+  `AgentConfigError::JsonInvalid`/`TomlInvalid` from a status probe.
 
 ### Adding a new integration
 
@@ -174,7 +175,9 @@ be registered without speculating on a rules file — defer it instead. See
 
 ## Surface coverage
 
-Per-agent reference is in [`docs/agents/`](docs/agents/README.md). The matrix:
+Per-agent reference is in [`docs/agents/`](docs/agents/README.md). The
+release-facing path contract is in
+[`docs/support-matrix.md`](docs/support-matrix.md). The surface matrix:
 
 |                      | Hooks | Prompt | MCP   | Skills |
 | -------------------- | ----- | ------ | ----- | ------ |
@@ -236,9 +239,9 @@ Per-agent locations now wired up:
   object. JSON5 input is accepted and rewritten as strict JSON.
 - Hermes: `~/.hermes/config.yaml` (Global only), `mcp_servers` object.
 
-Ownership is recorded in a sidecar `<config-dir>/.ai-hooker-mcp.json` ledger
+Ownership is recorded in a sidecar `<config-dir>/.agent-config-mcp.json` ledger
 so multiple consumers coexist; install and uninstall return
-[`HookerError::NotOwnedByCaller`] on owner mismatch or hand-installed
+[`AgentConfigError::NotOwnedByCaller`] on owner mismatch or hand-installed
 entries.
 
 ### Phase 3 — Skills — DONE
@@ -271,9 +274,9 @@ Per-agent locations now wired up:
   `<root>/.agent/skills/<name>/` (Local). Same `SKILL.md` layout.
 - OpenClaw: `~/.openclaw/skills/<name>/` (Global),
   `<root>/.agents/skills/<name>/` (Local).
-- Hermes: `~/.hermes/skills/ai-hooker/<name>/` (Global only).
+- Hermes: `~/.hermes/skills/agent-config/<name>/` (Global only).
 
-Sidecar ledger lives at `<skills_root>/.ai-hooker-skills.json`. Asset paths
+Sidecar ledger lives at `<skills_root>/.agent-config-skills.json`. Asset paths
 must be relative — absolute paths and `..` segments are rejected at install
 time to prevent directory escape.
 
@@ -283,7 +286,7 @@ time to prevent directory escape.
   with ledger-protected ownership so multiple consumers don't overwrite each
   other's hooks.
 - Windsurf: `<root>/.windsurf/hooks.json` with snake_case event keys
-  (`pre_run_command`, `post_cascade_response`, etc.) and `_ai_hooker_tag`
+  (`pre_run_command`, `post_cascade_response`, etc.) and `_agent_config_tag`
   marked entries for multi-consumer coexistence.
 
 ### Phase 4 — OpenClaw And Hermes — DONE
@@ -319,16 +322,16 @@ previews, and dry-run non-mutation.
 
 ## Conventions
 
-- Public errors: `thiserror`-typed (`HookerError`). Internal helpers may use `anyhow`. Never panic on user input.
-- Every mutating method (`install`, `uninstall`, `install_mcp`, `install_skill`, etc.) must call `scope.ensure_contained(&path)?` before touching disk. No-op for `Scope::Global`; for `Scope::Local`, rejects symlink components and canonicalized escapes. Skipping it opens a symlink-traversal hole. See `docs/SECURITY.md`.
-- Cross-process file locks use `file_lock::with_lock(&path, || { ... Ok::<(), HookerError>(()) })?;` (closure pattern). Drop the closure before locking a different file.
-- Atomic writes only (`util::fs_atomic::write_atomic`); never `std::fs::write` directly on a path the user owns.
+- Public errors: `thiserror`-typed (`AgentConfigError`). Internal helpers may use `anyhow`. Never panic on user input.
+- Every mutating method (`install`, `uninstall`, `install_mcp`, `install_skill`, etc.) must call `scope.ensure_contained(&path)?` before touching disk. `Scope::Global` rejects symlinked target files; `Scope::Local` rejects symlink components and canonicalized escapes. Skipping it opens a symlink-traversal hole. See `docs/SECURITY.md`.
+- Cross-process file locks use `file_lock::with_lock(&path, || { ... Ok::<(), AgentConfigError>(()) })?;` (closure pattern). Drop the closure before locking a different file.
+- Integration writes/removals go through `util::safe_fs` (`safe_fs::write`, `safe_fs::remove_file`, `safe_fs::remove_dir_all`); lower-level helpers inside `util` may call `fs_atomic` after their callers validate paths. Never `std::fs::write` directly on a path the user owns.
 - First-touch backups (`<path>.bak`) for any file we modify but did not create. Refuses to clobber an existing `.bak`.
 - Idempotency markers:
-  - JSON: `_ai_hooker_tag` field on every object we insert.
-  - Markdown: HTML-comment fence `<!-- BEGIN AI-HOOKER:<tag> --> ... <!-- END AI-HOOKER:<tag> -->`.
+  - JSON: `_agent_config_tag` field on every object we insert.
+  - Markdown: HTML-comment fence `<!-- BEGIN AGENT-CONFIG:<tag> --> ... <!-- END AGENT-CONFIG:<tag> -->`.
 - MCP and skills use sidecar ownership ledgers instead of embedding
-  `_ai_hooker_tag` into harness-owned server or skill payloads.
+  `_agent_config_tag` into harness-owned server or skill payloads.
 - One file per consumer (no shared array) when the harness allows it (Copilot, OpenCode plugins, prompt-only agents). Avoids JSON-array contention and makes uninstall trivially safe.
 - Install/uninstall are idempotent: same tag + same content = no-op. Multiple consumers coexist without conflict.
 - Plan generation is side-effect-free. It must not create config files,

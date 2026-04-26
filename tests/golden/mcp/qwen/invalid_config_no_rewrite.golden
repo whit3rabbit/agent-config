@@ -27,7 +27,7 @@ Ok(
             "[ROOT]/.qwen/settings.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.qwen/.ai-hooker-mcp.json",
+            "[ROOT]/.qwen/.agent-config-mcp.json",
         ),
         files: [
             Invalid {
@@ -35,7 +35,7 @@ Ok(
                 reason: "key must be a string at line 1 column 3",
             },
             Missing {
-                path: "[ROOT]/.qwen/.ai-hooker-mcp.json",
+                path: "[ROOT]/.qwen/.agent-config-mcp.json",
             },
         ],
         warnings: [],

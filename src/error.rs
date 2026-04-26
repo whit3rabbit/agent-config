@@ -4,10 +4,10 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-/// All failures returned by `ai-hooker`'s public API.
+/// All failures returned by `agent-config`'s public API.
 #[derive(Debug, Error)]
 #[non_exhaustive]
-pub enum HookerError {
+pub enum AgentConfigError {
     /// Filesystem I/O failed. Wraps [`std::io::Error`] with the path that caused it.
     #[error("io error at {path}: {source}")]
     Io {
@@ -86,7 +86,7 @@ pub enum HookerError {
 
     /// Could not acquire a filesystem lock before the timeout elapsed.
     #[error(
-        "timed out waiting for lock at {path}; if no ai-hooker process is running, this lock may be stale and can be deleted"
+        "timed out waiting for lock at {path}; if no agent-config process is running, this lock may be stale and can be deleted"
     )]
     LockTimeout {
         /// The lock file path that remained held.
@@ -136,7 +136,7 @@ pub enum HookerError {
     Other(#[from] anyhow::Error),
 }
 
-impl HookerError {
+impl AgentConfigError {
     /// Helper to wrap an I/O error with its path.
     pub(crate) fn io(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
         Self::Io {
@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn io_helper_format() {
-        let err = HookerError::io(
+        let err = AgentConfigError::io(
             "/some/path",
             std::io::Error::new(std::io::ErrorKind::NotFound, "gone"),
         );
@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn json_helper_format() {
         let parse_err = serde_json::from_str::<serde_json::Value>("{bad").unwrap_err();
-        let err = HookerError::json("/bad.json", parse_err);
+        let err = AgentConfigError::json("/bad.json", parse_err);
         let msg = format!("{err}");
         assert!(msg.contains("/bad.json"), "message: {msg}");
         assert!(msg.contains("invalid JSON"), "message: {msg}");
@@ -189,66 +189,66 @@ mod tests {
 
     #[test]
     fn from_anyhow() {
-        let err = HookerError::from(anyhow::anyhow!("something broke"));
-        assert!(matches!(err, HookerError::Other(_)));
+        let err = AgentConfigError::from(anyhow::anyhow!("something broke"));
+        assert!(matches!(err, AgentConfigError::Other(_)));
         assert_eq!(format!("{err}"), "something broke");
     }
 
     #[test]
     fn display_format_for_each_variant() {
-        let io = HookerError::Io {
+        let io = AgentConfigError::Io {
             path: PathBuf::from("/a"),
             source: std::io::Error::new(std::io::ErrorKind::NotFound, "not found"),
         };
         assert!(format!("{io}").contains("/a"));
 
-        let json = HookerError::JsonInvalid {
+        let json = AgentConfigError::JsonInvalid {
             path: PathBuf::from("/b.json"),
             source: serde_json::from_str::<serde_json::Value>("{").unwrap_err(),
         };
         assert!(format!("{json}").contains("/b.json"));
 
-        let path = HookerError::PathResolution("no home".into());
+        let path = AgentConfigError::PathResolution("no home".into());
         assert!(format!("{path}").contains("no home"));
 
-        let unsupported = HookerError::UnsupportedScope {
+        let unsupported = AgentConfigError::UnsupportedScope {
             id: "test",
             scope: crate::scope::ScopeKind::Global,
         };
         assert!(format!("{unsupported}").contains("test"));
 
-        let missing = HookerError::MissingSpecField {
+        let missing = AgentConfigError::MissingSpecField {
             id: "agent",
             field: "command",
         };
         assert!(format!("{missing}").contains("command"));
 
-        let tag = HookerError::InvalidTag {
+        let tag = AgentConfigError::InvalidTag {
             tag: "bad!".into(),
             reason: "chars",
         };
         assert!(format!("{tag}").contains("bad!"));
 
-        let command = HookerError::InvalidCommand {
+        let command = AgentConfigError::InvalidCommand {
             reason: "empty command",
         };
         assert!(format!("{command}").contains("empty command"));
 
-        let secret = HookerError::InlineSecretInLocalScope {
+        let secret = AgentConfigError::InlineSecretInLocalScope {
             name: "github".into(),
             key: "GITHUB_TOKEN".into(),
         };
         assert!(format!("{secret}").contains("GITHUB_TOKEN"));
 
-        let backup = HookerError::BackupExists(PathBuf::from("/c.bak"));
+        let backup = AgentConfigError::BackupExists(PathBuf::from("/c.bak"));
         assert!(format!("{backup}").contains("/c.bak"));
 
-        let lock = HookerError::LockTimeout {
+        let lock = AgentConfigError::LockTimeout {
             path: PathBuf::from("/c.lock"),
         };
         assert!(format!("{lock}").contains("/c.lock"));
 
-        let toml = HookerError::TomlInvalid {
+        let toml = AgentConfigError::TomlInvalid {
             path: PathBuf::from("/d.toml"),
             source: toml_edit::DocumentMut::from_str("=bad")
                 .expect_err("malformed TOML to parse-fail"),
@@ -257,7 +257,7 @@ mod tests {
         assert!(toml_msg.contains("/d.toml"));
         assert!(toml_msg.contains("invalid TOML"));
 
-        let owned = HookerError::NotOwnedByCaller {
+        let owned = AgentConfigError::NotOwnedByCaller {
             kind: "mcp server",
             name: "github".into(),
             expected: "myapp".into(),
@@ -268,10 +268,10 @@ mod tests {
         assert!(owned_msg.contains("myapp"));
         assert!(owned_msg.contains("otherapp"));
 
-        let other = HookerError::Other(anyhow::anyhow!("misc"));
+        let other = AgentConfigError::Other(anyhow::anyhow!("misc"));
         assert_eq!(format!("{other}"), "misc");
 
-        let drifted = HookerError::ConfigDrifted {
+        let drifted = AgentConfigError::ConfigDrifted {
             path: PathBuf::from("/e/config.json"),
         };
         let drifted_msg = format!("{drifted}");

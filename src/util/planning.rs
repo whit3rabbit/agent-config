@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::plan::{PlannedChange, RefusalReason};
 use crate::util::{fs_atomic, json_patch, md_block};
 
@@ -15,7 +15,7 @@ pub(crate) fn plan_write_file(
     path: &Path,
     content: &[u8],
     make_backup: bool,
-) -> Result<(), HookerError> {
+) -> Result<(), AgentConfigError> {
     match fs::read(path) {
         Ok(current) => {
             if current == content {
@@ -44,7 +44,7 @@ pub(crate) fn plan_write_file(
                 path: path.to_path_buf(),
             });
         }
-        Err(e) => return Err(HookerError::io(path, e)),
+        Err(e) => return Err(AgentConfigError::io(path, e)),
     }
     Ok(())
 }
@@ -69,10 +69,10 @@ pub(crate) fn plan_restore_backup_or_remove(
     changes: &mut Vec<PlannedChange>,
     path: &Path,
     desired_content: &[u8],
-) -> Result<(), HookerError> {
+) -> Result<(), AgentConfigError> {
     let backup = fs_atomic::backup_path(path);
     if backup.exists() {
-        let backup_content = fs::read(&backup).map_err(|e| HookerError::io(&backup, e))?;
+        let backup_content = fs::read(&backup).map_err(|e| AgentConfigError::io(&backup, e))?;
         if backup_content == desired_content {
             changes.push(PlannedChange::RestoreBackup {
                 backup,
@@ -125,24 +125,24 @@ pub(crate) fn plan_set_permissions(changes: &mut Vec<PlannedChange>, path: &Path
     }
 }
 
-/// Plan upserting an ai-hooker fenced markdown block.
+/// Plan upserting an agent-config fenced markdown block.
 pub(crate) fn plan_markdown_upsert(
     changes: &mut Vec<PlannedChange>,
     path: &Path,
     tag: &str,
     body: &str,
-) -> Result<(), HookerError> {
+) -> Result<(), AgentConfigError> {
     let host = fs_atomic::read_to_string_or_empty(path)?;
     let new_host = md_block::upsert(&host, tag, body);
     plan_write_file(changes, path, new_host.as_bytes(), true)
 }
 
-/// Plan removing an ai-hooker fenced markdown block.
+/// Plan removing an agent-config fenced markdown block.
 pub(crate) fn plan_markdown_remove(
     changes: &mut Vec<PlannedChange>,
     path: &Path,
     tag: &str,
-) -> Result<(), HookerError> {
+) -> Result<(), AgentConfigError> {
     let host = fs_atomic::read_to_string_or_empty(path)?;
     let (stripped, removed) = md_block::remove(&host, tag);
     if !removed {
@@ -168,13 +168,13 @@ pub(crate) fn plan_tagged_json_upsert<F>(
     tag: &str,
     entry: Value,
     configure_root: F,
-) -> Result<(), HookerError>
+) -> Result<(), AgentConfigError>
 where
     F: FnOnce(&mut Value),
 {
     let mut root = match json_patch::read_or_empty(path) {
         Ok(root) => root,
-        Err(HookerError::JsonInvalid { .. }) => {
+        Err(AgentConfigError::JsonInvalid { .. }) => {
             changes.push(PlannedChange::Refuse {
                 path: Some(path.to_path_buf()),
                 reason: RefusalReason::InvalidConfig,
@@ -205,7 +205,7 @@ pub(crate) fn plan_tagged_json_remove_under<F>(
     tag: &str,
     is_empty_after: F,
     restore_when_empty: bool,
-) -> Result<(), HookerError>
+) -> Result<(), AgentConfigError>
 where
     F: FnOnce(&Value) -> bool,
 {
@@ -219,7 +219,7 @@ where
 
     let mut root = match json_patch::read_or_empty(path) {
         Ok(root) => root,
-        Err(HookerError::JsonInvalid { .. }) => {
+        Err(AgentConfigError::JsonInvalid { .. }) => {
             changes.push(PlannedChange::Refuse {
                 path: Some(path.to_path_buf()),
                 reason: RefusalReason::InvalidConfig,

@@ -27,7 +27,7 @@ Ok(
             "[ROOT]/.iflow/settings.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.iflow/.ai-hooker-mcp.json",
+            "[ROOT]/.iflow/.agent-config-mcp.json",
         ),
         files: [
             Invalid {
@@ -35,7 +35,7 @@ Ok(
                 reason: "key must be a string at line 1 column 3",
             },
             Missing {
-                path: "[ROOT]/.iflow/.ai-hooker-mcp.json",
+                path: "[ROOT]/.iflow/.agent-config-mcp.json",
             },
         ],
         warnings: [],

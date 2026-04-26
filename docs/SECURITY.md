@@ -1,11 +1,11 @@
 # Security Model
 
 This document describes the security properties, threat model, and
-recommendations for consumers of the `ai-hooker` library.
+recommendations for consumers of the `agent-config` library.
 
 ## Threat Model
 
-`ai-hooker` is a **local coordination** library. Its security boundary is
+`agent-config` is a **local coordination** library. Its security boundary is
 the local filesystem: it prevents one consumer from accidentally clobbering
 another consumer's hooks, MCP servers, or skills in shared config files.
 
@@ -46,9 +46,9 @@ The library records ownership in sidecar JSON ledger files:
 
 | Ledger file | Tracks ownership of |
 |---|---|
-| `<config-dir>/.ai-hooker-mcp.json` | MCP server entries |
-| `<skills-root>/.ai-hooker-skills.json` | Skill directories |
-| `.clinerules/hooks/.ai-hooker-hooks.json` | Cline hook scripts |
+| `<config-dir>/.agent-config-mcp.json` | MCP server entries |
+| `<skills-root>/.agent-config-skills.json` | Skill directories |
+| `.clinerules/hooks/.agent-config-hooks.json` | Cline hook scripts |
 
 ### Content hashes (v2 ledgers)
 
@@ -59,7 +59,7 @@ hash mismatch can be detected.
 
 ### Ownership enforcement
 
-- **Hooks** use inline `_ai_hooker_tag` markers in JSON entries or markdown
+- **Hooks** use inline `_agent_config_tag` markers in JSON entries or markdown
   comment fences. Overwriting an entry with a different tag returns
   `NotOwnedByCaller`.
 - **MCP servers and skills** use sidecar ledgers. Removing or overwriting an
@@ -90,7 +90,7 @@ the existing ancestor chain passes those checks. This prevents:
 - Path traversal via `../` segments in resolved paths.
 
 If the canonicalized path escapes the project root, the operation fails with
-`HookerError::PathResolution`.
+`AgentConfigError::PathResolution`.
 
 `Scope::Local(root)` is a caller-supplied trust boundary. The library verifies
 that resolved write targets stay under the canonicalized root, but it does not
@@ -99,12 +99,14 @@ a symlinked root or a root containing `..`, the canonical destination is treated
 as the project root. Consumers should pass a project root they have already
 chosen intentionally.
 
-`Scope::Global` writes are not containment-checked; they target the user's
-home or config directories by design.
+`Scope::Global` writes are not project-contained, but they still reject a
+symlinked target file before locking or mutating a config target. Global paths
+target the user's home or config directories by design.
 
 ## Atomic Writes
 
-All file modifications go through `write_atomic`, which:
+Integration file modifications go through `util::safe_fs`, which applies the
+scope checks above and then delegates to `write_atomic`, which:
 
 1. Writes to a temporary file in the same directory.
 2. Calls `fsync` on the temp file.

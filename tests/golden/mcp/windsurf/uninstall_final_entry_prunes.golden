@@ -22,14 +22,14 @@ Ok(
             "[ROOT]/.windsurf/mcp_config.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.windsurf/.ai-hooker-mcp.json",
+            "[ROOT]/.windsurf/.agent-config-mcp.json",
         ),
         files: [
             Missing {
                 path: "[ROOT]/.windsurf/mcp_config.json",
             },
             Missing {
-                path: "[ROOT]/.windsurf/.ai-hooker-mcp.json",
+                path: "[ROOT]/.windsurf/.agent-config-mcp.json",
             },
         ],
         warnings: [],

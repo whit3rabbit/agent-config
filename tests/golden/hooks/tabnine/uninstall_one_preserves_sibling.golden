@@ -77,7 +77,7 @@ files:
             "command": "golden hook"
           }
         ],
-        "_ai_hooker_tag": "sibling-hook"
+        "_agent_config_tag": "sibling-hook"
       }
     ]
   }
@@ -97,7 +97,7 @@ files:
             "command": "golden hook"
           }
         ],
-        "_ai_hooker_tag": "golden-hook"
+        "_agent_config_tag": "golden-hook"
       }
     ]
   }

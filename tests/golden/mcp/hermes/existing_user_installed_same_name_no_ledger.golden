@@ -22,14 +22,14 @@ Ok(
             "[HOME]/.hermes/config.yaml",
         ),
         ledger_path: Some(
-            "[HOME]/.hermes/.ai-hooker-mcp.json",
+            "[HOME]/.hermes/.agent-config-mcp.json",
         ),
         files: [
             Exists {
                 path: "[HOME]/.hermes/config.yaml",
             },
             Missing {
-                path: "[HOME]/.hermes/.ai-hooker-mcp.json",
+                path: "[HOME]/.hermes/.agent-config-mcp.json",
             },
         ],
         warnings: [],

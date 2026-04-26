@@ -11,19 +11,19 @@
 //!   assets/              (optional: static files)
 //! ```
 //!
-//! Ownership is tracked in `<skills_root>/.ai-hooker-skills.json` (same
+//! Ownership is tracked in `<skills_root>/.agent-config-skills.json` (same
 //! schema as [`super::ownership`] uses for MCP).
 
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, UninstallReport};
 use crate::plan::{has_refusal, PlannedChange, RefusalReason};
 use crate::spec::{SkillFrontmatter, SkillSpec};
 use crate::util::{file_lock, fs_atomic, ownership, planning};
 
-const LEDGER_FILE: &str = ".ai-hooker-skills.json";
+const LEDGER_FILE: &str = ".agent-config-skills.json";
 const SKILL_MD: &str = "SKILL.md";
 const KIND: &str = "skill";
 
@@ -39,7 +39,7 @@ fn skill_dir(skills_root: &Path, name: &str) -> PathBuf {
 }
 
 /// Returns true if the ledger has an entry for `name`.
-pub(crate) fn is_installed(skills_root: &Path, name: &str) -> Result<bool, HookerError> {
+pub(crate) fn is_installed(skills_root: &Path, name: &str) -> Result<bool, AgentConfigError> {
     SkillSpec::validate_name(name)?;
     ownership::contains(&ledger_path(skills_root), name)
 }
@@ -56,7 +56,10 @@ pub(crate) fn paths_for_status(skills_root: &Path, name: &str) -> (PathBuf, Path
 
 /// Install (or update) a skill under `<skills_root>/<spec.name>/`. Records
 /// ownership in the sidecar ledger.
-pub(crate) fn install(skills_root: &Path, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+pub(crate) fn install(
+    skills_root: &Path,
+    spec: &SkillSpec,
+) -> Result<InstallReport, AgentConfigError> {
     spec.validate()?;
     for asset in &spec.assets {
         validate_relative(&asset.relative_path)?;
@@ -68,7 +71,7 @@ pub(crate) fn install(skills_root: &Path, spec: &SkillSpec) -> Result<InstallRep
         let led = ledger_path(skills_root);
 
         ownership::require_owner(&led, &spec.name, &spec.owner_tag, KIND, dir.exists())?;
-        fs::create_dir_all(skills_root).map_err(|e| HookerError::io(skills_root, e))?;
+        fs::create_dir_all(skills_root).map_err(|e| AgentConfigError::io(skills_root, e))?;
 
         let skill_md_path = dir.join(SKILL_MD);
         fs_atomic::ensure_contained(&skill_md_path, skills_root)?;
@@ -108,7 +111,7 @@ pub(crate) fn install(skills_root: &Path, spec: &SkillSpec) -> Result<InstallRep
 pub(crate) fn plan_install(
     skills_root: &Path,
     spec: &SkillSpec,
-) -> Result<Vec<PlannedChange>, HookerError> {
+) -> Result<Vec<PlannedChange>, AgentConfigError> {
     spec.validate()?;
     for asset in &spec.assets {
         validate_relative(&asset.relative_path)?;
@@ -170,7 +173,7 @@ pub(crate) fn uninstall(
     skills_root: &Path,
     name: &str,
     owner_tag: &str,
-) -> Result<UninstallReport, HookerError> {
+) -> Result<UninstallReport, AgentConfigError> {
     SkillSpec::validate_name(name)?;
 
     let dir = skill_dir(skills_root, name);
@@ -201,7 +204,7 @@ pub(crate) fn uninstall(
 
         if on_disk {
             fs_atomic::ensure_contained(&dir, skills_root)?;
-            fs::remove_dir_all(&dir).map_err(|e| HookerError::io(&dir, e))?;
+            fs::remove_dir_all(&dir).map_err(|e| AgentConfigError::io(&dir, e))?;
             report.removed.push(dir);
         }
 
@@ -219,7 +222,7 @@ pub(crate) fn plan_uninstall(
     skills_root: &Path,
     name: &str,
     owner_tag: &str,
-) -> Result<Vec<PlannedChange>, HookerError> {
+) -> Result<Vec<PlannedChange>, AgentConfigError> {
     SkillSpec::validate_name(name)?;
 
     let mut changes = Vec::new();
@@ -267,9 +270,9 @@ pub(crate) fn plan_uninstall(
 
 /// Reject absolute or `..`-containing relative paths so callers cannot
 /// escape the skill directory via crafted asset paths.
-fn validate_relative(p: &Path) -> Result<(), HookerError> {
+fn validate_relative(p: &Path) -> Result<(), AgentConfigError> {
     if p.is_absolute() {
-        return Err(HookerError::Other(anyhow::anyhow!(
+        return Err(AgentConfigError::Other(anyhow::anyhow!(
             "skill asset path must be relative (got {p:?})"
         )));
     }
@@ -277,7 +280,7 @@ fn validate_relative(p: &Path) -> Result<(), HookerError> {
         match comp {
             Component::CurDir | Component::Normal(_) => {}
             _ => {
-                return Err(HookerError::Other(anyhow::anyhow!(
+                return Err(AgentConfigError::Other(anyhow::anyhow!(
                     "skill asset path must not contain `..` or root (got {p:?})"
                 )))
             }
@@ -473,7 +476,7 @@ mod tests {
             .build();
         let err = install(dir.path(), &spec).unwrap_err();
 
-        assert!(matches!(err, HookerError::PathResolution(_)));
+        assert!(matches!(err, AgentConfigError::PathResolution(_)));
         assert_eq!(fs::read(&manifest).unwrap(), original_manifest);
         assert!(!outside.path().join("run.sh").exists());
     }
@@ -492,7 +495,7 @@ mod tests {
 
         let err = uninstall(dir.path(), "alpha", "myapp").unwrap_err();
 
-        assert!(matches!(err, HookerError::PathResolution(_)));
+        assert!(matches!(err, AgentConfigError::PathResolution(_)));
         assert!(dir.path().join("alpha").exists());
         assert!(outside.path().exists());
     }
@@ -511,7 +514,7 @@ mod tests {
             })
             .build();
         let err = install(dir.path(), &spec).unwrap_err();
-        assert!(matches!(err, HookerError::Other(_)));
+        assert!(matches!(err, AgentConfigError::Other(_)));
     }
 
     #[test]
@@ -528,7 +531,7 @@ mod tests {
             })
             .build();
         let err = install(dir.path(), &spec).unwrap_err();
-        assert!(matches!(err, HookerError::Other(_)));
+        assert!(matches!(err, AgentConfigError::Other(_)));
     }
 
     #[test]
@@ -557,7 +560,7 @@ mod tests {
         let dir = tempdir().unwrap();
         install(dir.path(), &basic_spec("alpha", "appA")).unwrap();
         let err = uninstall(dir.path(), "alpha", "appB").unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
         assert!(dir.path().join("alpha").exists());
     }
 
@@ -566,7 +569,7 @@ mod tests {
         let dir = tempdir().unwrap();
         install(dir.path(), &basic_spec("alpha", "appA")).unwrap();
         let err = install(dir.path(), &basic_spec("alpha", "appB")).unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
     }
 
     #[test]
@@ -578,7 +581,7 @@ mod tests {
         let err = install(dir.path(), &basic_spec("user-skill", "myapp")).unwrap_err();
         assert!(matches!(
             err,
-            HookerError::NotOwnedByCaller { actual: None, .. }
+            AgentConfigError::NotOwnedByCaller { actual: None, .. }
         ));
     }
 
@@ -591,7 +594,7 @@ mod tests {
         let err = uninstall(dir.path(), "user-skill", "myapp").unwrap_err();
         assert!(matches!(
             err,
-            HookerError::NotOwnedByCaller { actual: None, .. }
+            AgentConfigError::NotOwnedByCaller { actual: None, .. }
         ));
     }
 

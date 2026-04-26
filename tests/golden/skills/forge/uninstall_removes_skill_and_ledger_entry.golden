@@ -24,7 +24,7 @@ Ok(
             "[ROOT]/.forge/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.forge/skills/.ai-hooker-skills.json",
+            "[ROOT]/.forge/skills/.agent-config-skills.json",
         ),
         files: [
             Missing {
@@ -62,7 +62,7 @@ directories:
 - .forge/skills
 - .forge/skills/sibling-skill
 files:
-- .forge/skills/.ai-hooker-skills.json
+- .forge/skills/.agent-config-skills.json
   content:
 ```text
 {

@@ -26,7 +26,7 @@ Ok(
             "[ROOT]/.amp/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.amp/skills/.ai-hooker-skills.json",
+            "[ROOT]/.amp/skills/.agent-config-skills.json",
         ),
         files: [
             Exists {
@@ -58,7 +58,7 @@ Ok(
                     "other-owner",
                 ),
                 path: Some(
-                    "[ROOT]/.amp/skills/.ai-hooker-skills.json",
+                    "[ROOT]/.amp/skills/.agent-config-skills.json",
                 ),
             },
         ],
@@ -74,7 +74,7 @@ directories:
 - .amp/skills
 - .amp/skills/golden-skill
 files:
-- .amp/skills/.ai-hooker-skills.json
+- .amp/skills/.agent-config-skills.json
   content:
 ```text
 {

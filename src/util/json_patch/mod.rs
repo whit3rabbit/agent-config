@@ -1,7 +1,7 @@
 //! Idempotent insert/remove of consumer-tagged objects inside a settings JSON
 //! file.
 //!
-//! Every entry this module writes carries an `_ai_hooker_tag` marker so we can
+//! Every entry this module writes carries an `_agent_config_tag` marker so we can
 //! find and remove our own work without disturbing entries the user added by
 //! hand.
 //!

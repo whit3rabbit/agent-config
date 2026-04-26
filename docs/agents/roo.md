@@ -1,6 +1,6 @@
 # Roo Code
 
-ID: `roo` — `ai_hooker::by_id("roo")`
+ID: `roo` — `agent_config::by_id("roo")`
 
 Roo Code is a Cline fork; despite shared lineage, it uses a distinct rules
 directory and is treated as a separate integration.
@@ -23,13 +23,8 @@ Not supported. Prompt-level integration only.
 
 ### User scope (`Scope::Global`)
 
-| | |
-| --- | --- |
-| Path | `~/.roo/rules/` |
-| Format | Markdown or text files |
-
-Roo Code loads rules from workspace rules first, then global rules (workspace
-takes precedence in case of conflicts).
+Not supported in v0.1. Roo Code can read global rules, but this crate only
+writes project-local rules.
 
 ### AGENTS.md support
 

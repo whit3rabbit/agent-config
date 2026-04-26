@@ -24,14 +24,14 @@ Ok(
             "[ROOT]/.windsurf/mcp_config.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.windsurf/.ai-hooker-mcp.json",
+            "[ROOT]/.windsurf/.agent-config-mcp.json",
         ),
         files: [
             Exists {
                 path: "[ROOT]/.windsurf/mcp_config.json",
             },
             Exists {
-                path: "[ROOT]/.windsurf/.ai-hooker-mcp.json",
+                path: "[ROOT]/.windsurf/.agent-config-mcp.json",
             },
         ],
         warnings: [],
@@ -60,7 +60,7 @@ ROOT tree:
 directories:
 - .windsurf
 files:
-- .windsurf/.ai-hooker-mcp.json
+- .windsurf/.agent-config-mcp.json
   content:
 ```text
 {

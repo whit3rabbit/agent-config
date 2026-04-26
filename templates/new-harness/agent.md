@@ -12,7 +12,7 @@ can judge whether the upstream contract may have moved.
 
 # <Display Name>
 
-ID: `<id>` — `ai_hooker::by_id("<id>")`
+ID: `<id>` — `agent_config::by_id("<id>")`
 
 ## Surfaces
 
@@ -57,7 +57,7 @@ variants for those surfaces). The plan methods are side-effect-free.
         "hooks": [
           { "type": "command", "command": "myapp hook <id>" }
         ],
-        "_ai_hooker_tag": "myapp"
+        "_agent_config_tag": "myapp"
       }
     ]
   }
@@ -113,9 +113,9 @@ fenced span in place.
 | Format | JSON |
 | Mechanism | `mcpServers` object map |
 
-Ownership is recorded in a sidecar `<config-dir>/.ai-hooker-mcp.json` ledger
+Ownership is recorded in a sidecar `<config-dir>/.agent-config-mcp.json` ledger
 (schema v2: includes a SHA-256 content hash for drift detection). Multiple
-consumers coexist; `uninstall_mcp` returns `HookerError::NotOwnedByCaller`
+consumers coexist; `uninstall_mcp` returns `AgentConfigError::NotOwnedByCaller`
 on owner mismatch or hand-installed entries.
 
 ### Example
@@ -142,7 +142,7 @@ on owner mismatch or hand-installed entries.
 | User scope | `~/.<id>/skills/<name>/` |
 | Project scope | `<root>/.<id>/skills/<name>/` |
 
-Ownership lives in `<skills_root>/.ai-hooker-skills.json`.
+Ownership lives in `<skills_root>/.agent-config-skills.json`.
 
 ### Format
 

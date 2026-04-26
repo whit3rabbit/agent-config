@@ -1,6 +1,6 @@
 # Qoder CLI
 
-ID: `qodercli` — `ai_hooker::by_id("qodercli")`
+ID: `qodercli` — `agent_config::by_id("qodercli")`
 
 ## Surfaces
 
@@ -37,7 +37,7 @@ ID: `qodercli` — `ai_hooker::by_id("qodercli")`
 }
 ```
 
-Ownership is recorded in a sidecar `<config-dir>/.ai-hooker-mcp.json` ledger.
+Ownership is recorded in a sidecar `<config-dir>/.agent-config-mcp.json` ledger.
 Qoder's CLI commands `qodercli mcp add/remove/list` write the same shape
 directly.
 

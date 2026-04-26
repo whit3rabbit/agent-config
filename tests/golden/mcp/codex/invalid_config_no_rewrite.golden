@@ -36,7 +36,7 @@ Ok(
             "[ROOT]/.codex/config.toml",
         ),
         ledger_path: Some(
-            "[ROOT]/.codex/.ai-hooker-mcp.json",
+            "[ROOT]/.codex/.agent-config-mcp.json",
         ),
         files: [
             Invalid {
@@ -44,7 +44,7 @@ Ok(
                 reason: "TOML parse error at line 1, column 13\n  |\n1 | [mcp_servers\n  |             ^\ninvalid table header\nexpected `.`, `]`\n",
             },
             Missing {
-                path: "[ROOT]/.codex/.ai-hooker-mcp.json",
+                path: "[ROOT]/.codex/.agent-config-mcp.json",
             },
         ],
         warnings: [],

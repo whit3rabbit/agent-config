@@ -1,6 +1,6 @@
 # Qwen Code
 
-ID: `qwen` — `ai_hooker::by_id("qwen")`
+ID: `qwen` — `agent_config::by_id("qwen")`
 
 Qwen Code is Alibaba's terminal coding agent, a Gemini-CLI fork. The on-disk
 shape mirrors Gemini's.
@@ -40,7 +40,7 @@ shape mirrors Gemini's.
 }
 ```
 
-Ownership is recorded in a sidecar `<config-dir>/.ai-hooker-mcp.json` ledger.
+Ownership is recorded in a sidecar `<config-dir>/.agent-config-mcp.json` ledger.
 
 ## Skills
 

@@ -1,6 +1,6 @@
 # Google Antigravity
 
-ID: `antigravity` — `ai_hooker::by_id("antigravity")`
+ID: `antigravity` — `agent_config::by_id("antigravity")`
 
 (Google's agent-first IDE, Gemini-backed.)
 
@@ -28,7 +28,7 @@ Not supported. Prompt-level integration only.
 
 Not supported in v0.1. Antigravity's user rules are configured via the
 editor settings UI rather than a documented file path. Calling with
-`Scope::Global` returns `HookerError::UnsupportedScope`.
+`Scope::Global` returns `AgentConfigError::UnsupportedScope`.
 
 ## Skills
 

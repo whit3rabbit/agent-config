@@ -9,7 +9,7 @@
 //!       {
 //!         "matcher": "Bash",
 //!         "hooks": [{ "type": "command", "command": "..." }],
-//!         "_ai_hooker_tag": "myapp"
+//!         "_agent_config_tag": "myapp"
 //!       }
 //!     ]
 //!   }
@@ -24,7 +24,7 @@ use std::path::PathBuf;
 use serde_json::json;
 
 use crate::agents::planning as agent_planning;
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
 use crate::plan::{has_refusal, InstallPlan, PlanTarget, UninstallPlan};
@@ -32,7 +32,8 @@ use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
 use crate::status::StatusReport;
 use crate::util::{
-    file_lock, fs_atomic, json_patch, mcp_json_object, md_block, ownership, planning, skills_dir,
+    file_lock, fs_atomic, json_patch, mcp_json_object, md_block, ownership, planning, safe_fs,
+    skills_dir,
 };
 
 /// Claude Code (Anthropic's official CLI).
@@ -44,14 +45,14 @@ impl ClaudeAgent {
         Self
     }
 
-    fn settings_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn settings_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::claude_home()?.join("settings.json"),
             Scope::Local(p) => p.join(".claude").join("settings.json"),
         })
     }
 
-    fn memory_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn memory_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::claude_home()?.join("CLAUDE.md"),
             Scope::Local(p) => p.join("CLAUDE.md"),
@@ -64,7 +65,7 @@ impl ClaudeAgent {
     ///
     /// Local → `<root>/.mcp.json` (the canonical project-shared MCP file
     /// Anthropic's own CLI writes; *not* under `.claude/`).
-    fn mcp_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::claude_mcp_user_file()?,
             Scope::Local(p) => p.join(".mcp.json"),
@@ -72,7 +73,7 @@ impl ClaudeAgent {
     }
 
     /// `~/.claude/skills/` (Global) or `<root>/.claude/skills/` (Local).
-    fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::claude_home()?.join("skills"),
             Scope::Local(p) => p.join(".claude").join("skills"),
@@ -99,14 +100,18 @@ impl Integration for ClaudeAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let settings = Self::settings_path(scope)?;
         let presence = json_patch::tagged_hook_presence(&settings, &["hooks"], tag)?;
         Ok(StatusReport::for_tagged_hook(tag, settings, presence))
     }
 
-    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install(
+        &self,
+        scope: &Scope,
+        spec: &HookSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let target = PlanTarget::Hook {
             integration_id: Integration::id(self),
@@ -142,7 +147,7 @@ impl Integration for ClaudeAgent {
         Ok(InstallPlan::from_changes(target, changes))
     }
 
-    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let target = PlanTarget::Hook {
             integration_id: Integration::id(self),
@@ -169,7 +174,7 @@ impl Integration for ClaudeAgent {
         Ok(UninstallPlan::from_changes(target, changes))
     }
 
-    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
+    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let mut report = InstallReport::default();
 
@@ -196,7 +201,7 @@ impl Integration for ClaudeAgent {
 
             if changed {
                 let bytes = json_patch::to_pretty(&root);
-                let outcome = fs_atomic::write_atomic(&settings, &bytes, true)?;
+                let outcome = safe_fs::write(scope, &settings, &bytes, true)?;
                 if outcome.existed {
                     report.patched.push(outcome.path.clone());
                 } else {
@@ -216,7 +221,7 @@ impl Integration for ClaudeAgent {
             let _memory_lock = file_lock::FileLock::acquire(&memory)?;
             let host = fs_atomic::read_to_string_or_empty(&memory)?;
             let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
-            let outcome = fs_atomic::write_atomic(&memory, new_host.as_bytes(), true)?;
+            let outcome = safe_fs::write(scope, &memory, new_host.as_bytes(), true)?;
             if !outcome.no_change {
                 if outcome.existed {
                     report.patched.push(outcome.path.clone());
@@ -233,7 +238,7 @@ impl Integration for ClaudeAgent {
         Ok(report)
     }
 
-    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, HookerError> {
+    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let mut report = UninstallReport::default();
 
@@ -247,13 +252,13 @@ impl Integration for ClaudeAgent {
             if changed {
                 let is_now_empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
                 let bytes = json_patch::to_pretty(&root);
-                if is_now_empty && fs_atomic::restore_backup_if_matches(&settings, &bytes)? {
+                if is_now_empty && safe_fs::restore_backup_if_matches(scope, &settings, &bytes)? {
                     report.restored.push(settings.clone());
                 } else if is_now_empty {
-                    fs_atomic::remove_if_exists(&settings)?;
+                    safe_fs::remove_file(scope, &settings)?;
                     report.removed.push(settings.clone());
                 } else {
-                    fs_atomic::write_atomic(&settings, &bytes, false)?;
+                    safe_fs::write(scope, &settings, &bytes, false)?;
                     report.patched.push(settings.clone());
                 }
             }
@@ -266,14 +271,14 @@ impl Integration for ClaudeAgent {
         let (stripped, removed) = md_block::remove(&host, tag);
         if removed {
             if stripped.trim().is_empty() {
-                if fs_atomic::restore_backup_if_matches(&memory, stripped.as_bytes())? {
+                if safe_fs::restore_backup_if_matches(scope, &memory, stripped.as_bytes())? {
                     report.restored.push(memory.clone());
                 } else {
-                    fs_atomic::remove_if_exists(&memory)?;
+                    safe_fs::remove_file(scope, &memory)?;
                     report.removed.push(memory.clone());
                 }
             } else {
-                fs_atomic::write_atomic(&memory, stripped.as_bytes(), false)?;
+                safe_fs::write(scope, &memory, stripped.as_bytes(), false)?;
                 report.patched.push(memory.clone());
             }
         }
@@ -299,7 +304,7 @@ impl McpSurface for ClaudeAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         let cfg = Self::mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -315,7 +320,11 @@ impl McpSurface for ClaudeAgent {
         ))
     }
 
-    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         spec.validate()?;
         let target = PlanTarget::Mcp {
             integration_id: McpSurface::id(self),
@@ -348,7 +357,7 @@ impl McpSurface for ClaudeAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let target = PlanTarget::Mcp {
@@ -364,7 +373,11 @@ impl McpSurface for ClaudeAgent {
         Ok(UninstallPlan::from_changes(target, changes))
     }
 
-    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
+    fn install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
         spec.validate_local_secret_policy(scope)?;
@@ -378,7 +391,7 @@ impl McpSurface for ClaudeAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::mcp_path(scope)?;
@@ -402,7 +415,7 @@ impl SkillSurface for ClaudeAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
         let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
@@ -421,7 +434,7 @@ impl SkillSurface for ClaudeAgent {
         &self,
         scope: &Scope,
         spec: &SkillSpec,
-    ) -> Result<InstallPlan, HookerError> {
+    ) -> Result<InstallPlan, AgentConfigError> {
         spec.validate()?;
         let target = PlanTarget::Skill {
             integration_id: SkillSurface::id(self),
@@ -439,7 +452,7 @@ impl SkillSurface for ClaudeAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         SkillSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let target = PlanTarget::Skill {
@@ -453,7 +466,11 @@ impl SkillSurface for ClaudeAgent {
         Ok(UninstallPlan::from_changes(target, changes))
     }
 
-    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+    fn install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         spec.validate()?;
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
@@ -465,7 +482,7 @@ impl SkillSurface for ClaudeAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         SkillSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let root = Self::skills_root(scope)?;
@@ -534,7 +551,7 @@ mod tests {
             json!("command")
         );
         assert_eq!(
-            v["hooks"]["PreToolUse"][0]["_ai_hooker_tag"],
+            v["hooks"]["PreToolUse"][0]["_agent_config_tag"],
             json!("alpha")
         );
     }
@@ -596,9 +613,9 @@ mod tests {
         agent.install(&scope, &spec).unwrap();
 
         let md = std::fs::read_to_string(dir.path().join("CLAUDE.md")).unwrap();
-        assert!(md.contains("<!-- BEGIN AI-HOOKER:alpha -->"));
+        assert!(md.contains("<!-- BEGIN AGENT-CONFIG:alpha -->"));
         assert!(md.contains("Use myapp prefix."));
-        assert!(md.contains("<!-- END AI-HOOKER:alpha -->"));
+        assert!(md.contains("<!-- END AGENT-CONFIG:alpha -->"));
     }
 
     #[test]
@@ -666,7 +683,7 @@ mod tests {
         let agent = ClaudeAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         let err = agent.install(&scope, &local_spec("alpha")).unwrap_err();
-        assert!(matches!(err, HookerError::JsonInvalid { .. }));
+        assert!(matches!(err, AgentConfigError::JsonInvalid { .. }));
     }
 
     #[test]
@@ -763,7 +780,7 @@ mod tests {
             .install_mcp(&scope, &local_mcp_spec("github", "appA"))
             .unwrap();
         let err = agent.uninstall_mcp(&scope, "github", "appB").unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
     }
 
     #[test]
@@ -798,6 +815,6 @@ mod tests {
             secret_policy: crate::spec::SecretPolicy::RefuseInlineSecretsInLocalScope,
         };
         let err = agent.install_mcp(&scope, &spec).unwrap_err();
-        assert!(matches!(err, HookerError::InvalidTag { .. }));
+        assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
     }
 }

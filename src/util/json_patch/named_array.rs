@@ -7,7 +7,7 @@
 
 use serde_json::Value;
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 
 use super::common::{ensure_array, prune_empty_path, traverse_array, traverse_array_mut};
 
@@ -23,7 +23,7 @@ pub(crate) fn upsert_named_array_entry(
     name_field: &str,
     name: &str,
     value: Value,
-) -> Result<bool, HookerError> {
+) -> Result<bool, AgentConfigError> {
     let arr = ensure_array(root, path)?;
     let idx = arr.iter().position(|v| {
         v.as_object()
@@ -52,7 +52,7 @@ pub(crate) fn remove_named_array_entry(
     path: &[&str],
     name_field: &str,
     name: &str,
-) -> Result<bool, HookerError> {
+) -> Result<bool, AgentConfigError> {
     let Some(arr) = traverse_array_mut(root, path) else {
         return Ok(false);
     };

@@ -3,15 +3,15 @@
 //! Each block is delimited by HTML comments keyed on a tag:
 //!
 //! ```text
-//! <!-- BEGIN AI-HOOKER:app -->
+//! <!-- BEGIN AGENT-CONFIG:app -->
 //! ...content...
-//! <!-- END AI-HOOKER:app -->
+//! <!-- END AGENT-CONFIG:app -->
 //! ```
 //!
 //! Multiple consumers can coexist by using distinct tags. The fence is invisible
 //! when the markdown is rendered, and stable enough to grep over.
 
-const FENCE_PREFIX: &str = "AI-HOOKER";
+const FENCE_PREFIX: &str = "AGENT-CONFIG";
 
 /// Returns the BEGIN/END marker pair for `tag`.
 fn markers(tag: &str) -> (String, String) {
@@ -123,7 +123,7 @@ fn find_block(host: &str, begin: &str, end: &str) -> Option<(usize, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::HookerError;
+    use crate::error::AgentConfigError;
     use crate::util::{file_lock, fs_atomic};
     use pretty_assertions::assert_eq;
     use std::sync::{Arc, Barrier};
@@ -159,25 +159,25 @@ mod tests {
         let out = upsert("", "app", "hello");
         assert_eq!(
             out,
-            "<!-- BEGIN AI-HOOKER:app -->\nhello\n<!-- END AI-HOOKER:app -->\n"
+            "<!-- BEGIN AGENT-CONFIG:app -->\nhello\n<!-- END AGENT-CONFIG:app -->\n"
         );
     }
 
     #[test]
     fn upsert_appends_with_separator_on_existing_host() {
         let out = upsert("# Title\n\nIntro.\n", "app", "hello");
-        assert!(out.starts_with("# Title\n\nIntro.\n\n<!-- BEGIN AI-HOOKER:app -->\n"));
-        assert!(out.ends_with("<!-- END AI-HOOKER:app -->\n"));
+        assert!(out.starts_with("# Title\n\nIntro.\n\n<!-- BEGIN AGENT-CONFIG:app -->\n"));
+        assert!(out.ends_with("<!-- END AGENT-CONFIG:app -->\n"));
     }
 
     #[test]
     fn upsert_replaces_in_place() {
         let host =
-            "# Top\n\n<!-- BEGIN AI-HOOKER:app -->\nold\n<!-- END AI-HOOKER:app -->\n\n# Bottom\n";
+            "# Top\n\n<!-- BEGIN AGENT-CONFIG:app -->\nold\n<!-- END AGENT-CONFIG:app -->\n\n# Bottom\n";
         let out = upsert(host, "app", "new");
         assert_eq!(
             out,
-            "# Top\n\n<!-- BEGIN AI-HOOKER:app -->\nnew\n<!-- END AI-HOOKER:app -->\n\n# Bottom\n"
+            "# Top\n\n<!-- BEGIN AGENT-CONFIG:app -->\nnew\n<!-- END AGENT-CONFIG:app -->\n\n# Bottom\n"
         );
     }
 
@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn malformed_detects_incomplete_or_duplicate_fence() {
-        assert!(malformed("<!-- BEGIN AI-HOOKER:app -->\nbody\n", "app"));
+        assert!(malformed("<!-- BEGIN AGENT-CONFIG:app -->\nbody\n", "app"));
         let duplicated = format!("{}\n{}", upsert("", "app", "one"), upsert("", "app", "two"));
         assert!(malformed(&duplicated, "app"));
         assert!(!malformed(&upsert("", "app", "ok"), "app"));
@@ -211,7 +211,7 @@ mod tests {
         let host = upsert("# A\n", "app", "body");
         let (stripped, removed) = remove(&host, "app");
         assert!(removed);
-        assert!(!stripped.contains("AI-HOOKER:app"));
+        assert!(!stripped.contains("AGENT-CONFIG:app"));
         // Should not have ended up with double-blank lines between '# A' and EOF.
         assert!(!stripped.contains("\n\n\n"));
     }
@@ -230,7 +230,7 @@ mod tests {
         let (after_remove, _) = remove(&with_block, "app");
         // Don't require exact equality (whitespace may differ by one newline)
         // but require the block is gone and the prose is preserved verbatim.
-        assert!(!after_remove.contains("AI-HOOKER"));
+        assert!(!after_remove.contains("AGENT-CONFIG"));
         assert!(after_remove.contains("# Top"));
         assert!(after_remove.contains("Body."));
     }
@@ -257,7 +257,7 @@ mod tests {
                     let host = fs_atomic::read_to_string_or_empty(&path_a)?;
                     let updated = upsert(&host, "alpha", "Alpha body.");
                     fs_atomic::write_atomic(&path_a, updated.as_bytes(), true)?;
-                    Ok::<(), HookerError>(())
+                    Ok::<(), AgentConfigError>(())
                 })
             },
             move || {
@@ -265,7 +265,7 @@ mod tests {
                     let host = fs_atomic::read_to_string_or_empty(&path_b)?;
                     let updated = upsert(&host, "beta", "Beta body.");
                     fs_atomic::write_atomic(&path_b, updated.as_bytes(), true)?;
-                    Ok::<(), HookerError>(())
+                    Ok::<(), AgentConfigError>(())
                 })
             },
         );
@@ -273,9 +273,9 @@ mod tests {
         ra.unwrap();
         rb.unwrap();
         let text = std::fs::read_to_string(path).unwrap();
-        assert!(text.contains("BEGIN AI-HOOKER:alpha"));
-        assert!(text.contains("BEGIN AI-HOOKER:beta"));
-        assert_eq!(text.matches("BEGIN AI-HOOKER:alpha").count(), 1);
-        assert_eq!(text.matches("BEGIN AI-HOOKER:beta").count(), 1);
+        assert!(text.contains("BEGIN AGENT-CONFIG:alpha"));
+        assert!(text.contains("BEGIN AGENT-CONFIG:beta"));
+        assert_eq!(text.matches("BEGIN AGENT-CONFIG:alpha").count(), 1);
+        assert_eq!(text.matches("BEGIN AGENT-CONFIG:beta").count(), 1);
     }
 }

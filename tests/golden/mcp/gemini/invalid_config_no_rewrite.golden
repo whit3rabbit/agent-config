@@ -27,7 +27,7 @@ Ok(
             "[ROOT]/.gemini/settings.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.gemini/.ai-hooker-mcp.json",
+            "[ROOT]/.gemini/.agent-config-mcp.json",
         ),
         files: [
             Invalid {
@@ -35,7 +35,7 @@ Ok(
                 reason: "key must be a string at line 1 column 3",
             },
             Missing {
-                path: "[ROOT]/.gemini/.ai-hooker-mcp.json",
+                path: "[ROOT]/.gemini/.agent-config-mcp.json",
             },
         ],
         warnings: [],

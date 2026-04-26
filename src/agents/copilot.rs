@@ -27,14 +27,16 @@ use std::path::PathBuf;
 use serde_json::json;
 
 use crate::agents::planning as agent_planning;
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
 use crate::plan::{has_refusal, InstallPlan, PlanTarget, RefusalReason, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{file_lock, fs_atomic, mcp_json_map, md_block, ownership, planning, skills_dir};
+use crate::util::{
+    file_lock, fs_atomic, mcp_json_map, md_block, ownership, planning, safe_fs, skills_dir,
+};
 
 /// GitHub Copilot.
 pub struct CopilotAgent;
@@ -45,11 +47,11 @@ impl CopilotAgent {
         Self
     }
 
-    fn hooks_file(scope: &Scope, tag: &str) -> Result<PathBuf, HookerError> {
+    fn hooks_file(scope: &Scope, tag: &str) -> Result<PathBuf, AgentConfigError> {
         let root = match scope {
             Scope::Local(p) => p,
             Scope::Global => {
-                return Err(HookerError::UnsupportedScope {
+                return Err(AgentConfigError::UnsupportedScope {
                     id: "copilot",
                     scope: ScopeKind::Global,
                 });
@@ -61,9 +63,9 @@ impl CopilotAgent {
             .join(format!("{tag}-rewrite.json")))
     }
 
-    fn instructions_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn instructions_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         let Scope::Local(root) = scope else {
-            return Err(HookerError::UnsupportedScope {
+            return Err(AgentConfigError::UnsupportedScope {
                 id: "copilot",
                 scope: ScopeKind::Global,
             });
@@ -71,14 +73,14 @@ impl CopilotAgent {
         Ok(root.join(".github").join("copilot-instructions.md"))
     }
 
-    fn mcp_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::home_dir()?.join(".copilot").join("mcp-config.json"),
             Scope::Local(root) => root.join(".mcp.json"),
         })
     }
 
-    fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::home_dir()?.join(".copilot").join("skills"),
             Scope::Local(root) => root.join(".github").join("skills"),
@@ -105,13 +107,17 @@ impl Integration for CopilotAgent {
         &[ScopeKind::Local]
     }
 
-    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let p = Self::hooks_file(scope, tag)?;
         Ok(StatusReport::for_file_hook(tag, p))
     }
 
-    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install(
+        &self,
+        scope: &Scope,
+        spec: &HookSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let target = PlanTarget::Hook {
             integration_id: Integration::id(self),
@@ -120,7 +126,7 @@ impl Integration for CopilotAgent {
         };
         let p = match Self::hooks_file(scope, &spec.tag) {
             Ok(p) => p,
-            Err(HookerError::UnsupportedScope { .. }) => {
+            Err(AgentConfigError::UnsupportedScope { .. }) => {
                 return Ok(InstallPlan::refused(
                     target,
                     None,
@@ -158,7 +164,7 @@ impl Integration for CopilotAgent {
         Ok(InstallPlan::from_changes(target, changes))
     }
 
-    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let target = PlanTarget::Hook {
             integration_id: Integration::id(self),
@@ -167,7 +173,7 @@ impl Integration for CopilotAgent {
         };
         let p = match Self::hooks_file(scope, tag) {
             Ok(p) => p,
-            Err(HookerError::UnsupportedScope { .. }) => {
+            Err(AgentConfigError::UnsupportedScope { .. }) => {
                 return Ok(UninstallPlan::refused(
                     target,
                     None,
@@ -183,7 +189,7 @@ impl Integration for CopilotAgent {
         Ok(UninstallPlan::from_changes(target, changes))
     }
 
-    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
+    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let mut report = InstallReport::default();
 
@@ -208,7 +214,7 @@ impl Integration for CopilotAgent {
             b.push(b'\n');
             b
         };
-        let outcome = fs_atomic::write_atomic(&p, &bytes, true)?;
+        let outcome = safe_fs::write(scope, &p, &bytes, true)?;
         if outcome.no_change {
             report.already_installed = true;
         } else if outcome.existed {
@@ -226,7 +232,7 @@ impl Integration for CopilotAgent {
             file_lock::with_lock(&instr, || {
                 let host = fs_atomic::read_to_string_or_empty(&instr)?;
                 let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
-                let outcome = fs_atomic::write_atomic(&instr, new_host.as_bytes(), true)?;
+                let outcome = safe_fs::write(scope, &instr, new_host.as_bytes(), true)?;
                 if outcome.existed && !outcome.no_change {
                     report.patched.push(outcome.path.clone());
                     report.already_installed = false;
@@ -237,21 +243,21 @@ impl Integration for CopilotAgent {
                 if let Some(b) = outcome.backup {
                     report.backed_up.push(b);
                 }
-                Ok::<(), HookerError>(())
+                Ok::<(), AgentConfigError>(())
             })?;
         }
 
         Ok(report)
     }
 
-    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, HookerError> {
+    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let mut report = UninstallReport::default();
 
         let p = Self::hooks_file(scope, tag)?;
         scope.ensure_contained(&p)?;
         if p.exists() {
-            fs_atomic::remove_if_exists(&p)?;
+            safe_fs::remove_file(scope, &p)?;
             report.removed.push(p.clone());
 
             // Tidy: remove .github/hooks/ if empty.
@@ -260,7 +266,7 @@ impl Integration for CopilotAgent {
                     .map(|mut it| it.next().is_none())
                     .unwrap_or(false)
                 {
-                    let _ = std::fs::remove_dir(parent);
+                    let _ = safe_fs::remove_empty_dir(scope, parent);
                 }
             }
         }
@@ -272,18 +278,18 @@ impl Integration for CopilotAgent {
             let (stripped, removed) = md_block::remove(&host, tag);
             if removed {
                 if stripped.trim().is_empty() {
-                    if fs_atomic::restore_backup_if_matches(&instr, stripped.as_bytes())? {
+                    if safe_fs::restore_backup_if_matches(scope, &instr, stripped.as_bytes())? {
                         report.restored.push(instr.clone());
                     } else {
-                        fs_atomic::remove_if_exists(&instr)?;
+                        safe_fs::remove_file(scope, &instr)?;
                         report.removed.push(instr.clone());
                     }
                 } else {
-                    fs_atomic::write_atomic(&instr, stripped.as_bytes(), false)?;
+                    safe_fs::write(scope, &instr, stripped.as_bytes(), false)?;
                     report.patched.push(instr.clone());
                 }
             }
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
 
         if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
@@ -307,7 +313,7 @@ impl McpSurface for CopilotAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         let cfg = Self::mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -328,7 +334,11 @@ impl McpSurface for CopilotAgent {
         ))
     }
 
-    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::mcp_json_map_install(
             McpSurface::id(self),
             scope,
@@ -345,7 +355,7 @@ impl McpSurface for CopilotAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::mcp_json_map_uninstall(
             McpSurface::id(self),
             scope,
@@ -357,7 +367,11 @@ impl McpSurface for CopilotAgent {
         )
     }
 
-    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
+    fn install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
         spec.validate_local_secret_policy(scope)?;
@@ -378,7 +392,7 @@ impl McpSurface for CopilotAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::mcp_path(scope)?;
@@ -410,7 +424,7 @@ impl SkillSurface for CopilotAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
         let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
@@ -429,7 +443,7 @@ impl SkillSurface for CopilotAgent {
         &self,
         scope: &Scope,
         spec: &SkillSpec,
-    ) -> Result<InstallPlan, HookerError> {
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::skill_install(
             SkillSurface::id(self),
             scope,
@@ -443,7 +457,7 @@ impl SkillSurface for CopilotAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::skill_uninstall(
             SkillSurface::id(self),
             scope,
@@ -453,7 +467,11 @@ impl SkillSurface for CopilotAgent {
         )
     }
 
-    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+    fn install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
@@ -464,7 +482,7 @@ impl SkillSurface for CopilotAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
@@ -557,7 +575,7 @@ mod tests {
     fn rejects_global_scope() {
         let agent = CopilotAgent::new();
         let err = agent.is_installed(&Scope::Global, "alpha").unwrap_err();
-        assert!(matches!(err, HookerError::UnsupportedScope { .. }));
+        assert!(matches!(err, AgentConfigError::UnsupportedScope { .. }));
     }
 
     #[test]
@@ -594,6 +612,6 @@ mod tests {
             .install_mcp(&scope, &mcp_spec("memory", "appA"))
             .unwrap();
         let err = agent.uninstall_mcp(&scope, "memory", "appB").unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
     }
 }

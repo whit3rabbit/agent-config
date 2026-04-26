@@ -27,7 +27,7 @@ Ok(
             "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
         ),
         ledger_path: Some(
-            "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.ai-hooker-mcp.json",
+            "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.agent-config-mcp.json",
         ),
         files: [
             Invalid {
@@ -35,7 +35,7 @@ Ok(
                 reason: "key must be a string at line 1 column 3",
             },
             Missing {
-                path: "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.ai-hooker-mcp.json",
+                path: "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.agent-config-mcp.json",
             },
         ],
         warnings: [],

@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::plan::{InstallPlan, PlanTarget, PlanWarning, RefusalReason, UninstallPlan};
 use crate::scope::Scope;
 use crate::spec::{HookSpec, McpSpec, SkillSpec};
@@ -14,9 +14,9 @@ pub(crate) fn rules_install(
     integration_id: &'static str,
     scope: &Scope,
     spec: &HookSpec,
-    root: Result<&Path, HookerError>,
+    root: Result<&Path, AgentConfigError>,
     rules_dir_name: &str,
-) -> Result<InstallPlan, HookerError> {
+) -> Result<InstallPlan, AgentConfigError> {
     HookSpec::validate_tag(&spec.tag)?;
     let target = PlanTarget::Hook {
         integration_id,
@@ -25,7 +25,7 @@ pub(crate) fn rules_install(
     };
     let root = match root {
         Ok(root) => root,
-        Err(HookerError::UnsupportedScope { .. }) => {
+        Err(AgentConfigError::UnsupportedScope { .. }) => {
             return Ok(InstallPlan::refused(
                 target,
                 None,
@@ -49,9 +49,9 @@ pub(crate) fn rules_uninstall(
     integration_id: &'static str,
     scope: &Scope,
     tag: &str,
-    root: Result<&Path, HookerError>,
+    root: Result<&Path, AgentConfigError>,
     rules_dir_name: &str,
-) -> Result<UninstallPlan, HookerError> {
+) -> Result<UninstallPlan, AgentConfigError> {
     HookSpec::validate_tag(tag)?;
     let target = PlanTarget::Hook {
         integration_id,
@@ -60,7 +60,7 @@ pub(crate) fn rules_uninstall(
     };
     let root = match root {
         Ok(root) => root,
-        Err(HookerError::UnsupportedScope { .. }) => {
+        Err(AgentConfigError::UnsupportedScope { .. }) => {
             return Ok(UninstallPlan::refused(
                 target,
                 None,
@@ -77,9 +77,9 @@ pub(crate) fn markdown_install(
     integration_id: &'static str,
     scope: &Scope,
     spec: &HookSpec,
-    path: Result<PathBuf, HookerError>,
+    path: Result<PathBuf, AgentConfigError>,
     required_rules: bool,
-) -> Result<InstallPlan, HookerError> {
+) -> Result<InstallPlan, AgentConfigError> {
     HookSpec::validate_tag(&spec.tag)?;
     let target = PlanTarget::Hook {
         integration_id,
@@ -88,7 +88,7 @@ pub(crate) fn markdown_install(
     };
     let path = match path {
         Ok(path) => path,
-        Err(HookerError::UnsupportedScope { .. }) => {
+        Err(AgentConfigError::UnsupportedScope { .. }) => {
             return Ok(InstallPlan::refused(
                 target,
                 None,
@@ -122,8 +122,8 @@ pub(crate) fn markdown_uninstall(
     integration_id: &'static str,
     scope: &Scope,
     tag: &str,
-    path: Result<PathBuf, HookerError>,
-) -> Result<UninstallPlan, HookerError> {
+    path: Result<PathBuf, AgentConfigError>,
+) -> Result<UninstallPlan, AgentConfigError> {
     HookSpec::validate_tag(tag)?;
     let target = PlanTarget::Hook {
         integration_id,
@@ -132,7 +132,7 @@ pub(crate) fn markdown_uninstall(
     };
     let path = match path {
         Ok(path) => path,
-        Err(HookerError::UnsupportedScope { .. }) => {
+        Err(AgentConfigError::UnsupportedScope { .. }) => {
             return Ok(UninstallPlan::refused(
                 target,
                 None,
@@ -150,8 +150,8 @@ pub(crate) fn mcp_json_object_install(
     integration_id: &'static str,
     scope: &Scope,
     spec: &McpSpec,
-    config_path: Result<PathBuf, HookerError>,
-) -> Result<InstallPlan, HookerError> {
+    config_path: Result<PathBuf, AgentConfigError>,
+) -> Result<InstallPlan, AgentConfigError> {
     spec.validate()?;
     let target = PlanTarget::Mcp {
         integration_id,
@@ -161,7 +161,7 @@ pub(crate) fn mcp_json_object_install(
     };
     let config_path = match config_path {
         Ok(path) => path,
-        Err(HookerError::UnsupportedScope { .. }) => {
+        Err(AgentConfigError::UnsupportedScope { .. }) => {
             return Ok(InstallPlan::refused(
                 target,
                 None,
@@ -191,8 +191,8 @@ pub(crate) fn mcp_json_object_uninstall(
     scope: &Scope,
     name: &str,
     owner_tag: &str,
-    config_path: Result<PathBuf, HookerError>,
-) -> Result<UninstallPlan, HookerError> {
+    config_path: Result<PathBuf, AgentConfigError>,
+) -> Result<UninstallPlan, AgentConfigError> {
     McpSpec::validate_name(name)?;
     HookSpec::validate_tag(owner_tag)?;
     let target = PlanTarget::Mcp {
@@ -203,7 +203,7 @@ pub(crate) fn mcp_json_object_uninstall(
     };
     let config_path = match config_path {
         Ok(path) => path,
-        Err(HookerError::UnsupportedScope { .. }) => {
+        Err(AgentConfigError::UnsupportedScope { .. }) => {
             return Ok(UninstallPlan::refused(
                 target,
                 None,
@@ -222,11 +222,11 @@ pub(crate) fn mcp_json_map_install(
     integration_id: &'static str,
     scope: &Scope,
     spec: &McpSpec,
-    config_path: Result<PathBuf, HookerError>,
+    config_path: Result<PathBuf, AgentConfigError>,
     servers_path: &[&str],
     build_server: mcp_json_map::ServerBuilder,
     format: mcp_json_map::ConfigFormat,
-) -> Result<InstallPlan, HookerError> {
+) -> Result<InstallPlan, AgentConfigError> {
     spec.validate()?;
     let target = PlanTarget::Mcp {
         integration_id,
@@ -236,7 +236,7 @@ pub(crate) fn mcp_json_map_install(
     };
     let config_path = match config_path {
         Ok(path) => path,
-        Err(HookerError::UnsupportedScope { .. }) => {
+        Err(AgentConfigError::UnsupportedScope { .. }) => {
             return Ok(InstallPlan::refused(
                 target,
                 None,
@@ -273,10 +273,10 @@ pub(crate) fn mcp_json_map_uninstall(
     scope: &Scope,
     name: &str,
     owner_tag: &str,
-    config_path: Result<PathBuf, HookerError>,
+    config_path: Result<PathBuf, AgentConfigError>,
     servers_path: &[&str],
     format: mcp_json_map::ConfigFormat,
-) -> Result<UninstallPlan, HookerError> {
+) -> Result<UninstallPlan, AgentConfigError> {
     McpSpec::validate_name(name)?;
     HookSpec::validate_tag(owner_tag)?;
     let target = PlanTarget::Mcp {
@@ -287,7 +287,7 @@ pub(crate) fn mcp_json_map_uninstall(
     };
     let config_path = match config_path {
         Ok(path) => path,
-        Err(HookerError::UnsupportedScope { .. }) => {
+        Err(AgentConfigError::UnsupportedScope { .. }) => {
             return Ok(UninstallPlan::refused(
                 target,
                 None,
@@ -313,10 +313,10 @@ pub(crate) fn mcp_yaml_install(
     integration_id: &'static str,
     scope: &Scope,
     spec: &McpSpec,
-    config_path: Result<PathBuf, HookerError>,
+    config_path: Result<PathBuf, AgentConfigError>,
     servers_path: &[&str],
     build_server: yaml_mcp_map::ServerBuilder,
-) -> Result<InstallPlan, HookerError> {
+) -> Result<InstallPlan, AgentConfigError> {
     spec.validate()?;
     let target = PlanTarget::Mcp {
         integration_id,
@@ -326,7 +326,7 @@ pub(crate) fn mcp_yaml_install(
     };
     let config_path = match config_path {
         Ok(path) => path,
-        Err(HookerError::UnsupportedScope { .. }) => {
+        Err(AgentConfigError::UnsupportedScope { .. }) => {
             return Ok(InstallPlan::refused(
                 target,
                 None,
@@ -391,9 +391,9 @@ pub(crate) fn mcp_yaml_uninstall(
     scope: &Scope,
     name: &str,
     owner_tag: &str,
-    config_path: Result<PathBuf, HookerError>,
+    config_path: Result<PathBuf, AgentConfigError>,
     servers_path: &[&str],
-) -> Result<UninstallPlan, HookerError> {
+) -> Result<UninstallPlan, AgentConfigError> {
     McpSpec::validate_name(name)?;
     HookSpec::validate_tag(owner_tag)?;
     let target = PlanTarget::Mcp {
@@ -404,7 +404,7 @@ pub(crate) fn mcp_yaml_uninstall(
     };
     let config_path = match config_path {
         Ok(path) => path,
-        Err(HookerError::UnsupportedScope { .. }) => {
+        Err(AgentConfigError::UnsupportedScope { .. }) => {
             return Ok(UninstallPlan::refused(
                 target,
                 None,
@@ -429,8 +429,8 @@ pub(crate) fn skill_install(
     integration_id: &'static str,
     scope: &Scope,
     spec: &SkillSpec,
-    root: Result<PathBuf, HookerError>,
-) -> Result<InstallPlan, HookerError> {
+    root: Result<PathBuf, AgentConfigError>,
+) -> Result<InstallPlan, AgentConfigError> {
     spec.validate()?;
     let target = PlanTarget::Skill {
         integration_id,
@@ -440,7 +440,7 @@ pub(crate) fn skill_install(
     };
     let root = match root {
         Ok(root) => root,
-        Err(HookerError::UnsupportedScope { .. }) => {
+        Err(AgentConfigError::UnsupportedScope { .. }) => {
             return Ok(InstallPlan::refused(
                 target,
                 None,
@@ -458,8 +458,8 @@ pub(crate) fn skill_uninstall(
     scope: &Scope,
     name: &str,
     owner_tag: &str,
-    root: Result<PathBuf, HookerError>,
-) -> Result<UninstallPlan, HookerError> {
+    root: Result<PathBuf, AgentConfigError>,
+) -> Result<UninstallPlan, AgentConfigError> {
     SkillSpec::validate_name(name)?;
     HookSpec::validate_tag(owner_tag)?;
     let target = PlanTarget::Skill {
@@ -470,7 +470,7 @@ pub(crate) fn skill_uninstall(
     };
     let root = match root {
         Ok(root) => root,
-        Err(HookerError::UnsupportedScope { .. }) => {
+        Err(AgentConfigError::UnsupportedScope { .. }) => {
             return Ok(UninstallPlan::refused(
                 target,
                 None,

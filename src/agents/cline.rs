@@ -10,7 +10,7 @@
 //!    (Global, macOS/Linux only). Cline reads JSON event payloads on stdin
 //!    and inspects the script's exit code / JSON stdout. Filenames are event
 //!    names, so concurrent consumers wanting the same event must coordinate;
-//!    we record ownership in a sibling `.ai-hooker-hooks.json` ledger and
+//!    we record ownership in a sibling `.agent-config-hooks.json` ledger and
 //!    refuse to overwrite a hook owned by a different consumer.
 //!
 //! 3. **MCP servers** — global VS Code extension config at
@@ -23,7 +23,7 @@
 use std::path::PathBuf;
 
 use crate::agents::planning as agent_planning;
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
 use crate::plan::{
@@ -34,7 +34,7 @@ use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, McpSpec, ScriptTemplate, SkillSpec};
 use crate::status::{InstallStatus, PathStatus, PlanTarget, StatusReport, StatusWarning};
 use crate::util::{
-    file_lock, fs_atomic, mcp_json_object, ownership, planning, rules_dir, skills_dir,
+    file_lock, fs_atomic, mcp_json_object, ownership, planning, rules_dir, safe_fs, skills_dir,
 };
 
 const RULES_DIR: &str = ".clinerules";
@@ -50,10 +50,10 @@ impl ClineAgent {
         Self
     }
 
-    fn project_root<'a>(&self, scope: &'a Scope) -> Result<&'a std::path::Path, HookerError> {
+    fn project_root<'a>(&self, scope: &'a Scope) -> Result<&'a std::path::Path, AgentConfigError> {
         match scope {
             Scope::Local(p) => Ok(p),
-            Scope::Global => Err(HookerError::UnsupportedScope {
+            Scope::Global => Err(AgentConfigError::UnsupportedScope {
                 id: "cline",
                 scope: ScopeKind::Global,
             }),
@@ -63,25 +63,25 @@ impl ClineAgent {
     /// `.clinerules/hooks/` (Local). Global is unsupported (Cline's
     /// `~/Documents/Cline/Hooks/` is macOS/Linux-only and the path
     /// convention is unstable enough that we leave it out of v0.1).
-    fn hooks_dir(&self, scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn hooks_dir(&self, scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(self.project_root(scope)?.join(RULES_DIR).join(HOOKS_SUBDIR))
     }
 
-    fn ledger_path(&self, scope: &Scope) -> Result<PathBuf, HookerError> {
-        Ok(self.hooks_dir(scope)?.join(".ai-hooker-hooks.json"))
+    fn ledger_path(&self, scope: &Scope) -> Result<PathBuf, AgentConfigError> {
+        Ok(self.hooks_dir(scope)?.join(".agent-config-hooks.json"))
     }
 
-    fn mcp_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         match scope {
             Scope::Global => paths::cline_mcp_global_file(),
-            Scope::Local(_) => Err(HookerError::UnsupportedScope {
+            Scope::Local(_) => Err(AgentConfigError::UnsupportedScope {
                 id: "cline",
                 scope: ScopeKind::Local,
             }),
         }
     }
 
-    fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::home_dir()?.join(".cline").join("skills"),
             Scope::Local(p) => p.join(".cline").join("skills"),
@@ -111,7 +111,7 @@ impl Integration for ClineAgent {
     /// Reports installed if either the rules file *or* a hook script for the
     /// caller exists. (Tag is the consumer ID; hooks are keyed by event name
     /// and recorded by tag in the ledger.)
-    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let root = self.project_root(scope)?;
         let rules_file = rules_dir::target_path(root, RULES_DIR, tag);
@@ -179,7 +179,11 @@ impl Integration for ClineAgent {
         })
     }
 
-    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install(
+        &self,
+        scope: &Scope,
+        spec: &HookSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let target = DryPlanTarget::Hook {
             integration_id: Integration::id(self),
@@ -188,7 +192,7 @@ impl Integration for ClineAgent {
         };
         let root = match self.project_root(scope) {
             Ok(root) => root,
-            Err(HookerError::UnsupportedScope { .. }) => {
+            Err(AgentConfigError::UnsupportedScope { .. }) => {
                 return Ok(InstallPlan::refused(
                     target,
                     None,
@@ -262,7 +266,7 @@ impl Integration for ClineAgent {
         Ok(InstallPlan::from_changes(target, changes))
     }
 
-    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let target = DryPlanTarget::Hook {
             integration_id: Integration::id(self),
@@ -271,7 +275,7 @@ impl Integration for ClineAgent {
         };
         let root = match self.project_root(scope) {
             Ok(root) => root,
-            Err(HookerError::UnsupportedScope { .. }) => {
+            Err(AgentConfigError::UnsupportedScope { .. }) => {
                 return Ok(UninstallPlan::refused(
                     target,
                     None,
@@ -285,7 +289,7 @@ impl Integration for ClineAgent {
         if ledger.exists() {
             let v = match crate::util::json_patch::read_or_empty(&ledger) {
                 Ok(v) => v,
-                Err(HookerError::JsonInvalid { .. }) => {
+                Err(AgentConfigError::JsonInvalid { .. }) => {
                     changes.push(PlannedChange::Refuse {
                         path: Some(ledger),
                         reason: RefusalReason::InvalidConfig,
@@ -324,7 +328,7 @@ impl Integration for ClineAgent {
         Ok(UninstallPlan::from_changes(target, changes))
     }
 
-    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
+    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let root = self.project_root(scope)?;
         let mut report = InstallReport::default();
@@ -344,7 +348,7 @@ impl Integration for ClineAgent {
                         fs_atomic::ensure_trailing_newline(&prefix_shebang(s))
                     }
                     Some(ScriptTemplate::TypeScript(_)) => {
-                        return Err(HookerError::MissingSpecField {
+                        return Err(AgentConfigError::MissingSpecField {
                             id: "cline",
                             field: "script (Shell — TypeScript not supported)",
                         });
@@ -354,14 +358,14 @@ impl Integration for ClineAgent {
 
                 let event_filename = event_to_filename(&spec.event)?;
                 let path = hooks_dir.join(&event_filename);
-                let ledger = hooks_dir.join(".ai-hooker-hooks.json");
+                let ledger = hooks_dir.join(".agent-config-hooks.json");
 
                 // Refuse to overwrite a hook owned by a different consumer.
                 ownership::require_owner(&ledger, &event_filename, &spec.tag, KIND, path.exists())?;
 
-                let outcome = fs_atomic::write_atomic(&path, body.as_bytes(), false)?;
+                let outcome = safe_fs::write(scope, &path, body.as_bytes(), false)?;
                 #[cfg(unix)]
-                fs_atomic::chmod(&path, 0o755)?;
+                safe_fs::chmod(scope, &path, 0o755)?;
                 if !outcome.no_change {
                     if outcome.existed {
                         report.patched.push(outcome.path.clone());
@@ -386,13 +390,13 @@ impl Integration for ClineAgent {
                         report.already_installed = true;
                     }
                 }
-                Ok::<(), HookerError>(())
+                Ok::<(), AgentConfigError>(())
             })?;
         }
         Ok(report)
     }
 
-    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, HookerError> {
+    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let root = self.project_root(scope)?;
         let mut report = UninstallReport::default();
@@ -405,7 +409,7 @@ impl Integration for ClineAgent {
         let hooks_dir = self.hooks_dir(scope)?;
         scope.ensure_contained(&hooks_dir)?;
         file_lock::with_lock(&hooks_dir, || {
-            let ledger = hooks_dir.join(".ai-hooker-hooks.json");
+            let ledger = hooks_dir.join(".agent-config-hooks.json");
             if ledger.exists() {
                 let v = crate::util::json_patch::read_or_empty(&ledger)?;
                 let owned: Vec<String> = v
@@ -425,13 +429,13 @@ impl Integration for ClineAgent {
                     validate_custom_event_filename(&filename)?;
                     let path = hooks_dir.join(&filename);
                     if path.exists() {
-                        fs_atomic::remove_if_exists(&path)?;
+                        safe_fs::remove_file(scope, &path)?;
                         report.removed.push(path);
                     }
                     ownership::record_uninstall(&ledger, &filename)?;
                 }
             }
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
 
         // Tidy: prune empty hooks/ then .clinerules/ in case the rules path
@@ -439,7 +443,7 @@ impl Integration for ClineAgent {
         for empty_dir in [self.hooks_dir(scope)?, root.join(RULES_DIR)] {
             if let Ok(mut entries) = std::fs::read_dir(&empty_dir) {
                 if entries.next().is_none() {
-                    let _ = std::fs::remove_dir(&empty_dir);
+                    let _ = safe_fs::remove_empty_dir(scope, &empty_dir);
                 }
             }
         }
@@ -465,7 +469,7 @@ impl McpSurface for ClineAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         let cfg = Self::mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -481,7 +485,11 @@ impl McpSurface for ClineAgent {
         ))
     }
 
-    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::mcp_json_object_install(
             McpSurface::id(self),
             scope,
@@ -495,7 +503,7 @@ impl McpSurface for ClineAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::mcp_json_object_uninstall(
             McpSurface::id(self),
             scope,
@@ -505,7 +513,11 @@ impl McpSurface for ClineAgent {
         )
     }
 
-    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
+    fn install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
         spec.validate_local_secret_policy(scope)?;
@@ -518,7 +530,7 @@ impl McpSurface for ClineAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::mcp_path(scope)?;
@@ -541,7 +553,7 @@ impl SkillSurface for ClineAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
         let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
@@ -560,7 +572,7 @@ impl SkillSurface for ClineAgent {
         &self,
         scope: &Scope,
         spec: &SkillSpec,
-    ) -> Result<InstallPlan, HookerError> {
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::skill_install(
             SkillSurface::id(self),
             scope,
@@ -574,7 +586,7 @@ impl SkillSurface for ClineAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::skill_uninstall(
             SkillSurface::id(self),
             scope,
@@ -584,7 +596,11 @@ impl SkillSurface for ClineAgent {
         )
     }
 
-    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+    fn install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
@@ -595,7 +611,7 @@ impl SkillSurface for ClineAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
@@ -604,7 +620,7 @@ impl SkillSurface for ClineAgent {
 
 /// Map [`Event`] to Cline's filename convention. Custom names become
 /// file names, so they must be path-safe single components.
-fn event_to_filename(event: &Event) -> Result<String, HookerError> {
+fn event_to_filename(event: &Event) -> Result<String, AgentConfigError> {
     match event {
         Event::PreToolUse => Ok("PreToolUse".into()),
         Event::PostToolUse => Ok("PostToolUse".into()),
@@ -612,9 +628,9 @@ fn event_to_filename(event: &Event) -> Result<String, HookerError> {
     }
 }
 
-fn validate_custom_event_filename(name: &str) -> Result<(), HookerError> {
+fn validate_custom_event_filename(name: &str) -> Result<(), AgentConfigError> {
     if name.is_empty() {
-        return Err(HookerError::InvalidTag {
+        return Err(AgentConfigError::InvalidTag {
             tag: name.into(),
             reason: "Cline custom event must not be empty",
         });
@@ -623,7 +639,7 @@ fn validate_custom_event_filename(name: &str) -> Result<(), HookerError> {
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
     {
-        return Err(HookerError::InvalidTag {
+        return Err(AgentConfigError::InvalidTag {
             tag: name.into(),
             reason: "Cline custom event may only contain ASCII letters, digits, '_' and '-'",
         });
@@ -644,7 +660,7 @@ fn prefix_shebang(s: &str) -> String {
 /// unchecked shell commands intentionally pass through as shell syntax.
 fn default_hook_body(command: &str) -> String {
     format!(
-        "#!/usr/bin/env bash\n# Generated by ai-hooker.\n# Forwards Cline's JSON event payload to the consumer command.\n{command}\n"
+        "#!/usr/bin/env bash\n# Generated by agent-config.\n# Forwards Cline's JSON event payload to the consumer command.\n{command}\n"
     )
 }
 
@@ -759,7 +775,7 @@ mod tests {
                 .build();
             let err = agent.install(&scope, &spec).unwrap_err();
             assert!(
-                matches!(err, HookerError::InvalidTag { .. }),
+                matches!(err, AgentConfigError::InvalidTag { .. }),
                 "expected invalid custom event for {bad:?}"
             );
         }
@@ -778,7 +794,7 @@ mod tests {
             .build();
 
         let err = agent.plan_install(&scope, &spec).unwrap_err();
-        assert!(matches!(err, HookerError::InvalidTag { .. }));
+        assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
     }
 
     #[test]
@@ -789,7 +805,9 @@ mod tests {
         agent
             .install(&scope, &hook_spec("myapp", Event::PreToolUse, "noop"))
             .unwrap();
-        let ledger = dir.path().join(".clinerules/hooks/.ai-hooker-hooks.json");
+        let ledger = dir
+            .path()
+            .join(".clinerules/hooks/.agent-config-hooks.json");
         assert!(ledger.exists());
         let v: serde_json::Value = serde_json::from_slice(&fs::read(&ledger).unwrap()).unwrap();
         assert_eq!(
@@ -809,7 +827,7 @@ mod tests {
         let err = agent
             .install(&scope, &hook_spec("appB", Event::PreToolUse, "b"))
             .unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
         // appA's hook untouched.
         let body = fs::read_to_string(dir.path().join(".clinerules/hooks/PreToolUse")).unwrap();
         assert!(body.contains("a\n"));
@@ -836,7 +854,7 @@ mod tests {
             .script(ScriptTemplate::TypeScript("export {}".into()))
             .build();
         let err = agent.install(&scope, &s).unwrap_err();
-        assert!(matches!(err, HookerError::MissingSpecField { .. }));
+        assert!(matches!(err, AgentConfigError::MissingSpecField { .. }));
     }
 
     #[test]
@@ -908,7 +926,7 @@ mod tests {
         let hooks_dir = dir.path().join(".clinerules/hooks");
         fs::create_dir_all(&hooks_dir).unwrap();
         fs::write(
-            hooks_dir.join(".ai-hooker-hooks.json"),
+            hooks_dir.join(".agent-config-hooks.json"),
             r#"{"entries":{"../escape":{"owner":"alpha"}}}"#,
         )
         .unwrap();
@@ -916,7 +934,7 @@ mod tests {
         fs::write(&escaped, "do not remove").unwrap();
 
         let err = agent.uninstall(&scope, "alpha").unwrap_err();
-        assert!(matches!(err, HookerError::InvalidTag { .. }));
+        assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
         assert!(escaped.exists());
     }
 
@@ -933,7 +951,7 @@ mod tests {
     fn rejects_global_scope() {
         let agent = ClineAgent::new();
         let err = agent.is_installed(&Scope::Global, "x").unwrap_err();
-        assert!(matches!(err, HookerError::UnsupportedScope { .. }));
+        assert!(matches!(err, AgentConfigError::UnsupportedScope { .. }));
     }
 
     #[test]
@@ -966,7 +984,7 @@ mod tests {
         let err = agent.install_mcp(&scope, &spec).unwrap_err();
         assert!(matches!(
             err,
-            HookerError::UnsupportedScope {
+            AgentConfigError::UnsupportedScope {
                 scope: ScopeKind::Local,
                 ..
             }

@@ -11,7 +11,7 @@ use std::path::Path;
 
 use serde_json::{Map, Value};
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, UninstallReport};
 use crate::spec::{McpSpec, McpTransport};
 use crate::util::{file_lock, fs_atomic, json_patch, ownership};
@@ -23,7 +23,7 @@ pub(crate) const ARRAY_KEY: &str = "mcp";
 pub(crate) const NAME_FIELD: &str = "name";
 
 /// Returns true if `name` is present in the ledger.
-pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, HookerError> {
+pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, AgentConfigError> {
     ownership::contains(ledger_path, name)
 }
 
@@ -33,7 +33,7 @@ pub(crate) fn install(
     config_path: &Path,
     ledger_path: &Path,
     spec: &McpSpec,
-) -> Result<InstallReport, HookerError> {
+) -> Result<InstallReport, AgentConfigError> {
     file_lock::with_lock(config_path, || {
         let mut report = InstallReport::default();
         let mut root = json_patch::read_or_empty(config_path)?;
@@ -96,7 +96,7 @@ pub(crate) fn uninstall(
     name: &str,
     owner_tag: &str,
     kind: &'static str,
-) -> Result<UninstallReport, HookerError> {
+) -> Result<UninstallReport, AgentConfigError> {
     if !config_path.exists() && !ledger_path.exists() {
         return Ok(UninstallReport {
             not_installed: true,
@@ -193,7 +193,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn paths(dir: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
-        (dir.join("config.json"), dir.join(".ai-hooker-mcp.json"))
+        (dir.join("config.json"), dir.join(".agent-config-mcp.json"))
     }
 
     fn stdio_spec(name: &str, owner: &str) -> McpSpec {
@@ -248,7 +248,7 @@ mod tests {
         let (cfg, led) = paths(dir.path());
         install(&cfg, &led, &stdio_spec("github", "appA")).unwrap();
         let err = install(&cfg, &led, &stdio_spec("github", "appB")).unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
     }
 
     #[test]
@@ -263,7 +263,7 @@ mod tests {
         let err = install(&cfg, &led, &stdio_spec("github", "myapp")).unwrap_err();
         assert!(matches!(
             err,
-            HookerError::NotOwnedByCaller { actual: None, .. }
+            AgentConfigError::NotOwnedByCaller { actual: None, .. }
         ));
     }
 
@@ -273,7 +273,7 @@ mod tests {
         let (cfg, led) = paths(dir.path());
         install(&cfg, &led, &stdio_spec("github", "appA")).unwrap();
         let err = uninstall(&cfg, &led, "github", "appB", "mcp server").unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
     }
 
     #[test]
@@ -288,7 +288,7 @@ mod tests {
         let err = uninstall(&cfg, &led, "user", "myapp", "mcp server").unwrap_err();
         assert!(matches!(
             err,
-            HookerError::NotOwnedByCaller { actual: None, .. }
+            AgentConfigError::NotOwnedByCaller { actual: None, .. }
         ));
     }
 

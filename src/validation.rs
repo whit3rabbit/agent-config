@@ -6,14 +6,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::plan::PlanTarget;
-use crate::status::{
-    DriftIssue, InstallStatus as StatusInstallStatus, StatusReport, StatusWarning,
-};
+use crate::status::{DriftIssue, InstallStatus, StatusReport, StatusWarning};
 use crate::util::{fs_atomic, md_block, ownership};
 
 /// Validation result for one hook, MCP server, or skill target.
+#[must_use]
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct ValidationReport {
@@ -75,8 +74,8 @@ pub(crate) fn hook_report_from_status(
 ) -> ValidationReport {
     let mut issues = Vec::new();
     match &status.status {
-        StatusInstallStatus::Absent | StatusInstallStatus::InstalledOwned { .. } => {}
-        StatusInstallStatus::InstalledOtherOwner { owner } => {
+        InstallStatus::Absent | InstallStatus::InstalledOwned { .. } => {}
+        InstallStatus::InstalledOtherOwner { owner } => {
             let expected = match &target {
                 PlanTarget::Hook { tag, .. } => tag.clone(),
                 _ => String::new(),
@@ -90,7 +89,7 @@ pub(crate) fn hook_report_from_status(
                 },
             );
         }
-        StatusInstallStatus::PresentUnowned => {
+        InstallStatus::PresentUnowned => {
             push_issue(
                 &mut issues,
                 DriftIssue::ConfigOnly {
@@ -98,7 +97,7 @@ pub(crate) fn hook_report_from_status(
                 },
             );
         }
-        StatusInstallStatus::LedgerOnly { owner } => {
+        InstallStatus::LedgerOnly { owner } => {
             push_issue(
                 &mut issues,
                 DriftIssue::LedgerOnly {
@@ -110,10 +109,10 @@ pub(crate) fn hook_report_from_status(
                 },
             );
         }
-        StatusInstallStatus::Drifted { issues: drift } => {
+        InstallStatus::Drifted { issues: drift } => {
             push_mapped_issues(&mut issues, drift);
         }
-        StatusInstallStatus::Unknown => {
+        InstallStatus::Unknown => {
             push_issue(
                 &mut issues,
                 DriftIssue::UnexpectedDirectoryShape {
@@ -134,7 +133,7 @@ pub(crate) fn ledger_backed_report_from_status(
     name: &str,
     expected_owner: Option<&str>,
     status: StatusReport,
-) -> Result<ValidationReport, HookerError> {
+) -> Result<ValidationReport, AgentConfigError> {
     let mut issues = ledger_backed_issues(name, expected_owner, &status)?;
     add_backup_issues(&mut issues, &status);
     Ok(ValidationReport::from_issues(target, issues))
@@ -145,7 +144,7 @@ pub(crate) fn skill_report_from_status(
     name: &str,
     expected_owner: Option<&str>,
     status: StatusReport,
-) -> Result<ValidationReport, HookerError> {
+) -> Result<ValidationReport, AgentConfigError> {
     let mut issues = ledger_backed_issues(name, expected_owner, &status)?;
     add_skill_shape_issues(&mut issues, &status)?;
     add_backup_issues(&mut issues, &status);
@@ -164,9 +163,9 @@ fn ledger_backed_issues(
     name: &str,
     expected_owner: Option<&str>,
     status: &StatusReport,
-) -> Result<Vec<DriftIssue>, HookerError> {
+) -> Result<Vec<DriftIssue>, AgentConfigError> {
     let mut issues = Vec::new();
-    if let StatusInstallStatus::Drifted { issues: drift } = &status.status {
+    if let InstallStatus::Drifted { issues: drift } = &status.status {
         push_mapped_issues(&mut issues, drift);
     }
 
@@ -241,11 +240,11 @@ fn ledger_backed_issues(
 
 fn presence_from_status(status: &StatusReport) -> Presence {
     match &status.status {
-        StatusInstallStatus::InstalledOwned { .. }
-        | StatusInstallStatus::InstalledOtherOwner { .. }
-        | StatusInstallStatus::PresentUnowned => Presence::Present,
-        StatusInstallStatus::Absent | StatusInstallStatus::LedgerOnly { .. } => Presence::Absent,
-        StatusInstallStatus::Drifted { issues } => {
+        InstallStatus::InstalledOwned { .. }
+        | InstallStatus::InstalledOtherOwner { .. }
+        | InstallStatus::PresentUnowned => Presence::Present,
+        InstallStatus::Absent | InstallStatus::LedgerOnly { .. } => Presence::Absent,
+        InstallStatus::Drifted { issues } => {
             if issues.iter().any(|issue| {
                 matches!(
                     issue,
@@ -268,7 +267,7 @@ fn presence_from_status(status: &StatusReport) -> Presence {
                 Presence::Unknown
             }
         }
-        StatusInstallStatus::Unknown => Presence::Unknown,
+        InstallStatus::Unknown => Presence::Unknown,
     }
 }
 
@@ -379,7 +378,7 @@ fn add_markdown_fence_issues(
             issues,
             DriftIssue::MalformedConfig {
                 path,
-                reason: "malformed ai-hooker markdown fence".into(),
+                reason: "malformed agent-config markdown fence".into(),
             },
         );
     }
@@ -418,13 +417,13 @@ fn add_unix_executable_issue(_issues: &mut Vec<DriftIssue>, _path: &Path) {}
 fn add_skill_shape_issues(
     issues: &mut Vec<DriftIssue>,
     status: &StatusReport,
-) -> Result<(), HookerError> {
+) -> Result<(), AgentConfigError> {
     let dir = primary_path(status);
     if !dir.exists() {
         return Ok(());
     }
 
-    let metadata = fs::symlink_metadata(&dir).map_err(|e| HookerError::io(&dir, e))?;
+    let metadata = fs::symlink_metadata(&dir).map_err(|e| AgentConfigError::io(&dir, e))?;
     if !metadata.is_dir() {
         push_issue(
             issues,
@@ -468,14 +467,14 @@ fn walk_skill_dir(
     dir: &Path,
     canonical_root: &Path,
     issues: &mut Vec<DriftIssue>,
-) -> Result<(), HookerError> {
+) -> Result<(), AgentConfigError> {
     // `dir` is descended from `canonical_root` through real (non-symlink)
     // directories, so non-symlink entries cannot escape — only canonicalize
     // when an entry is a symlink.
-    for entry in fs::read_dir(dir).map_err(|e| HookerError::io(dir, e))? {
-        let entry = entry.map_err(|e| HookerError::io(dir, e))?;
+    for entry in fs::read_dir(dir).map_err(|e| AgentConfigError::io(dir, e))? {
+        let entry = entry.map_err(|e| AgentConfigError::io(dir, e))?;
         let path = entry.path();
-        let metadata = fs::symlink_metadata(&path).map_err(|e| HookerError::io(&path, e))?;
+        let metadata = fs::symlink_metadata(&path).map_err(|e| AgentConfigError::io(&path, e))?;
 
         if metadata.file_type().is_symlink() {
             match fs::canonicalize(&path) {

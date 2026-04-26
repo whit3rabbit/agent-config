@@ -1,6 +1,6 @@
 # Cursor
 
-ID: `cursor` — `ai_hooker::by_id("cursor")`
+ID: `cursor` — `agent_config::by_id("cursor")`
 
 ## Hooks
 
@@ -30,7 +30,7 @@ ID: `cursor` — `ai_hooker::by_id("cursor")`
       {
         "command": "myapp hook cursor",
         "matcher": "Shell",
-        "_ai_hooker_tag": "myapp"
+        "_agent_config_tag": "myapp"
       }
     ]
   }

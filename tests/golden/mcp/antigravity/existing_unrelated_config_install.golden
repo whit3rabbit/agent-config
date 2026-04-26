@@ -28,14 +28,14 @@ Ok(
             "[ROOT]/.agent/mcp_config.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.agent/.ai-hooker-mcp.json",
+            "[ROOT]/.agent/.agent-config-mcp.json",
         ),
         files: [
             Exists {
                 path: "[ROOT]/.agent/mcp_config.json",
             },
             Exists {
-                path: "[ROOT]/.agent/.ai-hooker-mcp.json",
+                path: "[ROOT]/.agent/.agent-config-mcp.json",
             },
         ],
         warnings: [],
@@ -68,7 +68,7 @@ ROOT tree:
 directories:
 - .agent
 files:
-- .agent/.ai-hooker-mcp.json
+- .agent/.agent-config-mcp.json
   content:
 ```text
 {

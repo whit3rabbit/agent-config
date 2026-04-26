@@ -12,7 +12,7 @@
 //!         "hooks": [
 //!           { "type": "command", "command": "...", "timeout": 5000 }
 //!         ],
-//!         "_ai_hooker_tag": "myapp"
+//!         "_agent_config_tag": "myapp"
 //!       }
 //!     ]
 //!   }
@@ -27,7 +27,7 @@ use std::path::PathBuf;
 use serde_json::json;
 
 use crate::agents::planning as agent_planning;
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
 use crate::plan::{has_refusal, InstallPlan, PlanTarget, UninstallPlan};
@@ -35,7 +35,8 @@ use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
 use crate::status::StatusReport;
 use crate::util::{
-    file_lock, fs_atomic, json_patch, mcp_json_object, md_block, ownership, planning, skills_dir,
+    file_lock, fs_atomic, json_patch, mcp_json_object, md_block, ownership, planning, safe_fs,
+    skills_dir,
 };
 
 /// Gemini CLI (Google's official Gemini code agent).
@@ -47,14 +48,14 @@ impl GeminiAgent {
         Self
     }
 
-    fn settings_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn settings_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::gemini_home()?.join("settings.json"),
             Scope::Local(p) => p.join(".gemini").join("settings.json"),
         })
     }
 
-    fn memory_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn memory_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::gemini_home()?.join("GEMINI.md"),
             Scope::Local(p) => p.join("GEMINI.md"),
@@ -63,11 +64,11 @@ impl GeminiAgent {
 
     /// MCP servers live under the `mcpServers` key inside the same
     /// `settings.json` that holds hooks.
-    fn mcp_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Self::settings_path(scope)
     }
 
-    fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::gemini_home()?.join("skills"),
             Scope::Local(p) => p.join(".gemini").join("skills"),
@@ -94,14 +95,18 @@ impl Integration for GeminiAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let p = Self::settings_path(scope)?;
         let presence = json_patch::tagged_hook_presence(&p, &["hooks"], tag)?;
         Ok(StatusReport::for_tagged_hook(tag, p, presence))
     }
 
-    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install(
+        &self,
+        scope: &Scope,
+        spec: &HookSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let target = PlanTarget::Hook {
             integration_id: Integration::id(self),
@@ -139,7 +144,7 @@ impl Integration for GeminiAgent {
         Ok(InstallPlan::from_changes(target, changes))
     }
 
-    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let target = PlanTarget::Hook {
             integration_id: Integration::id(self),
@@ -166,7 +171,7 @@ impl Integration for GeminiAgent {
         Ok(UninstallPlan::from_changes(target, changes))
     }
 
-    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
+    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let mut report = InstallReport::default();
 
@@ -194,7 +199,7 @@ impl Integration for GeminiAgent {
 
             if changed {
                 let bytes = json_patch::to_pretty(&root);
-                let outcome = fs_atomic::write_atomic(&p, &bytes, true)?;
+                let outcome = safe_fs::write(scope, &p, &bytes, true)?;
                 if outcome.existed {
                     report.patched.push(outcome.path.clone());
                 } else {
@@ -206,7 +211,7 @@ impl Integration for GeminiAgent {
             } else {
                 report.already_installed = true;
             }
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
 
         if let Some(rules) = &spec.rules {
@@ -215,7 +220,7 @@ impl Integration for GeminiAgent {
             file_lock::with_lock(&memory, || {
                 let host = fs_atomic::read_to_string_or_empty(&memory)?;
                 let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
-                let outcome = fs_atomic::write_atomic(&memory, new_host.as_bytes(), true)?;
+                let outcome = safe_fs::write(scope, &memory, new_host.as_bytes(), true)?;
                 if outcome.existed && !outcome.no_change {
                     report.patched.push(outcome.path.clone());
                     report.already_installed = false;
@@ -226,14 +231,14 @@ impl Integration for GeminiAgent {
                 if let Some(b) = outcome.backup {
                     report.backed_up.push(b);
                 }
-                Ok::<(), HookerError>(())
+                Ok::<(), AgentConfigError>(())
             })?;
         }
 
         Ok(report)
     }
 
-    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, HookerError> {
+    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let mut report = UninstallReport::default();
 
@@ -247,17 +252,17 @@ impl Integration for GeminiAgent {
                 if changed {
                     let empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
                     let bytes = json_patch::to_pretty(&root);
-                    if empty && fs_atomic::restore_backup_if_matches(&p, &bytes)? {
+                    if empty && safe_fs::restore_backup_if_matches(scope, &p, &bytes)? {
                         report.restored.push(p.clone());
                     } else if empty {
-                        fs_atomic::remove_if_exists(&p)?;
+                        safe_fs::remove_file(scope, &p)?;
                         report.removed.push(p.clone());
                     } else {
-                        fs_atomic::write_atomic(&p, &bytes, false)?;
+                        safe_fs::write(scope, &p, &bytes, false)?;
                         report.patched.push(p.clone());
                     }
                 }
-                Ok::<(), HookerError>(())
+                Ok::<(), AgentConfigError>(())
             })?;
         }
 
@@ -268,18 +273,18 @@ impl Integration for GeminiAgent {
             let (stripped, removed) = md_block::remove(&host, tag);
             if removed {
                 if stripped.trim().is_empty() {
-                    if fs_atomic::restore_backup_if_matches(&memory, stripped.as_bytes())? {
+                    if safe_fs::restore_backup_if_matches(scope, &memory, stripped.as_bytes())? {
                         report.restored.push(memory.clone());
                     } else {
-                        fs_atomic::remove_if_exists(&memory)?;
+                        safe_fs::remove_file(scope, &memory)?;
                         report.removed.push(memory.clone());
                     }
                 } else {
-                    fs_atomic::write_atomic(&memory, stripped.as_bytes(), false)?;
+                    safe_fs::write(scope, &memory, stripped.as_bytes(), false)?;
                     report.patched.push(memory.clone());
                 }
             }
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
 
         if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
@@ -303,7 +308,7 @@ impl McpSurface for GeminiAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         let cfg = Self::mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -319,7 +324,11 @@ impl McpSurface for GeminiAgent {
         ))
     }
 
-    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::mcp_json_object_install(
             McpSurface::id(self),
             scope,
@@ -333,7 +342,7 @@ impl McpSurface for GeminiAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::mcp_json_object_uninstall(
             McpSurface::id(self),
             scope,
@@ -343,7 +352,11 @@ impl McpSurface for GeminiAgent {
         )
     }
 
-    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
+    fn install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
         spec.validate_local_secret_policy(scope)?;
@@ -357,7 +370,7 @@ impl McpSurface for GeminiAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::mcp_path(scope)?;
@@ -381,7 +394,7 @@ impl SkillSurface for GeminiAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
         let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
@@ -400,7 +413,7 @@ impl SkillSurface for GeminiAgent {
         &self,
         scope: &Scope,
         spec: &SkillSpec,
-    ) -> Result<InstallPlan, HookerError> {
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::skill_install(
             SkillSurface::id(self),
             scope,
@@ -414,7 +427,7 @@ impl SkillSurface for GeminiAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::skill_uninstall(
             SkillSurface::id(self),
             scope,
@@ -424,7 +437,11 @@ impl SkillSurface for GeminiAgent {
         )
     }
 
-    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+    fn install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
@@ -435,7 +452,7 @@ impl SkillSurface for GeminiAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
@@ -498,7 +515,7 @@ mod tests {
             json!("myapp hook")
         );
         assert_eq!(
-            v["hooks"]["BeforeTool"][0]["_ai_hooker_tag"],
+            v["hooks"]["BeforeTool"][0]["_agent_config_tag"],
             json!("alpha")
         );
     }
@@ -526,7 +543,7 @@ mod tests {
         agent.install(&scope, &spec).unwrap();
         let md = std::fs::read_to_string(dir.path().join("GEMINI.md")).unwrap();
         assert!(md.contains("Always prefix shell calls."));
-        assert!(md.contains("AI-HOOKER:alpha"));
+        assert!(md.contains("AGENT-CONFIG:alpha"));
     }
 
     #[test]
@@ -571,7 +588,7 @@ mod tests {
                 "BeforeTool": [{
                     "matcher": "write_file",
                     "hooks": [{ "type": "command", "command": "user-cmd" }],
-                    "_ai_hooker_tag": "user-tool"
+                    "_agent_config_tag": "user-tool"
                 }]
             }
         });
@@ -584,8 +601,8 @@ mod tests {
         let v = read_json(&settings);
         let entries = v["hooks"]["BeforeTool"].as_array().unwrap();
         assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0]["_ai_hooker_tag"], json!("user-tool"));
-        assert_eq!(entries[1]["_ai_hooker_tag"], json!("alpha"));
+        assert_eq!(entries[0]["_agent_config_tag"], json!("user-tool"));
+        assert_eq!(entries[1]["_agent_config_tag"], json!("alpha"));
     }
 
     fn local_mcp_spec(name: &str, owner: &str) -> McpSpec {
@@ -655,6 +672,6 @@ mod tests {
             .install_mcp(&scope, &local_mcp_spec("github", "appA"))
             .unwrap();
         let err = agent.uninstall_mcp(&scope, "github", "appB").unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
     }
 }

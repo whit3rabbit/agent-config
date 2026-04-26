@@ -1,11 +1,13 @@
+#![allow(unused_must_use)]
+
 //! End-to-end smoke tests against the public API surface.
 
-use ai_hooker::{by_id, Event, HookSpec, Matcher, Scope};
+use agent_config::{by_id, Event, HookSpec, Matcher, Scope};
 use std::collections::HashSet;
 
 #[test]
 fn registry_exposes_every_supported_integration() {
-    let ids: HashSet<_> = ai_hooker::all().into_iter().map(|i| i.id()).collect();
+    let ids: HashSet<_> = agent_config::all().into_iter().map(|i| i.id()).collect();
 
     for expected in [
         "claude",
@@ -157,12 +159,15 @@ fn invalid_tag_is_rejected_at_install_time() {
         .try_build();
     assert!(matches!(
         bad_spec.unwrap_err(),
-        ai_hooker::HookerError::InvalidTag { .. }
+        agent_config::AgentConfigError::InvalidTag { .. }
     ));
 
     // And via direct uninstall path.
     let err = agent
         .uninstall(&scope, "ghost tag with spaces")
         .unwrap_err();
-    assert!(matches!(err, ai_hooker::HookerError::InvalidTag { .. }));
+    assert!(matches!(
+        err,
+        agent_config::AgentConfigError::InvalidTag { .. }
+    ));
 }

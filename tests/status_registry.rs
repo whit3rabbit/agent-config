@@ -1,3 +1,5 @@
+#![allow(unused_must_use)]
+
 //! Public-API acceptance tests for `Integration::status`,
 //! `McpSurface::mcp_status`, and `SkillSurface::skill_status`.
 //!
@@ -5,10 +7,10 @@
 //! and `tests/skill_registry.rs` smoke tests, but exercises the richer
 //! [`InstallStatus`] reporting introduced by the status checklist work.
 
-use ai_hooker::status::{
+use agent_config::status::{
     DriftIssue, InstallStatus, PathStatus, PlanTarget, StatusReport, StatusWarning,
 };
-use ai_hooker::{
+use agent_config::{
     by_id, mcp_by_id, skill_by_id, Event, HookSpec, Matcher, McpSpec, Scope, SkillSpec,
 };
 
@@ -133,7 +135,7 @@ fn markdown_hook_status_absent_when_file_has_other_consumer_block() {
     let scope = Scope::Local(dir.path().to_path_buf());
     std::fs::write(
         dir.path().join("AGENTS.md"),
-        "<!-- BEGIN AI-HOOKER:other -->\nOther rules.\n<!-- END AI-HOOKER:other -->\n",
+        "<!-- BEGIN AGENT-CONFIG:other -->\nOther rules.\n<!-- END AGENT-CONFIG:other -->\n",
     )
     .unwrap();
 
@@ -155,7 +157,7 @@ fn markdown_hook_status_drifted_on_malformed_matching_fence() {
     let scope = Scope::Local(dir.path().to_path_buf());
     std::fs::write(
         dir.path().join("AGENTS.md"),
-        "<!-- BEGIN AI-HOOKER:smoketest -->\nmissing end\n",
+        "<!-- BEGIN AGENT-CONFIG:smoketest -->\nmissing end\n",
     )
     .unwrap();
 

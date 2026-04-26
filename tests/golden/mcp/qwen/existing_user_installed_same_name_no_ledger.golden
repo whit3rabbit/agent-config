@@ -22,14 +22,14 @@ Ok(
             "[ROOT]/.qwen/settings.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.qwen/.ai-hooker-mcp.json",
+            "[ROOT]/.qwen/.agent-config-mcp.json",
         ),
         files: [
             Exists {
                 path: "[ROOT]/.qwen/settings.json",
             },
             Missing {
-                path: "[ROOT]/.qwen/.ai-hooker-mcp.json",
+                path: "[ROOT]/.qwen/.agent-config-mcp.json",
             },
         ],
         warnings: [],

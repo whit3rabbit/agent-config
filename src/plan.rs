@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use crate::scope::Scope;
 
 /// Side-effect-free preview of an install operation.
+#[must_use]
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct InstallPlan {
@@ -17,7 +18,7 @@ pub struct InstallPlan {
     /// File, directory, permission, ledger, no-op, or refusal changes.
     pub changes: Vec<PlannedChange>,
     /// High-level outcome of the plan.
-    pub status: InstallStatus,
+    pub status: PlanStatus,
     /// Advisory information that does not alter the status.
     pub warnings: Vec<PlanWarning>,
 }
@@ -44,6 +45,7 @@ impl InstallPlan {
 }
 
 /// Side-effect-free preview of an uninstall operation.
+#[must_use]
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct UninstallPlan {
@@ -52,7 +54,7 @@ pub struct UninstallPlan {
     /// File, directory, permission, ledger, no-op, or refusal changes.
     pub changes: Vec<PlannedChange>,
     /// High-level outcome of the plan.
-    pub status: InstallStatus,
+    pub status: PlanStatus,
     /// Advisory information that does not alter the status.
     pub warnings: Vec<PlanWarning>,
 }
@@ -118,7 +120,7 @@ pub enum PlanTarget {
 /// High-level status for a dry-run install or uninstall plan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum InstallStatus {
+pub enum PlanStatus {
     /// The operation would change filesystem or ledger state.
     WillChange,
     /// The operation would not change anything.
@@ -215,7 +217,7 @@ pub enum PlannedChange {
 pub enum RefusalReason {
     /// A sidecar ledger records a different owner.
     OwnerMismatch,
-    /// The config entry exists without an ai-hooker ledger entry.
+    /// The config entry exists without an agent-config ledger entry.
     UserInstalledEntry,
     /// Existing config could not be parsed or had an unsupported shape.
     InvalidConfig,
@@ -242,18 +244,18 @@ pub struct PlanWarning {
     pub message: String,
 }
 
-fn status_for_changes(changes: &[PlannedChange]) -> InstallStatus {
+fn status_for_changes(changes: &[PlannedChange]) -> PlanStatus {
     if has_refusal(changes) {
-        return InstallStatus::Refused;
+        return PlanStatus::Refused;
     }
     if changes.is_empty()
         || changes
             .iter()
             .all(|c| matches!(c, PlannedChange::NoOp { .. }))
     {
-        return InstallStatus::NoOp;
+        return PlanStatus::NoOp;
     }
-    InstallStatus::WillChange
+    PlanStatus::WillChange
 }
 
 /// Returns true when any planned change refuses the operation.

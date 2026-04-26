@@ -24,7 +24,7 @@ Ok(
             "[ROOT]/.trae/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.trae/skills/.ai-hooker-skills.json",
+            "[ROOT]/.trae/skills/.agent-config-skills.json",
         ),
         files: [
             Missing {
@@ -62,7 +62,7 @@ directories:
 - .trae/skills
 - .trae/skills/sibling-skill
 files:
-- .trae/skills/.ai-hooker-skills.json
+- .trae/skills/.agent-config-skills.json
   content:
 ```text
 {

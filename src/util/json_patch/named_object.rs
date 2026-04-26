@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 
 use super::common::{ensure_object, prune_empty_path, traverse_object_mut};
 
@@ -17,7 +17,7 @@ pub(crate) fn upsert_named_object_entry(
     path: &[&str],
     name: &str,
     value: Value,
-) -> Result<bool, HookerError> {
+) -> Result<bool, AgentConfigError> {
     let parent = ensure_object(root, path)?;
     match parent.get(name) {
         Some(existing) if existing == &value => Ok(false),
@@ -34,7 +34,7 @@ pub(crate) fn remove_named_object_entry(
     root: &mut Value,
     path: &[&str],
     name: &str,
-) -> Result<bool, HookerError> {
+) -> Result<bool, AgentConfigError> {
     let Some(parent) = traverse_object_mut(root, path) else {
         return Ok(false);
     };

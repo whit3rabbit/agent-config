@@ -24,14 +24,14 @@ Ok(
             "[HOME]/.hermes/config.yaml",
         ),
         ledger_path: Some(
-            "[HOME]/.hermes/.ai-hooker-mcp.json",
+            "[HOME]/.hermes/.agent-config-mcp.json",
         ),
         files: [
             Exists {
                 path: "[HOME]/.hermes/config.yaml",
             },
             Exists {
-                path: "[HOME]/.hermes/.ai-hooker-mcp.json",
+                path: "[HOME]/.hermes/.agent-config-mcp.json",
             },
         ],
         warnings: [
@@ -69,7 +69,7 @@ HOME tree:
 directories:
 - .hermes
 files:
-- .hermes/.ai-hooker-mcp.json
+- .hermes/.agent-config-mcp.json
   content:
 ```text
 {

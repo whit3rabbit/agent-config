@@ -1,6 +1,6 @@
 # Gemini CLI
 
-ID: `gemini` — `ai_hooker::by_id("gemini")`
+ID: `gemini` — `agent_config::by_id("gemini")`
 
 ## Hooks
 
@@ -33,7 +33,7 @@ ID: `gemini` — `ai_hooker::by_id("gemini")`
         "hooks": [
           { "type": "command", "command": "myapp hook gemini" }
         ],
-        "_ai_hooker_tag": "myapp"
+        "_agent_config_tag": "myapp"
       }
     ]
   }
@@ -133,7 +133,7 @@ Interpolation via `$GEMINI_PROJECT_DIR` and `$GEMINI_PLANS_DIR` environment vari
 | User | `~/.gemini/skills/<name>/` |
 | Project | `.gemini/skills/<name>/` |
 
-Gemini CLI also discovers `.agents/skills`, but `ai-hooker` writes the native
+Gemini CLI also discovers `.agents/skills`, but `agent-config` writes the native
 Gemini path for this integration.
 
 ## References

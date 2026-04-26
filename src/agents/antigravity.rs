@@ -19,7 +19,7 @@
 use std::path::PathBuf;
 
 use crate::agents::planning as agent_planning;
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
 use crate::plan::{InstallPlan, UninstallPlan};
@@ -39,10 +39,10 @@ impl AntigravityAgent {
         Self
     }
 
-    fn project_root<'a>(&self, scope: &'a Scope) -> Result<&'a std::path::Path, HookerError> {
+    fn project_root<'a>(&self, scope: &'a Scope) -> Result<&'a std::path::Path, AgentConfigError> {
         match scope {
             Scope::Local(p) => Ok(p),
-            Scope::Global => Err(HookerError::UnsupportedScope {
+            Scope::Global => Err(AgentConfigError::UnsupportedScope {
                 id: "antigravity",
                 scope: ScopeKind::Global,
             }),
@@ -52,14 +52,14 @@ impl AntigravityAgent {
     /// Skills root: `<root>/.agent/skills/` (Local) or
     /// `~/.gemini/antigravity/skills/` (Global). Both scopes are supported
     /// for skills.
-    fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::gemini_home()?.join("antigravity").join("skills"),
             Scope::Local(p) => p.join(".agent").join("skills"),
         })
     }
 
-    fn mcp_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::antigravity_mcp_global_file()?,
             Scope::Local(p) => p.join(".agent").join("mcp_config.json"),
@@ -86,14 +86,18 @@ impl Integration for AntigravityAgent {
         &[ScopeKind::Local]
     }
 
-    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let root = self.project_root(scope)?;
         let path = rules_dir::target_path(root, RULES_DIR, tag);
         Ok(StatusReport::for_file_hook(tag, path))
     }
 
-    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install(
+        &self,
+        scope: &Scope,
+        spec: &HookSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::rules_install(
             Integration::id(self),
             scope,
@@ -103,7 +107,7 @@ impl Integration for AntigravityAgent {
         )
     }
 
-    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::rules_uninstall(
             Integration::id(self),
             scope,
@@ -113,17 +117,20 @@ impl Integration for AntigravityAgent {
         )
     }
 
-    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
+    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let root = self.project_root(scope)?;
-        let rules = spec.rules.as_ref().ok_or(HookerError::MissingSpecField {
-            id: "antigravity",
-            field: "rules",
-        })?;
+        let rules = spec
+            .rules
+            .as_ref()
+            .ok_or(AgentConfigError::MissingSpecField {
+                id: "antigravity",
+                field: "rules",
+            })?;
         rules_dir::install(root, RULES_DIR, &spec.tag, &rules.content)
     }
 
-    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, HookerError> {
+    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let root = self.project_root(scope)?;
         rules_dir::uninstall(root, RULES_DIR, tag)
@@ -144,7 +151,7 @@ impl McpSurface for AntigravityAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         let cfg = Self::mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -160,7 +167,11 @@ impl McpSurface for AntigravityAgent {
         ))
     }
 
-    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::mcp_json_object_install(
             McpSurface::id(self),
             scope,
@@ -174,7 +185,7 @@ impl McpSurface for AntigravityAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::mcp_json_object_uninstall(
             McpSurface::id(self),
             scope,
@@ -184,7 +195,11 @@ impl McpSurface for AntigravityAgent {
         )
     }
 
-    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
+    fn install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
         spec.validate_local_secret_policy(scope)?;
@@ -197,7 +212,7 @@ impl McpSurface for AntigravityAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::mcp_path(scope)?;
@@ -220,7 +235,7 @@ impl SkillSurface for AntigravityAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
         let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
@@ -239,7 +254,7 @@ impl SkillSurface for AntigravityAgent {
         &self,
         scope: &Scope,
         spec: &SkillSpec,
-    ) -> Result<InstallPlan, HookerError> {
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::skill_install(
             SkillSurface::id(self),
             scope,
@@ -253,7 +268,7 @@ impl SkillSurface for AntigravityAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::skill_uninstall(
             SkillSurface::id(self),
             scope,
@@ -263,7 +278,11 @@ impl SkillSurface for AntigravityAgent {
         )
     }
 
-    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+    fn install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         spec.validate()?;
         let root = Self::skills_root(scope)?;
         skills_dir::install(&root, spec)
@@ -274,7 +293,7 @@ impl SkillSurface for AntigravityAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         SkillSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let root = Self::skills_root(scope)?;
@@ -377,7 +396,7 @@ mod tests {
             .install_skill(&scope, &skill("alpha", "appA"))
             .unwrap();
         let err = agent.uninstall_skill(&scope, "alpha", "appB").unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
     }
 
     #[test]
@@ -399,7 +418,7 @@ mod tests {
         let err = agent.install(&scope, &no_rules).unwrap_err();
         assert!(matches!(
             err,
-            HookerError::MissingSpecField { field: "rules", .. }
+            AgentConfigError::MissingSpecField { field: "rules", .. }
         ));
     }
 
@@ -428,6 +447,6 @@ mod tests {
             .install_mcp(&scope, &mcp_spec("github", "appA"))
             .unwrap();
         let err = agent.uninstall_mcp(&scope, "github", "appB").unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
     }
 }

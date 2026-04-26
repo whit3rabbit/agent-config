@@ -1,4 +1,4 @@
-//! `ai-hooker` installs hooks, prompt rules, MCP servers, and skills into AI coding harnesses.
+//! `agent-config` installs hooks, prompt rules, MCP servers, and skills into AI coding harnesses.
 //!
 //! The library knows where each harness keeps its configuration and what shape
 //! that configuration takes. Callers supply a [`HookSpec`], [`McpSpec`], or
@@ -8,7 +8,7 @@
 //! # Quick start
 //!
 //! ```no_run
-//! use ai_hooker::{by_id, HookSpec, Matcher, Event, Scope};
+//! use agent_config::{by_id, HookSpec, Matcher, Event, Scope};
 //!
 //! let spec = HookSpec::builder("myapp")
 //!     .command_program("myapp", ["hook", "claude"])
@@ -23,7 +23,7 @@
 //! # MCP servers
 //!
 //! ```no_run
-//! use ai_hooker::{mcp_by_id, McpSpec, Scope};
+//! use agent_config::{mcp_by_id, McpSpec, Scope};
 //!
 //! let spec = McpSpec::builder("github")
 //!     .owner("myapp")
@@ -37,7 +37,7 @@
 //! # Skills
 //!
 //! ```no_run
-//! use ai_hooker::{skill_by_id, Scope, SkillSpec};
+//! use agent_config::{skill_by_id, Scope, SkillSpec};
 //!
 //! let spec = SkillSpec::builder("my-skill")
 //!     .owner("myapp")
@@ -52,7 +52,7 @@
 //! # Discovery and uninstall
 //!
 //! ```no_run
-//! use ai_hooker::{all, by_id, Scope};
+//! use agent_config::{all, by_id, Scope};
 //!
 //! for integration in all() {
 //!     if integration.supported_scopes().contains(&Scope::Global.kind())
@@ -75,6 +75,7 @@
 
 #![warn(missing_docs)]
 #![forbid(unsafe_code)]
+#![cfg_attr(test, allow(unused_must_use))]
 
 pub mod error;
 pub mod integration;
@@ -89,13 +90,12 @@ pub mod validation;
 mod agents;
 mod util;
 
-pub use error::HookerError;
+pub use error::AgentConfigError;
 pub use integration::{
     InstallReport, Integration, McpSurface, MigrationReport, SkillSurface, UninstallReport,
 };
 pub use plan::{
-    InstallPlan, InstallStatus, PlanTarget, PlanWarning, PlannedChange, RefusalReason,
-    UninstallPlan,
+    InstallPlan, PlanStatus, PlanTarget, PlanWarning, PlannedChange, RefusalReason, UninstallPlan,
 };
 pub use registry::{all, by_id, mcp_by_id, mcp_capable, skill_by_id, skill_capable};
 pub use scope::{Scope, ScopeKind};
@@ -105,10 +105,10 @@ pub use spec::{
     SkillSpecBuilder,
 };
 pub use status::{
-    DriftIssue, InstallStatus as StatusInstallStatus, PathStatus, PlanTarget as StatusPlanTarget,
-    StatusReport, StatusWarning,
+    DriftIssue, InstallStatus, PathStatus, PlanTarget as StatusPlanTarget, StatusReport,
+    StatusWarning,
 };
 pub use validation::{SuggestedAction, ValidationReport};
 
 /// Result alias used throughout the crate's public API.
-pub type Result<T> = std::result::Result<T, HookerError>;
+pub type Result<T> = std::result::Result<T, AgentConfigError>;

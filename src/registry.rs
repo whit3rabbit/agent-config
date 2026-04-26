@@ -10,7 +10,7 @@
 use crate::integration::{Integration, McpSurface, SkillSurface};
 
 /// Returns a fresh `Box` per integration. The list is the source of truth for
-/// what `ai-hooker` supports today; adding a harness means adding one line
+/// what `agent-config` supports today; adding a harness means adding one line
 /// here.
 pub fn all() -> Vec<Box<dyn Integration>> {
     use crate::agents::{

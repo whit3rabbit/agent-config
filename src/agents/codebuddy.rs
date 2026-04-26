@@ -18,14 +18,16 @@ use std::path::{Path, PathBuf};
 
 use serde_json::json;
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, Integration, SkillSurface, UninstallReport};
 use crate::paths;
 use crate::plan::{has_refusal, InstallPlan, PlanTarget, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{file_lock, fs_atomic, json_patch, md_block, ownership, planning, skills_dir};
+use crate::util::{
+    file_lock, fs_atomic, json_patch, md_block, ownership, planning, safe_fs, skills_dir,
+};
 
 use crate::agents::planning as agent_planning;
 
@@ -42,7 +44,7 @@ impl CodeBuddyAgent {
         home.join(".codebuddy")
     }
 
-    fn settings_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn settings_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => {
                 Self::codebuddy_home_from_home(&paths::home_dir()?).join("settings.json")
@@ -51,14 +53,14 @@ impl CodeBuddyAgent {
         })
     }
 
-    fn memory_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn memory_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => Self::codebuddy_home_from_home(&paths::home_dir()?).join("CLAUDE.md"),
             Scope::Local(p) => p.join("CLAUDE.md"),
         })
     }
 
-    fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => Self::codebuddy_home_from_home(&paths::home_dir()?).join("skills"),
             Scope::Local(p) => p.join(".codebuddy").join("skills"),
@@ -85,14 +87,18 @@ impl Integration for CodeBuddyAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let settings = Self::settings_path(scope)?;
         let presence = json_patch::tagged_hook_presence(&settings, &["hooks"], tag)?;
         Ok(StatusReport::for_tagged_hook(tag, settings, presence))
     }
 
-    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install(
+        &self,
+        scope: &Scope,
+        spec: &HookSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let target = PlanTarget::Hook {
             integration_id: Integration::id(self),
@@ -128,7 +134,7 @@ impl Integration for CodeBuddyAgent {
         Ok(InstallPlan::from_changes(target, changes))
     }
 
-    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let target = PlanTarget::Hook {
             integration_id: Integration::id(self),
@@ -155,7 +161,7 @@ impl Integration for CodeBuddyAgent {
         Ok(UninstallPlan::from_changes(target, changes))
     }
 
-    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
+    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let mut report = InstallReport::default();
 
@@ -181,7 +187,7 @@ impl Integration for CodeBuddyAgent {
 
             if changed {
                 let bytes = json_patch::to_pretty(&root);
-                let outcome = fs_atomic::write_atomic(&settings, &bytes, true)?;
+                let outcome = safe_fs::write(scope, &settings, &bytes, true)?;
                 if outcome.existed {
                     report.patched.push(outcome.path.clone());
                 } else {
@@ -193,7 +199,7 @@ impl Integration for CodeBuddyAgent {
             } else {
                 report.already_installed = true;
             }
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
 
         if let Some(rules) = &spec.rules {
@@ -202,7 +208,7 @@ impl Integration for CodeBuddyAgent {
             file_lock::with_lock(&memory, || {
                 let host = fs_atomic::read_to_string_or_empty(&memory)?;
                 let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
-                let outcome = fs_atomic::write_atomic(&memory, new_host.as_bytes(), true)?;
+                let outcome = safe_fs::write(scope, &memory, new_host.as_bytes(), true)?;
                 if !outcome.no_change {
                     if outcome.existed {
                         report.patched.push(outcome.path.clone());
@@ -214,14 +220,14 @@ impl Integration for CodeBuddyAgent {
                 if let Some(b) = outcome.backup {
                     report.backed_up.push(b);
                 }
-                Ok::<(), HookerError>(())
+                Ok::<(), AgentConfigError>(())
             })?;
         }
 
         Ok(report)
     }
 
-    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, HookerError> {
+    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let mut report = UninstallReport::default();
 
@@ -235,17 +241,18 @@ impl Integration for CodeBuddyAgent {
                 if changed {
                     let is_now_empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
                     let bytes = json_patch::to_pretty(&root);
-                    if is_now_empty && fs_atomic::restore_backup_if_matches(&settings, &bytes)? {
+                    if is_now_empty && safe_fs::restore_backup_if_matches(scope, &settings, &bytes)?
+                    {
                         report.restored.push(settings.clone());
                     } else if is_now_empty {
-                        fs_atomic::remove_if_exists(&settings)?;
+                        safe_fs::remove_file(scope, &settings)?;
                         report.removed.push(settings.clone());
                     } else {
-                        fs_atomic::write_atomic(&settings, &bytes, false)?;
+                        safe_fs::write(scope, &settings, &bytes, false)?;
                         report.patched.push(settings.clone());
                     }
                 }
-                Ok::<(), HookerError>(())
+                Ok::<(), AgentConfigError>(())
             })?;
         }
 
@@ -256,18 +263,18 @@ impl Integration for CodeBuddyAgent {
             let (stripped, removed) = md_block::remove(&host, tag);
             if removed {
                 if stripped.trim().is_empty() {
-                    if fs_atomic::restore_backup_if_matches(&memory, stripped.as_bytes())? {
+                    if safe_fs::restore_backup_if_matches(scope, &memory, stripped.as_bytes())? {
                         report.restored.push(memory.clone());
                     } else {
-                        fs_atomic::remove_if_exists(&memory)?;
+                        safe_fs::remove_file(scope, &memory)?;
                         report.removed.push(memory.clone());
                     }
                 } else {
-                    fs_atomic::write_atomic(&memory, stripped.as_bytes(), false)?;
+                    safe_fs::write(scope, &memory, stripped.as_bytes(), false)?;
                     report.patched.push(memory.clone());
                 }
             }
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
 
         if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
@@ -291,7 +298,7 @@ impl SkillSurface for CodeBuddyAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
         let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
@@ -310,7 +317,7 @@ impl SkillSurface for CodeBuddyAgent {
         &self,
         scope: &Scope,
         spec: &SkillSpec,
-    ) -> Result<InstallPlan, HookerError> {
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::skill_install(
             SkillSurface::id(self),
             scope,
@@ -324,7 +331,7 @@ impl SkillSurface for CodeBuddyAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::skill_uninstall(
             SkillSurface::id(self),
             scope,
@@ -334,7 +341,11 @@ impl SkillSurface for CodeBuddyAgent {
         )
     }
 
-    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+    fn install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
@@ -345,7 +356,7 @@ impl SkillSurface for CodeBuddyAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
@@ -406,7 +417,7 @@ mod tests {
         let v = read_json(&dir.path().join(".codebuddy/settings.json"));
         assert_eq!(v["hooks"]["PreToolUse"][0]["matcher"], json!("Bash"));
         assert_eq!(
-            v["hooks"]["PreToolUse"][0]["_ai_hooker_tag"],
+            v["hooks"]["PreToolUse"][0]["_agent_config_tag"],
             json!("alpha")
         );
     }

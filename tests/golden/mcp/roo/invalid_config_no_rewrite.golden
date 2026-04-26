@@ -27,7 +27,7 @@ Ok(
             "[ROOT]/.roo/mcp.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.roo/.ai-hooker-mcp.json",
+            "[ROOT]/.roo/.agent-config-mcp.json",
         ),
         files: [
             Invalid {
@@ -35,7 +35,7 @@ Ok(
                 reason: "key must be a string at line 1 column 3",
             },
             Missing {
-                path: "[ROOT]/.roo/.ai-hooker-mcp.json",
+                path: "[ROOT]/.roo/.agent-config-mcp.json",
             },
         ],
         warnings: [],

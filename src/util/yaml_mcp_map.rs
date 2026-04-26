@@ -8,7 +8,7 @@ use std::path::Path;
 
 use serde_json::{Map, Value};
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, UninstallReport};
 use crate::plan::{has_refusal, PlannedChange, RefusalReason};
 use crate::spec::McpSpec;
@@ -19,7 +19,7 @@ use crate::util::{file_lock, fs_atomic, json_patch, ownership, planning};
 pub(crate) type ServerBuilder = fn(&McpSpec) -> Value;
 
 /// Returns true if `name` exists in the MCP ownership ledger.
-pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, HookerError> {
+pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, AgentConfigError> {
     ownership::contains(ledger_path, name)
 }
 
@@ -29,13 +29,13 @@ pub(crate) fn config_presence(
     config_path: &Path,
     servers_path: &[&str],
     name: &str,
-) -> Result<ConfigPresence, HookerError> {
+) -> Result<ConfigPresence, AgentConfigError> {
     if !config_path.exists() {
         return Ok(ConfigPresence::Absent);
     }
     let root = match read_or_empty(config_path) {
         Ok(v) => v,
-        Err(HookerError::Other(e)) => {
+        Err(AgentConfigError::Other(e)) => {
             return Ok(ConfigPresence::Invalid {
                 reason: e.to_string(),
             });
@@ -56,7 +56,7 @@ pub(crate) fn install(
     spec: &McpSpec,
     servers_path: &[&str],
     build_server: ServerBuilder,
-) -> Result<InstallReport, HookerError> {
+) -> Result<InstallReport, AgentConfigError> {
     file_lock::with_lock(config_path, || {
         let mut report = InstallReport::default();
 
@@ -115,12 +115,12 @@ pub(crate) fn plan_install(
     spec: &McpSpec,
     servers_path: &[&str],
     build_server: ServerBuilder,
-) -> Result<Vec<PlannedChange>, HookerError> {
+) -> Result<Vec<PlannedChange>, AgentConfigError> {
     let mut changes = Vec::new();
 
     let mut root = match read_or_empty(config_path) {
         Ok(root) => root,
-        Err(HookerError::Other(_)) => {
+        Err(AgentConfigError::Other(_)) => {
             changes.push(PlannedChange::Refuse {
                 path: Some(config_path.to_path_buf()),
                 reason: RefusalReason::InvalidConfig,
@@ -182,7 +182,7 @@ pub(crate) fn uninstall(
     owner_tag: &str,
     kind: &'static str,
     servers_path: &[&str],
-) -> Result<UninstallReport, HookerError> {
+) -> Result<UninstallReport, AgentConfigError> {
     if !config_path.exists() && !ledger_path.exists() {
         return Ok(UninstallReport {
             not_installed: true,
@@ -238,12 +238,12 @@ pub(crate) fn plan_uninstall(
     owner_tag: &str,
     kind: &'static str,
     servers_path: &[&str],
-) -> Result<Vec<PlannedChange>, HookerError> {
+) -> Result<Vec<PlannedChange>, AgentConfigError> {
     let mut changes = Vec::new();
 
     let mut root = match read_or_empty(config_path) {
         Ok(root) => root,
-        Err(HookerError::Other(_)) => {
+        Err(AgentConfigError::Other(_)) => {
             changes.push(PlannedChange::Refuse {
                 path: Some(config_path.to_path_buf()),
                 reason: RefusalReason::InvalidConfig,
@@ -309,19 +309,19 @@ pub(crate) fn plan_uninstall(
     Ok(changes)
 }
 
-fn read_or_empty(path: &Path) -> Result<Value, HookerError> {
+fn read_or_empty(path: &Path) -> Result<Value, AgentConfigError> {
     let text = fs_atomic::read_to_string_or_empty(path)?;
     if text.trim().is_empty() {
         return Ok(Value::Object(Map::new()));
     }
     yaml_serde::from_str::<Value>(&text).map_err(|e| {
-        HookerError::Other(anyhow::anyhow!("invalid YAML in {}: {}", path.display(), e))
+        AgentConfigError::Other(anyhow::anyhow!("invalid YAML in {}: {}", path.display(), e))
     })
 }
 
-fn to_yaml_bytes(root: &Value) -> Result<Vec<u8>, HookerError> {
+fn to_yaml_bytes(root: &Value) -> Result<Vec<u8>, AgentConfigError> {
     let mut text = yaml_serde::to_string(root)
-        .map_err(|e| HookerError::Other(anyhow::anyhow!("could not serialize YAML: {e}")))?;
+        .map_err(|e| AgentConfigError::Other(anyhow::anyhow!("could not serialize YAML: {e}")))?;
     if !text.ends_with('\n') {
         text.push('\n');
     }
@@ -367,7 +367,7 @@ mod tests {
     fn install_preserves_unrelated_yaml_keys() {
         let dir = tempdir().unwrap();
         let cfg = dir.path().join("config.yaml");
-        let led = dir.path().join(".ai-hooker-mcp.json");
+        let led = dir.path().join(".agent-config-mcp.json");
         std::fs::write(&cfg, "model: anthropic/claude\nother:\n  enabled: true\n").unwrap();
 
         install(
@@ -389,7 +389,7 @@ mod tests {
     fn uninstall_removes_empty_config() {
         let dir = tempdir().unwrap();
         let cfg = dir.path().join("config.yaml");
-        let led = dir.path().join(".ai-hooker-mcp.json");
+        let led = dir.path().join(".agent-config-mcp.json");
         let spec = stdio_spec("github", "myapp");
 
         install(&cfg, &led, &spec, &["mcp_servers"], value).unwrap();

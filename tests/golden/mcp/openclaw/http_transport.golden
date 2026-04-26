@@ -26,14 +26,14 @@ Ok(
             "[HOME]/.openclaw/openclaw.json",
         ),
         ledger_path: Some(
-            "[HOME]/.openclaw/.ai-hooker-mcp.json",
+            "[HOME]/.openclaw/.agent-config-mcp.json",
         ),
         files: [
             Exists {
                 path: "[HOME]/.openclaw/openclaw.json",
             },
             Exists {
-                path: "[HOME]/.openclaw/.ai-hooker-mcp.json",
+                path: "[HOME]/.openclaw/.agent-config-mcp.json",
             },
         ],
         warnings: [],
@@ -63,7 +63,7 @@ HOME tree:
 directories:
 - .openclaw
 files:
-- .openclaw/.ai-hooker-mcp.json
+- .openclaw/.agent-config-mcp.json
   content:
 ```text
 {

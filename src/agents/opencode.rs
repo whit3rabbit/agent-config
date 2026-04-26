@@ -13,14 +13,14 @@
 use std::path::PathBuf;
 
 use crate::agents::planning as agent_planning;
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
 use crate::plan::{InstallPlan, PlanTarget, RefusalReason, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{HookSpec, McpSpec, ScriptTemplate, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{fs_atomic, mcp_json_map, ownership, planning, skills_dir};
+use crate::util::{fs_atomic, mcp_json_map, ownership, planning, safe_fs, skills_dir};
 
 /// OpenCode plugin installer.
 pub struct OpenCodeAgent;
@@ -31,7 +31,7 @@ impl OpenCodeAgent {
         Self
     }
 
-    fn plugin_path(scope: &Scope, tag: &str) -> Result<PathBuf, HookerError> {
+    fn plugin_path(scope: &Scope, tag: &str) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::opencode_plugins_dir()?.join(format!("{tag}.ts")),
             Scope::Local(p) => p
@@ -44,14 +44,14 @@ impl OpenCodeAgent {
     /// `~/.config/opencode/opencode.json` (Global) or
     /// `<root>/opencode.json` (Local). MCP servers live in the object-based
     /// `mcp` key.
-    fn config_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn config_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::opencode_config_file()?,
             Scope::Local(p) => p.join("opencode.json"),
         })
     }
 
-    fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::home_dir()?
                 .join(".config")
@@ -81,13 +81,17 @@ impl Integration for OpenCodeAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let p = Self::plugin_path(scope, tag)?;
         Ok(StatusReport::for_file_hook(tag, p))
     }
 
-    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install(
+        &self,
+        scope: &Scope,
+        spec: &HookSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let target = PlanTarget::Hook {
             integration_id: Integration::id(self),
@@ -112,7 +116,7 @@ impl Integration for OpenCodeAgent {
         Ok(InstallPlan::from_changes(target, changes))
     }
 
-    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let target = PlanTarget::Hook {
             integration_id: Integration::id(self),
@@ -125,14 +129,14 @@ impl Integration for OpenCodeAgent {
         Ok(UninstallPlan::from_changes(target, changes))
     }
 
-    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
+    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let p = Self::plugin_path(scope, &spec.tag)?;
 
         let body = match &spec.script {
             Some(ScriptTemplate::TypeScript(s)) => s.clone(),
             Some(ScriptTemplate::Shell(_)) => {
-                return Err(HookerError::MissingSpecField {
+                return Err(AgentConfigError::MissingSpecField {
                     id: "opencode",
                     field: "script (TypeScript)",
                 });
@@ -142,7 +146,7 @@ impl Integration for OpenCodeAgent {
         let body = fs_atomic::ensure_trailing_newline(&body);
 
         scope.ensure_contained(&p)?;
-        let outcome = fs_atomic::write_atomic(&p, body.as_bytes(), true)?;
+        let outcome = safe_fs::write(scope, &p, body.as_bytes(), true)?;
         let mut report = InstallReport::default();
         if outcome.no_change {
             report.already_installed = true;
@@ -157,7 +161,7 @@ impl Integration for OpenCodeAgent {
         Ok(report)
     }
 
-    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, HookerError> {
+    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let mut report = UninstallReport::default();
         let p = Self::plugin_path(scope, tag)?;
@@ -166,7 +170,7 @@ impl Integration for OpenCodeAgent {
             report.not_installed = true;
             return Ok(report);
         }
-        fs_atomic::remove_if_exists(&p)?;
+        safe_fs::remove_file(scope, &p)?;
         report.removed.push(p.clone());
 
         // Tidy: prune empty plugins dir.
@@ -175,7 +179,7 @@ impl Integration for OpenCodeAgent {
                 .map(|mut it| it.next().is_none())
                 .unwrap_or(false)
             {
-                let _ = std::fs::remove_dir(parent);
+                let _ = safe_fs::remove_empty_dir(scope, parent);
             }
         }
         Ok(report)
@@ -196,7 +200,7 @@ impl McpSurface for OpenCodeAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         let cfg = Self::config_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -213,7 +217,11 @@ impl McpSurface for OpenCodeAgent {
         ))
     }
 
-    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::mcp_json_map_install(
             McpSurface::id(self),
             scope,
@@ -230,7 +238,7 @@ impl McpSurface for OpenCodeAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::mcp_json_map_uninstall(
             McpSurface::id(self),
             scope,
@@ -242,7 +250,11 @@ impl McpSurface for OpenCodeAgent {
         )
     }
 
-    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
+    fn install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         spec.validate()?;
         let cfg = Self::config_path(scope)?;
         spec.validate_local_secret_policy(scope)?;
@@ -263,7 +275,7 @@ impl McpSurface for OpenCodeAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::config_path(scope)?;
@@ -295,7 +307,7 @@ impl SkillSurface for OpenCodeAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
         let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
@@ -314,7 +326,7 @@ impl SkillSurface for OpenCodeAgent {
         &self,
         scope: &Scope,
         spec: &SkillSpec,
-    ) -> Result<InstallPlan, HookerError> {
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::skill_install(
             SkillSurface::id(self),
             scope,
@@ -328,7 +340,7 @@ impl SkillSurface for OpenCodeAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::skill_uninstall(
             SkillSurface::id(self),
             scope,
@@ -338,7 +350,11 @@ impl SkillSurface for OpenCodeAgent {
         )
     }
 
-    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+    fn install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
@@ -349,7 +365,7 @@ impl SkillSurface for OpenCodeAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
@@ -363,7 +379,7 @@ impl SkillSurface for OpenCodeAgent {
 fn default_plugin_body(command: &str) -> String {
     let escaped = escape_js_template_literal(command);
     format!(
-        r#"// Generated by ai-hooker. Edit at your own risk.
+        r#"// Generated by agent-config. Edit at your own risk.
 // Re-running install will overwrite this file.
 
 import type {{ Plugin }} from "@opencode-ai/plugin";
@@ -472,7 +488,7 @@ mod tests {
             .script(ScriptTemplate::Shell("#!/bin/sh\nexit 0".into()))
             .build();
         let err = agent.install(&scope, &s).unwrap_err();
-        assert!(matches!(err, HookerError::MissingSpecField { .. }));
+        assert!(matches!(err, AgentConfigError::MissingSpecField { .. }));
     }
 
     fn read_json(p: &std::path::Path) -> serde_json::Value {
@@ -591,7 +607,7 @@ mod tests {
             .install_mcp(&scope, &local_mcp_spec("github", "appA"))
             .unwrap();
         let err = agent.uninstall_mcp(&scope, "github", "appB").unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
     }
 
     #[test]

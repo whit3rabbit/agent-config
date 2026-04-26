@@ -4,7 +4,7 @@
 //! crate. It is deliberately simple: create a sibling lock file with
 //! `create_new`, retry until a short timeout, and remove it on drop. If a
 //! process crashes while holding the lock, the timeout error includes the lock
-//! path so a user can delete it after confirming no ai-hooker process is
+//! path so a user can delete it after confirming no agent-config process is
 //! running.
 
 use std::fs::{self, File, OpenOptions};
@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 
 #[cfg(not(test))]
 const LOCK_TIMEOUT: Duration = Duration::from_secs(10);
@@ -30,11 +30,11 @@ pub(crate) struct FileLock {
 
 impl FileLock {
     /// Acquire the lock associated with `target`.
-    pub(crate) fn acquire(target: &Path) -> Result<Self, HookerError> {
+    pub(crate) fn acquire(target: &Path) -> Result<Self, AgentConfigError> {
         let lock_path = lock_path_for(target)?;
         if let Some(parent) = lock_path.parent() {
             if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent).map_err(|e| HookerError::io(parent, e))?;
+                fs::create_dir_all(parent).map_err(|e| AgentConfigError::io(parent, e))?;
             }
         }
 
@@ -47,9 +47,9 @@ impl FileLock {
             {
                 Ok(mut file) => {
                     writeln!(file, "pid={}", std::process::id())
-                        .map_err(|e| HookerError::io(&lock_path, e))?;
+                        .map_err(|e| AgentConfigError::io(&lock_path, e))?;
                     file.sync_all()
-                        .map_err(|e| HookerError::io(&lock_path, e))?;
+                        .map_err(|e| AgentConfigError::io(&lock_path, e))?;
                     return Ok(Self {
                         path: lock_path,
                         _file: file,
@@ -57,11 +57,11 @@ impl FileLock {
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                     if started.elapsed() >= LOCK_TIMEOUT {
-                        return Err(HookerError::LockTimeout { path: lock_path });
+                        return Err(AgentConfigError::LockTimeout { path: lock_path });
                     }
                     thread::sleep(RETRY_DELAY);
                 }
-                Err(e) => return Err(HookerError::io(&lock_path, e)),
+                Err(e) => return Err(AgentConfigError::io(&lock_path, e)),
             }
         }
     }
@@ -76,23 +76,25 @@ impl Drop for FileLock {
 /// Run `f` while holding the lock for `target`.
 pub(crate) fn with_lock<T>(
     target: &Path,
-    f: impl FnOnce() -> Result<T, HookerError>,
-) -> Result<T, HookerError> {
+    f: impl FnOnce() -> Result<T, AgentConfigError>,
+) -> Result<T, AgentConfigError> {
     let _guard = FileLock::acquire(target)?;
     f()
 }
 
-fn lock_path_for(target: &Path) -> Result<PathBuf, HookerError> {
+fn lock_path_for(target: &Path) -> Result<PathBuf, AgentConfigError> {
     let file_name = target
         .file_name()
-        .ok_or_else(|| HookerError::PathResolution(format!("path has no file name: {target:?}")))?
+        .ok_or_else(|| {
+            AgentConfigError::PathResolution(format!("path has no file name: {target:?}"))
+        })?
         .to_string_lossy();
     let parent = target
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .map(Path::to_path_buf)
         .unwrap_or_else(|| PathBuf::from("."));
-    Ok(parent.join(format!(".{file_name}.ai-hooker.lock")))
+    Ok(parent.join(format!(".{file_name}.agent-config.lock")))
 }
 
 #[cfg(test)]
@@ -106,7 +108,7 @@ mod tests {
         let target = dir.path().join("config.json");
         let lock = lock_path_for(&target).unwrap();
 
-        let value = with_lock(&target, || Ok::<_, HookerError>(42)).unwrap();
+        let value = with_lock(&target, || Ok::<_, AgentConfigError>(42)).unwrap();
 
         assert_eq!(value, 42);
         assert!(!lock.exists());
@@ -121,6 +123,6 @@ mod tests {
 
         let err = FileLock::acquire(&target).unwrap_err();
 
-        assert!(matches!(err, HookerError::LockTimeout { .. }));
+        assert!(matches!(err, AgentConfigError::LockTimeout { .. }));
     }
 }

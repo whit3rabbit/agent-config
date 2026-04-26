@@ -14,7 +14,7 @@ OpenClaw project instructions use the workspace `AGENTS.md` file.
 | --- | --- |
 | Local | `<root>/AGENTS.md` |
 
-`ai-hooker` inserts a fenced markdown block keyed by the consumer tag. Global
+`agent-config` inserts a fenced markdown block keyed by the consumer tag. Global
 prompt install is unsupported.
 
 ## MCP
@@ -27,7 +27,7 @@ OpenClaw stores outbound MCP server definitions in its JSON5 config under
 | Global | `~/.openclaw/openclaw.json` | `mcp.servers.<name>` |
 
 MCP is global-only in this crate. Local MCP install returns
-`HookerError::UnsupportedScope`.
+`AgentConfigError::UnsupportedScope`.
 
 Transport mapping:
 
@@ -36,7 +36,7 @@ Transport mapping:
 - `Sse`: `url`, optional `headers`, `transport: "sse"`
 
 OpenClaw also has `openclaw mcp set/unset`; this crate writes the documented
-config shape directly and records ownership in `.ai-hooker-mcp.json` beside
+config shape directly and records ownership in `.agent-config-mcp.json` beside
 the config.
 
 ## Skills
@@ -56,7 +56,7 @@ Each skill directory contains `SKILL.md` plus optional caller-supplied
 
 OpenClaw native plugins require `openclaw.plugin.json`, `package.json`, and a
 runtime entrypoint, and are normally installed with `openclaw plugins install`.
-Hook packs participate in that plugin install surface. `ai-hooker` does not
+Hook packs participate in that plugin install surface. `agent-config` does not
 shell out to the OpenClaw CLI in this pass.
 
 ## References

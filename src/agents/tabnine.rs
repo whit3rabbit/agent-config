@@ -22,14 +22,14 @@ use std::path::PathBuf;
 use serde_json::json;
 
 use crate::agents::planning as agent_planning;
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, Integration, McpSurface, UninstallReport};
 use crate::paths;
 use crate::plan::{has_refusal, InstallPlan, PlanTarget, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec};
 use crate::status::StatusReport;
-use crate::util::{file_lock, fs_atomic, json_patch, mcp_json_object, ownership, planning};
+use crate::util::{file_lock, json_patch, mcp_json_object, ownership, planning, safe_fs};
 
 /// Tabnine CLI installer.
 pub struct TabnineAgent;
@@ -40,7 +40,7 @@ impl TabnineAgent {
         Self
     }
 
-    fn settings_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn settings_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::home_dir()?
                 .join(".tabnine")
@@ -50,7 +50,7 @@ impl TabnineAgent {
         })
     }
 
-    fn mcp_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Self::settings_path(scope)
     }
 }
@@ -74,14 +74,18 @@ impl Integration for TabnineAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let p = Self::settings_path(scope)?;
         let presence = json_patch::tagged_hook_presence(&p, &["hooks"], tag)?;
         Ok(StatusReport::for_tagged_hook(tag, p, presence))
     }
 
-    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install(
+        &self,
+        scope: &Scope,
+        spec: &HookSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let target = PlanTarget::Hook {
             integration_id: Integration::id(self),
@@ -111,7 +115,7 @@ impl Integration for TabnineAgent {
         Ok(InstallPlan::from_changes(target, changes))
     }
 
-    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let target = PlanTarget::Hook {
             integration_id: Integration::id(self),
@@ -131,7 +135,7 @@ impl Integration for TabnineAgent {
         Ok(UninstallPlan::from_changes(target, changes))
     }
 
-    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
+    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let mut report = InstallReport::default();
 
@@ -157,7 +161,7 @@ impl Integration for TabnineAgent {
 
             if changed {
                 let bytes = json_patch::to_pretty(&root);
-                let outcome = fs_atomic::write_atomic(&p, &bytes, true)?;
+                let outcome = safe_fs::write(scope, &p, &bytes, true)?;
                 if outcome.existed {
                     report.patched.push(outcome.path.clone());
                 } else {
@@ -169,13 +173,13 @@ impl Integration for TabnineAgent {
             } else {
                 report.already_installed = true;
             }
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
 
         Ok(report)
     }
 
-    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, HookerError> {
+    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let mut report = UninstallReport::default();
 
@@ -189,17 +193,17 @@ impl Integration for TabnineAgent {
                 if changed {
                     let is_now_empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
                     let bytes = json_patch::to_pretty(&root);
-                    if is_now_empty && fs_atomic::restore_backup_if_matches(&p, &bytes)? {
+                    if is_now_empty && safe_fs::restore_backup_if_matches(scope, &p, &bytes)? {
                         report.restored.push(p.clone());
                     } else if is_now_empty {
-                        fs_atomic::remove_if_exists(&p)?;
+                        safe_fs::remove_file(scope, &p)?;
                         report.removed.push(p.clone());
                     } else {
-                        fs_atomic::write_atomic(&p, &bytes, false)?;
+                        safe_fs::write(scope, &p, &bytes, false)?;
                         report.patched.push(p.clone());
                     }
                 }
-                Ok::<(), HookerError>(())
+                Ok::<(), AgentConfigError>(())
             })?;
         }
 
@@ -224,7 +228,7 @@ impl McpSurface for TabnineAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         let cfg = Self::mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -240,7 +244,11 @@ impl McpSurface for TabnineAgent {
         ))
     }
 
-    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::mcp_json_object_install(
             McpSurface::id(self),
             scope,
@@ -254,7 +262,7 @@ impl McpSurface for TabnineAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::mcp_json_object_uninstall(
             McpSurface::id(self),
             scope,
@@ -264,7 +272,11 @@ impl McpSurface for TabnineAgent {
         )
     }
 
-    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
+    fn install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
         spec.validate_local_secret_policy(scope)?;
@@ -278,7 +290,7 @@ impl McpSurface for TabnineAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::mcp_path(scope)?;
@@ -343,7 +355,7 @@ mod tests {
         let v = read_json(&dir.path().join(".tabnine/agent/settings.json"));
         assert_eq!(v["hooks"]["BeforeTool"][0]["matcher"], json!("Bash"));
         assert_eq!(
-            v["hooks"]["BeforeTool"][0]["_ai_hooker_tag"],
+            v["hooks"]["BeforeTool"][0]["_agent_config_tag"],
             json!("alpha")
         );
     }

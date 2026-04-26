@@ -1,6 +1,6 @@
 # Tabnine CLI
 
-ID: `tabnine` — `ai_hooker::by_id("tabnine")`
+ID: `tabnine` — `agent_config::by_id("tabnine")`
 
 Tabnine packs hooks and MCP servers into a single `settings.json`.
 
@@ -40,7 +40,7 @@ Tabnine packs hooks and MCP servers into a single `settings.json`.
       {
         "matcher": "Bash",
         "hooks": [{ "type": "command", "command": "myapp hook tabnine" }],
-        "_ai_hooker_tag": "myapp"
+        "_agent_config_tag": "myapp"
       }
     ]
   }
@@ -91,7 +91,7 @@ Tabnine also recognises top-level `mcp.allowed` and `mcp.excluded` arrays.
 This crate does not synthesise either; callers provide them via direct
 config edits if needed.
 
-Ownership is recorded in a sidecar `<config-dir>/.ai-hooker-mcp.json` ledger.
+Ownership is recorded in a sidecar `<config-dir>/.agent-config-mcp.json` ledger.
 
 ## References
 

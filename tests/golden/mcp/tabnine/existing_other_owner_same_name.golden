@@ -26,14 +26,14 @@ Ok(
             "[ROOT]/.tabnine/agent/settings.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.tabnine/agent/.ai-hooker-mcp.json",
+            "[ROOT]/.tabnine/agent/.agent-config-mcp.json",
         ),
         files: [
             Exists {
                 path: "[ROOT]/.tabnine/agent/settings.json",
             },
             Exists {
-                path: "[ROOT]/.tabnine/agent/.ai-hooker-mcp.json",
+                path: "[ROOT]/.tabnine/agent/.agent-config-mcp.json",
             },
         ],
         warnings: [],
@@ -58,7 +58,7 @@ Ok(
                     "other-owner",
                 ),
                 path: Some(
-                    "[ROOT]/.tabnine/agent/.ai-hooker-mcp.json",
+                    "[ROOT]/.tabnine/agent/.agent-config-mcp.json",
                 ),
             },
         ],
@@ -73,7 +73,7 @@ directories:
 - .tabnine
 - .tabnine/agent
 files:
-- .tabnine/agent/.ai-hooker-mcp.json
+- .tabnine/agent/.agent-config-mcp.json
   content:
 ```text
 {

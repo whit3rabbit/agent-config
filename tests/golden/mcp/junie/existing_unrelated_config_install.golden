@@ -28,14 +28,14 @@ Ok(
             "[ROOT]/.junie/mcp/mcp.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.junie/mcp/.ai-hooker-mcp.json",
+            "[ROOT]/.junie/mcp/.agent-config-mcp.json",
         ),
         files: [
             Exists {
                 path: "[ROOT]/.junie/mcp/mcp.json",
             },
             Exists {
-                path: "[ROOT]/.junie/mcp/.ai-hooker-mcp.json",
+                path: "[ROOT]/.junie/mcp/.agent-config-mcp.json",
             },
         ],
         warnings: [],
@@ -69,7 +69,7 @@ directories:
 - .junie
 - .junie/mcp
 files:
-- .junie/mcp/.ai-hooker-mcp.json
+- .junie/mcp/.agent-config-mcp.json
   content:
 ```text
 {

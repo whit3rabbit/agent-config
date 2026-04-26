@@ -22,14 +22,14 @@ Ok(
             "[HOME]/.openclaw/openclaw.json",
         ),
         ledger_path: Some(
-            "[HOME]/.openclaw/.ai-hooker-mcp.json",
+            "[HOME]/.openclaw/.agent-config-mcp.json",
         ),
         files: [
             Missing {
                 path: "[HOME]/.openclaw/openclaw.json",
             },
             Missing {
-                path: "[HOME]/.openclaw/.ai-hooker-mcp.json",
+                path: "[HOME]/.openclaw/.agent-config-mcp.json",
             },
         ],
         warnings: [],

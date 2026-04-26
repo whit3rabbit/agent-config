@@ -7,7 +7,7 @@ Ok(
     InstallReport {
         created: [],
         patched: [
-            "[HOME]/.hermes/skills/ai-hooker/golden-skill/SKILL.md",
+            "[HOME]/.hermes/skills/agent-config/golden-skill/SKILL.md",
         ],
         backed_up: [],
         already_installed: false,
@@ -23,17 +23,17 @@ Ok(
             owner: "golden-owner",
         },
         config_path: Some(
-            "[HOME]/.hermes/skills/ai-hooker/golden-skill",
+            "[HOME]/.hermes/skills/agent-config/golden-skill",
         ),
         ledger_path: Some(
-            "[HOME]/.hermes/skills/ai-hooker/.ai-hooker-skills.json",
+            "[HOME]/.hermes/skills/agent-config/.agent-config-skills.json",
         ),
         files: [
             Exists {
-                path: "[HOME]/.hermes/skills/ai-hooker/golden-skill",
+                path: "[HOME]/.hermes/skills/agent-config/golden-skill",
             },
             Exists {
-                path: "[HOME]/.hermes/skills/ai-hooker/golden-skill/SKILL.md",
+                path: "[HOME]/.hermes/skills/agent-config/golden-skill/SKILL.md",
             },
         ],
         warnings: [],
@@ -63,10 +63,10 @@ HOME tree:
 directories:
 - .hermes
 - .hermes/skills
-- .hermes/skills/ai-hooker
-- .hermes/skills/ai-hooker/golden-skill
+- .hermes/skills/agent-config
+- .hermes/skills/agent-config/golden-skill
 files:
-- .hermes/skills/ai-hooker/.ai-hooker-skills.json
+- .hermes/skills/agent-config/.agent-config-skills.json
   content:
 ```text
 {
@@ -79,7 +79,7 @@ files:
   "version": 2
 }
 ```
-- .hermes/skills/ai-hooker/golden-skill/SKILL.md
+- .hermes/skills/agent-config/golden-skill/SKILL.md
   content:
 ```text
 ---

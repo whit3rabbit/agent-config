@@ -22,14 +22,14 @@ Ok(
             "[ROOT]/.roo/mcp.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.roo/.ai-hooker-mcp.json",
+            "[ROOT]/.roo/.agent-config-mcp.json",
         ),
         files: [
             Missing {
                 path: "[ROOT]/.roo/mcp.json",
             },
             Missing {
-                path: "[ROOT]/.roo/.ai-hooker-mcp.json",
+                path: "[ROOT]/.roo/.agent-config-mcp.json",
             },
         ],
         warnings: [],

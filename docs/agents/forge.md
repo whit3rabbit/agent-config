@@ -1,6 +1,6 @@
 # Forge
 
-ID: `forge` — `ai_hooker::by_id("forge")`
+ID: `forge` — `agent_config::by_id("forge")`
 
 ## Surfaces
 
@@ -37,7 +37,7 @@ ID: `forge` — `ai_hooker::by_id("forge")`
 }
 ```
 
-Ownership is recorded in a sidecar `<config-dir>/.ai-hooker-mcp.json` ledger.
+Ownership is recorded in a sidecar `<config-dir>/.agent-config-mcp.json` ledger.
 
 ## Skills
 

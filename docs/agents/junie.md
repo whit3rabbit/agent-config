@@ -1,6 +1,6 @@
 # JetBrains Junie
 
-ID: `junie` — `ai_hooker::by_id("junie")`
+ID: `junie` — `agent_config::by_id("junie")`
 
 **Status:** registered for project-local prompt rules and MCP (Global + Local).
 Hook lifecycle support is tracked upstream (JUNIE-1961) but not yet released.
@@ -43,7 +43,7 @@ default `AGENTS.md`.
 }
 ```
 
-Ownership is recorded in a sidecar `<config-dir>/.ai-hooker-mcp.json` ledger.
+Ownership is recorded in a sidecar `<config-dir>/.agent-config-mcp.json` ledger.
 
 ## References
 

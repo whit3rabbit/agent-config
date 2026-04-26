@@ -26,14 +26,14 @@ Ok(
             "[ROOT]/.codex/config.toml",
         ),
         ledger_path: Some(
-            "[ROOT]/.codex/.ai-hooker-mcp.json",
+            "[ROOT]/.codex/.agent-config-mcp.json",
         ),
         files: [
             Exists {
                 path: "[ROOT]/.codex/config.toml",
             },
             Exists {
-                path: "[ROOT]/.codex/.ai-hooker-mcp.json",
+                path: "[ROOT]/.codex/.agent-config-mcp.json",
             },
         ],
         warnings: [],
@@ -62,7 +62,7 @@ ROOT tree:
 directories:
 - .codex
 files:
-- .codex/.ai-hooker-mcp.json
+- .codex/.agent-config-mcp.json
   content:
 ```text
 {

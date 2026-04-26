@@ -12,14 +12,14 @@
 use std::path::{Path, PathBuf};
 
 use crate::agents::planning as agent_planning;
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, Integration, SkillSurface, UninstallReport};
 use crate::paths;
 use crate::plan::{InstallPlan, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{HookSpec, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{file_lock, fs_atomic, md_block, ownership, skills_dir};
+use crate::util::{file_lock, fs_atomic, md_block, ownership, safe_fs, skills_dir};
 
 /// Trae agent installer.
 pub struct TraeAgent;
@@ -30,23 +30,23 @@ impl TraeAgent {
         Self
     }
 
-    fn require_local(scope: &Scope) -> Result<&Path, HookerError> {
+    fn require_local(scope: &Scope) -> Result<&Path, AgentConfigError> {
         match scope {
             Scope::Local(p) => Ok(p),
-            Scope::Global => Err(HookerError::UnsupportedScope {
+            Scope::Global => Err(AgentConfigError::UnsupportedScope {
                 id: "trae",
                 scope: ScopeKind::Global,
             }),
         }
     }
 
-    fn rules_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn rules_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(Self::require_local(scope)?
             .join(".trae")
             .join("project_rules.md"))
     }
 
-    fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::home_dir()?.join(".trae").join("skills"),
             Scope::Local(p) => p.join(".trae").join("skills"),
@@ -73,13 +73,17 @@ impl Integration for TraeAgent {
         &[ScopeKind::Local]
     }
 
-    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let path = Self::rules_path(scope)?;
         StatusReport::for_markdown_block_hook(tag, path)
     }
 
-    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install(
+        &self,
+        scope: &Scope,
+        spec: &HookSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::markdown_install(
             Integration::id(self),
             scope,
@@ -89,7 +93,7 @@ impl Integration for TraeAgent {
         )
     }
 
-    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::markdown_uninstall(
             Integration::id(self),
             scope,
@@ -98,19 +102,22 @@ impl Integration for TraeAgent {
         )
     }
 
-    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
+    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
-        let rules = spec.rules.as_ref().ok_or(HookerError::MissingSpecField {
-            id: "trae",
-            field: "rules",
-        })?;
+        let rules = spec
+            .rules
+            .as_ref()
+            .ok_or(AgentConfigError::MissingSpecField {
+                id: "trae",
+                field: "rules",
+            })?;
         let path = Self::rules_path(scope)?;
         scope.ensure_contained(&path)?;
         let mut report = InstallReport::default();
         file_lock::with_lock(&path, || {
             let host = fs_atomic::read_to_string_or_empty(&path)?;
             let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
-            let outcome = fs_atomic::write_atomic(&path, new_host.as_bytes(), true)?;
+            let outcome = safe_fs::write(scope, &path, new_host.as_bytes(), true)?;
             if outcome.no_change {
                 report.already_installed = true;
             } else if outcome.existed {
@@ -121,12 +128,12 @@ impl Integration for TraeAgent {
             if let Some(b) = outcome.backup {
                 report.backed_up.push(b);
             }
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
         Ok(report)
     }
 
-    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, HookerError> {
+    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let path = Self::rules_path(scope)?;
         scope.ensure_contained(&path)?;
@@ -139,17 +146,17 @@ impl Integration for TraeAgent {
                 return Ok(());
             }
             if stripped.trim().is_empty() {
-                if fs_atomic::restore_backup_if_matches(&path, stripped.as_bytes())? {
+                if safe_fs::restore_backup_if_matches(scope, &path, stripped.as_bytes())? {
                     report.restored.push(path.clone());
                 } else {
-                    fs_atomic::remove_if_exists(&path)?;
+                    safe_fs::remove_file(scope, &path)?;
                     report.removed.push(path.clone());
                 }
             } else {
-                fs_atomic::write_atomic(&path, stripped.as_bytes(), false)?;
+                safe_fs::write(scope, &path, stripped.as_bytes(), false)?;
                 report.patched.push(path.clone());
             }
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
         Ok(report)
     }
@@ -169,7 +176,7 @@ impl SkillSurface for TraeAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
         let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
@@ -188,7 +195,7 @@ impl SkillSurface for TraeAgent {
         &self,
         scope: &Scope,
         spec: &SkillSpec,
-    ) -> Result<InstallPlan, HookerError> {
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::skill_install(
             SkillSurface::id(self),
             scope,
@@ -202,7 +209,7 @@ impl SkillSurface for TraeAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::skill_uninstall(
             SkillSurface::id(self),
             scope,
@@ -212,7 +219,11 @@ impl SkillSurface for TraeAgent {
         )
     }
 
-    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+    fn install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
@@ -223,7 +234,7 @@ impl SkillSurface for TraeAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
@@ -268,7 +279,7 @@ mod tests {
         let err = agent
             .install(&Scope::Global, &rules_spec("alpha", "x"))
             .unwrap_err();
-        assert!(matches!(err, HookerError::UnsupportedScope { .. }));
+        assert!(matches!(err, AgentConfigError::UnsupportedScope { .. }));
     }
 
     #[test]

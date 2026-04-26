@@ -10,7 +10,7 @@
 //!       {
 //!         "matcher": "pattern",
 //!         "hooks": [{ "type": "command", "command": "...", "timeout": 600 }],
-//!         "_ai_hooker_tag": "myapp"
+//!         "_agent_config_tag": "myapp"
 //!       }
 //!     ]
 //!   }
@@ -27,7 +27,7 @@ use serde_json::json;
 use toml_edit::{value, Array, InlineTable, Table};
 
 use crate::agents::planning as agent_planning;
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
 use crate::plan::{
@@ -37,7 +37,8 @@ use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec, McpTransport, SkillSpec};
 use crate::status::StatusReport;
 use crate::util::{
-    file_lock, fs_atomic, json_patch, md_block, ownership, planning, skills_dir, toml_patch,
+    file_lock, fs_atomic, json_patch, md_block, ownership, planning, safe_fs, skills_dir,
+    toml_patch,
 };
 
 /// Codex CLI.
@@ -49,14 +50,14 @@ impl CodexAgent {
         Self
     }
 
-    fn hooks_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn hooks_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::codex_home()?.join("hooks.json"),
             Scope::Local(p) => p.join(".codex").join("hooks.json"),
         })
     }
 
-    fn agents_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn agents_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::codex_home()?.join("AGENTS.md"),
             Scope::Local(p) => p.join("AGENTS.md"),
@@ -65,14 +66,14 @@ impl CodexAgent {
 
     /// `<codex-home>/config.toml` (Global) or `<root>/.codex/config.toml`
     /// (Local). MCP servers live here as `[mcp_servers.<name>]` tables.
-    fn config_toml_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn config_toml_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::codex_home()?.join("config.toml"),
             Scope::Local(p) => p.join(".codex").join("config.toml"),
         })
     }
 
-    fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::home_dir()?.join(".agents").join("skills"),
             Scope::Local(p) => p.join(".agents").join("skills"),
@@ -99,14 +100,18 @@ impl Integration for CodexAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let p = Self::hooks_path(scope)?;
         let presence = json_patch::tagged_hook_presence(&p, &["hooks"], tag)?;
         Ok(StatusReport::for_tagged_hook(tag, p, presence))
     }
 
-    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install(
+        &self,
+        scope: &Scope,
+        spec: &HookSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let target = PlanTarget::Hook {
             integration_id: Integration::id(self),
@@ -139,7 +144,7 @@ impl Integration for CodexAgent {
         Ok(InstallPlan::from_changes(target, changes))
     }
 
-    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let target = PlanTarget::Hook {
             integration_id: Integration::id(self),
@@ -164,7 +169,7 @@ impl Integration for CodexAgent {
         Ok(UninstallPlan::from_changes(target, changes))
     }
 
-    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
+    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let mut report = InstallReport::default();
 
@@ -190,7 +195,7 @@ impl Integration for CodexAgent {
 
             if changed {
                 let bytes = json_patch::to_pretty(&root);
-                let outcome = fs_atomic::write_atomic(&p, &bytes, true)?;
+                let outcome = safe_fs::write(scope, &p, &bytes, true)?;
                 if outcome.existed {
                     report.patched.push(outcome.path.clone());
                 } else {
@@ -202,7 +207,7 @@ impl Integration for CodexAgent {
             } else {
                 report.already_installed = true;
             }
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
 
         if let Some(rules) = &spec.rules {
@@ -211,7 +216,7 @@ impl Integration for CodexAgent {
             file_lock::with_lock(&agents, || {
                 let host = fs_atomic::read_to_string_or_empty(&agents)?;
                 let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
-                let outcome = fs_atomic::write_atomic(&agents, new_host.as_bytes(), true)?;
+                let outcome = safe_fs::write(scope, &agents, new_host.as_bytes(), true)?;
                 if outcome.existed && !outcome.no_change {
                     report.patched.push(outcome.path.clone());
                     report.already_installed = false;
@@ -222,14 +227,14 @@ impl Integration for CodexAgent {
                 if let Some(b) = outcome.backup {
                     report.backed_up.push(b);
                 }
-                Ok::<(), HookerError>(())
+                Ok::<(), AgentConfigError>(())
             })?;
         }
 
         Ok(report)
     }
 
-    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, HookerError> {
+    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let mut report = UninstallReport::default();
 
@@ -243,17 +248,17 @@ impl Integration for CodexAgent {
                 if changed {
                     let empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
                     let bytes = json_patch::to_pretty(&root);
-                    if empty && fs_atomic::restore_backup_if_matches(&p, &bytes)? {
+                    if empty && safe_fs::restore_backup_if_matches(scope, &p, &bytes)? {
                         report.restored.push(p.clone());
                     } else if empty {
-                        fs_atomic::remove_if_exists(&p)?;
+                        safe_fs::remove_file(scope, &p)?;
                         report.removed.push(p.clone());
                     } else {
-                        fs_atomic::write_atomic(&p, &bytes, false)?;
+                        safe_fs::write(scope, &p, &bytes, false)?;
                         report.patched.push(p.clone());
                     }
                 }
-                Ok::<(), HookerError>(())
+                Ok::<(), AgentConfigError>(())
             })?;
         }
 
@@ -264,18 +269,18 @@ impl Integration for CodexAgent {
             let (stripped, removed) = md_block::remove(&host, tag);
             if removed {
                 if stripped.trim().is_empty() {
-                    if fs_atomic::restore_backup_if_matches(&agents, stripped.as_bytes())? {
+                    if safe_fs::restore_backup_if_matches(scope, &agents, stripped.as_bytes())? {
                         report.restored.push(agents.clone());
                     } else {
-                        fs_atomic::remove_if_exists(&agents)?;
+                        safe_fs::remove_file(scope, &agents)?;
                         report.removed.push(agents.clone());
                     }
                 } else {
-                    fs_atomic::write_atomic(&agents, stripped.as_bytes(), false)?;
+                    safe_fs::write(scope, &agents, stripped.as_bytes(), false)?;
                     report.patched.push(agents.clone());
                 }
             }
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
 
         if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
@@ -299,7 +304,7 @@ impl McpSurface for CodexAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         let cfg = Self::config_toml_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -315,7 +320,11 @@ impl McpSurface for CodexAgent {
         ))
     }
 
-    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         spec.validate()?;
         let target = PlanTarget::Mcp {
             integration_id: McpSurface::id(self),
@@ -336,7 +345,7 @@ impl McpSurface for CodexAgent {
         let mut changes = Vec::new();
         let mut doc = match toml_patch::read_or_empty(&cfg) {
             Ok(doc) => doc,
-            Err(HookerError::TomlInvalid { .. }) => {
+            Err(AgentConfigError::TomlInvalid { .. }) => {
                 changes.push(PlannedChange::Refuse {
                     path: Some(cfg),
                     reason: RefusalReason::InvalidConfig,
@@ -396,7 +405,7 @@ impl McpSurface for CodexAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let target = PlanTarget::Mcp {
@@ -410,7 +419,7 @@ impl McpSurface for CodexAgent {
         let mut changes = Vec::new();
         let mut doc = match toml_patch::read_or_empty(&cfg) {
             Ok(doc) => doc,
-            Err(HookerError::TomlInvalid { .. }) => {
+            Err(AgentConfigError::TomlInvalid { .. }) => {
                 changes.push(PlannedChange::Refuse {
                     path: Some(cfg),
                     reason: RefusalReason::InvalidConfig,
@@ -463,7 +472,11 @@ impl McpSurface for CodexAgent {
         Ok(UninstallPlan::from_changes(target, changes))
     }
 
-    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
+    fn install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         spec.validate()?;
         let mut report = InstallReport::default();
         let cfg = Self::config_toml_path(scope)?;
@@ -491,7 +504,7 @@ impl McpSurface for CodexAgent {
 
             let written_bytes: Option<Vec<u8>> = if changed {
                 let bytes = toml_patch::to_string(&doc);
-                let outcome = fs_atomic::write_atomic(&cfg, &bytes, true)?;
+                let outcome = safe_fs::write(scope, &cfg, &bytes, true)?;
                 if outcome.existed {
                     report.patched.push(outcome.path.clone());
                 } else {
@@ -515,7 +528,7 @@ impl McpSurface for CodexAgent {
             if !changed && !owner_changed {
                 report.already_installed = true;
             }
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
         Ok(report)
     }
@@ -525,7 +538,7 @@ impl McpSurface for CodexAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let mut report = UninstallReport::default();
@@ -557,19 +570,19 @@ impl McpSurface for CodexAgent {
 
                 let now_empty = doc.as_table().is_empty();
                 let bytes = toml_patch::to_string(&doc);
-                if now_empty && fs_atomic::restore_backup_if_matches(&cfg, &bytes)? {
+                if now_empty && safe_fs::restore_backup_if_matches(scope, &cfg, &bytes)? {
                     report.restored.push(cfg.clone());
                 } else if now_empty {
-                    fs_atomic::remove_if_exists(&cfg)?;
+                    safe_fs::remove_file(scope, &cfg)?;
                     report.removed.push(cfg.clone());
                 } else {
-                    fs_atomic::write_atomic(&cfg, &bytes, false)?;
+                    safe_fs::write(scope, &cfg, &bytes, false)?;
                     report.patched.push(cfg.clone());
                 }
             }
 
             ownership::record_uninstall(&ledger, name)?;
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
 
         if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
@@ -593,7 +606,7 @@ impl SkillSurface for CodexAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
         let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
@@ -612,7 +625,7 @@ impl SkillSurface for CodexAgent {
         &self,
         scope: &Scope,
         spec: &SkillSpec,
-    ) -> Result<InstallPlan, HookerError> {
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::skill_install(
             SkillSurface::id(self),
             scope,
@@ -626,7 +639,7 @@ impl SkillSurface for CodexAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::skill_uninstall(
             SkillSurface::id(self),
             scope,
@@ -636,7 +649,11 @@ impl SkillSurface for CodexAgent {
         )
     }
 
-    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+    fn install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
@@ -647,7 +664,7 @@ impl SkillSurface for CodexAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
@@ -801,7 +818,7 @@ mod tests {
         agent.install(&scope, &spec).unwrap();
         let md = std::fs::read_to_string(dir.path().join("AGENTS.md")).unwrap();
         assert!(md.contains("Use strict mode."));
-        assert!(md.contains("AI-HOOKER:alpha"));
+        assert!(md.contains("AGENT-CONFIG:alpha"));
     }
 
     #[test]
@@ -890,7 +907,7 @@ mod tests {
         let err = agent
             .install_mcp(&scope, &local_mcp_spec("github", "appB"))
             .unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
     }
 
     #[test]
@@ -907,7 +924,7 @@ mod tests {
             .unwrap_err();
         assert!(matches!(
             err,
-            HookerError::NotOwnedByCaller { actual: None, .. }
+            AgentConfigError::NotOwnedByCaller { actual: None, .. }
         ));
         let s = read_toml(&cfg);
         assert!(s.contains("user-cmd"));
@@ -936,7 +953,7 @@ mod tests {
             .install_mcp(&scope, &local_mcp_spec("github", "appA"))
             .unwrap();
         let err = agent.uninstall_mcp(&scope, "github", "appB").unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
     }
 
     #[test]

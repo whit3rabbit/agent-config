@@ -1,6 +1,6 @@
 # Codex CLI
 
-ID: `codex` — `ai_hooker::by_id("codex")`
+ID: `codex` — `agent_config::by_id("codex")`
 
 ## Hooks
 
@@ -35,7 +35,7 @@ ID: `codex` — `ai_hooker::by_id("codex")`
         "hooks": [
           { "type": "command", "command": "myapp hook codex" }
         ],
-        "_ai_hooker_tag": "myapp"
+        "_agent_config_tag": "myapp"
       }
     ]
   }

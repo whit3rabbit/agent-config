@@ -24,14 +24,14 @@ Ok(
             "[ROOT]/.iflow/settings.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.iflow/.ai-hooker-mcp.json",
+            "[ROOT]/.iflow/.agent-config-mcp.json",
         ),
         files: [
             Missing {
                 path: "[ROOT]/.iflow/settings.json",
             },
             Missing {
-                path: "[ROOT]/.iflow/.ai-hooker-mcp.json",
+                path: "[ROOT]/.iflow/.agent-config-mcp.json",
             },
         ],
         warnings: [],

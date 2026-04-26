@@ -26,7 +26,7 @@ Ok(
             "[ROOT]/.github/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.github/skills/.ai-hooker-skills.json",
+            "[ROOT]/.github/skills/.agent-config-skills.json",
         ),
         files: [
             Exists {
@@ -64,7 +64,7 @@ directories:
 - .github/skills
 - .github/skills/golden-skill
 files:
-- .github/skills/.ai-hooker-skills.json
+- .github/skills/.agent-config-skills.json
   content:
 ```text
 {

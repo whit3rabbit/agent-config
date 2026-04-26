@@ -1,6 +1,6 @@
 # Trae
 
-ID: `trae` — `ai_hooker::by_id("trae")`
+ID: `trae` — `agent_config::by_id("trae")`
 
 ## Surfaces
 

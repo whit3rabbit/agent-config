@@ -35,18 +35,18 @@ impl Scope {
 
     /// Verify that `path` is contained within the local project root.
     ///
-    /// For [`Scope::Global`], this is a no-op (global writes go to the user's
-    /// home/config directories, which are not project-scoped). For
-    /// [`Scope::Local`], rejects symlink components under the project root,
+    /// For [`Scope::Global`], rejects symlinked target files so writes do not
+    /// follow symlinked config files. For [`Scope::Local`], rejects symlink
+    /// components under the project root,
     /// canonicalizes the deepest existing path component, then checks it stays
     /// within the canonical project root.
     ///
-    /// Returns [`crate::HookerError::PathResolution`] if the path escapes the root.
+    /// Returns [`crate::AgentConfigError::PathResolution`] if the path escapes the root.
     /// Missing tail components are allowed when every existing ancestor stays
     /// inside the root and is not a symlink.
-    pub fn ensure_contained(&self, path: &Path) -> Result<(), crate::error::HookerError> {
+    pub fn ensure_contained(&self, path: &Path) -> Result<(), crate::error::AgentConfigError> {
         match self {
-            Scope::Global => Ok(()),
+            Scope::Global => crate::util::fs_atomic::reject_symlink(path),
             Scope::Local(root) => crate::util::fs_atomic::ensure_contained(path, root),
         }
     }

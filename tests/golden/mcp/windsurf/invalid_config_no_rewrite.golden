@@ -27,7 +27,7 @@ Ok(
             "[ROOT]/.windsurf/mcp_config.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.windsurf/.ai-hooker-mcp.json",
+            "[ROOT]/.windsurf/.agent-config-mcp.json",
         ),
         files: [
             Invalid {
@@ -35,7 +35,7 @@ Ok(
                 reason: "key must be a string at line 1 column 3",
             },
             Missing {
-                path: "[ROOT]/.windsurf/.ai-hooker-mcp.json",
+                path: "[ROOT]/.windsurf/.agent-config-mcp.json",
             },
         ],
         warnings: [],

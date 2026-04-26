@@ -19,7 +19,7 @@ Ok(
             "[ROOT]/.amp/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.amp/skills/.ai-hooker-skills.json",
+            "[ROOT]/.amp/skills/.agent-config-skills.json",
         ),
         files: [
             Missing {

@@ -1,6 +1,6 @@
 # Claude Code
 
-ID: `claude` — `ai_hooker::by_id("claude")`
+ID: `claude` — `agent_config::by_id("claude")`
 
 ## Hooks
 
@@ -35,7 +35,7 @@ ID: `claude` — `ai_hooker::by_id("claude")`
         "hooks": [
           { "type": "command", "command": "myapp hook claude" }
         ],
-        "_ai_hooker_tag": "myapp"
+        "_agent_config_tag": "myapp"
       }
     ]
   }

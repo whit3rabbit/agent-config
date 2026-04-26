@@ -15,6 +15,7 @@ pub(crate) mod md_block;
 pub(crate) mod ownership;
 pub(crate) mod planning;
 pub(crate) mod rules_dir;
+pub(crate) mod safe_fs;
 pub(crate) mod skills_dir;
 pub(crate) mod toml_patch;
 pub(crate) mod yaml_mcp_map;

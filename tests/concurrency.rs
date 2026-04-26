@@ -1,3 +1,5 @@
+#![allow(unused_must_use)]
+
 //! Integration-level concurrency coverage for shared configs and ledgers.
 
 use std::fs;
@@ -5,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Barrier};
 use std::thread;
 
-use ai_hooker::{Event, HookSpec, HookerError, Matcher, McpSpec, Scope, SkillSpec};
+use agent_config::{AgentConfigError, Event, HookSpec, Matcher, McpSpec, Scope, SkillSpec};
 use serde_json::Value;
 
 fn hook_spec(tag: &str) -> HookSpec {
@@ -29,7 +31,7 @@ fn mcp_spec_with_env(name: &str, owner: &str, value: &str) -> McpSpec {
     McpSpec::builder(name)
         .owner(owner)
         .stdio("npx", ["-y", "@example/server"])
-        .env("AI_HOOKER_TEST", value)
+        .env("AGENT_CONFIG_TEST", value)
         .build()
 }
 
@@ -97,13 +99,13 @@ fn hook_tag_count(settings: &Value, tag: &str) -> usize {
         .as_array()
         .into_iter()
         .flatten()
-        .filter(|entry| entry["_ai_hooker_tag"] == tag)
+        .filter(|entry| entry["_agent_config_tag"] == tag)
         .count()
 }
 
 fn markdown_block_count(path: &Path, tag: &str) -> usize {
     let text = fs::read_to_string(path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-    text.matches(&format!("<!-- BEGIN AI-HOOKER:{tag} -->"))
+    text.matches(&format!("<!-- BEGIN AGENT-CONFIG:{tag} -->"))
         .count()
 }
 
@@ -122,12 +124,12 @@ fn assert_at_most_one_backup(path: &Path) {
     );
 }
 
-fn assert_ok<T>(result: Result<T, HookerError>) -> T {
+fn assert_ok<T>(result: Result<T, AgentConfigError>) -> T {
     result.unwrap_or_else(|e| panic!("thread returned error: {e}"))
 }
 
-fn is_owner_mismatch<T>(result: &Result<T, HookerError>) -> bool {
-    matches!(result, Err(HookerError::NotOwnedByCaller { .. }))
+fn is_owner_mismatch<T>(result: &Result<T, AgentConfigError>) -> bool {
+    matches!(result, Err(AgentConfigError::NotOwnedByCaller { .. }))
 }
 
 #[test]
@@ -141,12 +143,12 @@ fn same_hook_tag_identical_content_is_idempotent_under_race() {
 
     let (a, b) = run_two(
         move || {
-            ai_hooker::by_id("claude")
+            agent_config::by_id("claude")
                 .unwrap()
                 .install(&scope_a, &spec_a)
         },
         move || {
-            ai_hooker::by_id("claude")
+            agent_config::by_id("claude")
                 .unwrap()
                 .install(&scope_b, &spec_b)
         },
@@ -176,12 +178,12 @@ fn different_hook_tags_share_markdown_file_under_race() {
 
     let (a, b) = run_two(
         move || {
-            ai_hooker::by_id("claude")
+            agent_config::by_id("claude")
                 .unwrap()
                 .install(&scope_a, &spec_a)
         },
         move || {
-            ai_hooker::by_id("claude")
+            agent_config::by_id("claude")
                 .unwrap()
                 .install(&scope_b, &spec_b)
         },
@@ -203,7 +205,7 @@ fn same_hook_tag_markdown_update_remains_valid_under_race() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().to_path_buf();
     let scope = Scope::Local(root.clone());
-    ai_hooker::by_id("claude")
+    agent_config::by_id("claude")
         .unwrap()
         .install(
             &scope,
@@ -218,12 +220,12 @@ fn same_hook_tag_markdown_update_remains_valid_under_race() {
 
     let (a, b) = run_two(
         move || {
-            ai_hooker::by_id("claude")
+            agent_config::by_id("claude")
                 .unwrap()
                 .install(&scope_a, &spec_a)
         },
         move || {
-            ai_hooker::by_id("claude")
+            agent_config::by_id("claude")
                 .unwrap()
                 .install(&scope_b, &spec_b)
         },
@@ -251,12 +253,12 @@ fn different_mcp_names_share_config_and_ledger_under_race() {
 
     let (a, b) = run_two(
         move || {
-            ai_hooker::mcp_by_id("claude")
+            agent_config::mcp_by_id("claude")
                 .unwrap()
                 .install_mcp(&scope_a, &spec_a)
         },
         move || {
-            ai_hooker::mcp_by_id("claude")
+            agent_config::mcp_by_id("claude")
                 .unwrap()
                 .install_mcp(&scope_b, &spec_b)
         },
@@ -268,7 +270,7 @@ fn different_mcp_names_share_config_and_ledger_under_race() {
     let cfg = read_json(&cfg_path);
     assert_eq!(cfg["mcpServers"]["mcp-alpha"]["command"], "npx");
     assert_eq!(cfg["mcpServers"]["mcp-beta"]["command"], "npx");
-    let ledger = read_ledger(&dir.path().join(".ai-hooker-mcp.json"));
+    let ledger = read_ledger(&dir.path().join(".agent-config-mcp.json"));
     assert_eq!(ledger["entries"]["mcp-alpha"]["owner"], "owner-a");
     assert_eq!(ledger["entries"]["mcp-beta"]["owner"], "owner-b");
     assert_at_most_one_backup(&cfg_path);
@@ -285,12 +287,12 @@ fn same_mcp_name_same_owner_same_content_is_idempotent_under_race() {
 
     let (a, b) = run_two(
         move || {
-            ai_hooker::mcp_by_id("claude")
+            agent_config::mcp_by_id("claude")
                 .unwrap()
                 .install_mcp(&scope_a, &spec_a)
         },
         move || {
-            ai_hooker::mcp_by_id("claude")
+            agent_config::mcp_by_id("claude")
                 .unwrap()
                 .install_mcp(&scope_b, &spec_b)
         },
@@ -302,7 +304,7 @@ fn same_mcp_name_same_owner_same_content_is_idempotent_under_race() {
     let servers = cfg["mcpServers"].as_object().unwrap();
     assert_eq!(servers.len(), 1);
     assert!(servers.contains_key("shared-mcp"));
-    let ledger = read_ledger(&dir.path().join(".ai-hooker-mcp.json"));
+    let ledger = read_ledger(&dir.path().join(".agent-config-mcp.json"));
     let entries = ledger["entries"].as_object().unwrap();
     assert_eq!(entries.len(), 1);
     assert_eq!(entries["shared-mcp"]["owner"], "same-owner");
@@ -313,7 +315,7 @@ fn same_mcp_name_same_owner_updates_remain_valid_under_race() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().to_path_buf();
     let scope = Scope::Local(root.clone());
-    ai_hooker::mcp_by_id("claude")
+    agent_config::mcp_by_id("claude")
         .unwrap()
         .install_mcp(&scope, &mcp_spec_with_env("updated-mcp", "owner-a", "base"))
         .unwrap();
@@ -325,12 +327,12 @@ fn same_mcp_name_same_owner_updates_remain_valid_under_race() {
 
     let (a, b) = run_two(
         move || {
-            ai_hooker::mcp_by_id("claude")
+            agent_config::mcp_by_id("claude")
                 .unwrap()
                 .install_mcp(&scope_a, &spec_a)
         },
         move || {
-            ai_hooker::mcp_by_id("claude")
+            agent_config::mcp_by_id("claude")
                 .unwrap()
                 .install_mcp(&scope_b, &spec_b)
         },
@@ -339,11 +341,11 @@ fn same_mcp_name_same_owner_updates_remain_valid_under_race() {
     assert_ok(a);
     assert_ok(b);
     let cfg = read_json(&dir.path().join(".mcp.json"));
-    let value = cfg["mcpServers"]["updated-mcp"]["env"]["AI_HOOKER_TEST"]
+    let value = cfg["mcpServers"]["updated-mcp"]["env"]["AGENT_CONFIG_TEST"]
         .as_str()
         .unwrap();
     assert!(matches!(value, "value-a" | "value-b"));
-    let ledger = read_ledger(&dir.path().join(".ai-hooker-mcp.json"));
+    let ledger = read_ledger(&dir.path().join(".agent-config-mcp.json"));
     assert_eq!(ledger["entries"]["updated-mcp"]["owner"], "owner-a");
 }
 
@@ -358,12 +360,12 @@ fn same_mcp_name_different_owners_returns_controlled_error_under_race() {
 
     let (a, b) = run_two(
         move || {
-            ai_hooker::mcp_by_id("claude")
+            agent_config::mcp_by_id("claude")
                 .unwrap()
                 .install_mcp(&scope_a, &spec_a)
         },
         move || {
-            ai_hooker::mcp_by_id("claude")
+            agent_config::mcp_by_id("claude")
                 .unwrap()
                 .install_mcp(&scope_b, &spec_b)
         },
@@ -378,7 +380,7 @@ fn same_mcp_name_different_owners_returns_controlled_error_under_race() {
     let servers = cfg["mcpServers"].as_object().unwrap();
     assert_eq!(servers.len(), 1);
     assert!(servers.contains_key("contended-mcp"));
-    let ledger = read_ledger(&dir.path().join(".ai-hooker-mcp.json"));
+    let ledger = read_ledger(&dir.path().join(".agent-config-mcp.json"));
     let owner = ledger["entries"]["contended-mcp"]["owner"]
         .as_str()
         .unwrap();
@@ -391,7 +393,7 @@ fn install_and_uninstall_same_mcp_name_leave_valid_winner_state() {
     let root = dir.path().to_path_buf();
     let scope = Scope::Local(root.clone());
     let spec = mcp_spec("flapping-mcp", "owner-a");
-    ai_hooker::mcp_by_id("claude")
+    agent_config::mcp_by_id("claude")
         .unwrap()
         .install_mcp(&scope, &spec)
         .unwrap();
@@ -401,12 +403,12 @@ fn install_and_uninstall_same_mcp_name_leave_valid_winner_state() {
     let spec_b = spec.clone();
     let (install, uninstall) = run_two(
         move || {
-            ai_hooker::mcp_by_id("claude")
+            agent_config::mcp_by_id("claude")
                 .unwrap()
                 .install_mcp(&scope_a, &spec_b)
         },
         move || {
-            ai_hooker::mcp_by_id("claude").unwrap().uninstall_mcp(
+            agent_config::mcp_by_id("claude").unwrap().uninstall_mcp(
                 &scope_b,
                 "flapping-mcp",
                 "owner-a",
@@ -417,7 +419,7 @@ fn install_and_uninstall_same_mcp_name_leave_valid_winner_state() {
     assert_ok(install);
     assert_ok(uninstall);
     let cfg_path = dir.path().join(".mcp.json");
-    let ledger_path = dir.path().join(".ai-hooker-mcp.json");
+    let ledger_path = dir.path().join(".agent-config-mcp.json");
     match (cfg_path.exists(), ledger_path.exists()) {
         (true, true) => {
             let cfg = read_json(&cfg_path);
@@ -435,7 +437,7 @@ fn uninstall_one_owner_while_other_owner_installs_different_mcp_name() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().to_path_buf();
     let scope = Scope::Local(root.clone());
-    ai_hooker::mcp_by_id("claude")
+    agent_config::mcp_by_id("claude")
         .unwrap()
         .install_mcp(&scope, &mcp_spec("old-mcp", "owner-a"))
         .unwrap();
@@ -445,12 +447,12 @@ fn uninstall_one_owner_while_other_owner_installs_different_mcp_name() {
     let new_spec = mcp_spec("new-mcp", "owner-b");
     let (uninstall, install) = run_two(
         move || {
-            ai_hooker::mcp_by_id("claude")
+            agent_config::mcp_by_id("claude")
                 .unwrap()
                 .uninstall_mcp(&scope_a, "old-mcp", "owner-a")
         },
         move || {
-            ai_hooker::mcp_by_id("claude")
+            agent_config::mcp_by_id("claude")
                 .unwrap()
                 .install_mcp(&scope_b, &new_spec)
         },
@@ -461,7 +463,7 @@ fn uninstall_one_owner_while_other_owner_installs_different_mcp_name() {
     let cfg = read_json(&dir.path().join(".mcp.json"));
     assert!(cfg["mcpServers"]["old-mcp"].is_null());
     assert!(cfg["mcpServers"]["new-mcp"].is_object());
-    let ledger = read_ledger(&dir.path().join(".ai-hooker-mcp.json"));
+    let ledger = read_ledger(&dir.path().join(".agent-config-mcp.json"));
     assert!(ledger["entries"]["old-mcp"].is_null());
     assert_eq!(ledger["entries"]["new-mcp"]["owner"], "owner-b");
 }
@@ -477,12 +479,12 @@ fn different_skills_share_root_and_ledger_under_race() {
 
     let (a, b) = run_two(
         move || {
-            ai_hooker::skill_by_id("claude")
+            agent_config::skill_by_id("claude")
                 .unwrap()
                 .install_skill(&scope_a, &spec_a)
         },
         move || {
-            ai_hooker::skill_by_id("claude")
+            agent_config::skill_by_id("claude")
                 .unwrap()
                 .install_skill(&scope_b, &spec_b)
         },
@@ -493,7 +495,7 @@ fn different_skills_share_root_and_ledger_under_race() {
     let skills_root = dir.path().join(".claude/skills");
     assert!(skills_root.join("skill-alpha/SKILL.md").is_file());
     assert!(skills_root.join("skill-beta/SKILL.md").is_file());
-    let ledger = read_ledger(&skills_root.join(".ai-hooker-skills.json"));
+    let ledger = read_ledger(&skills_root.join(".agent-config-skills.json"));
     assert_eq!(ledger["entries"]["skill-alpha"]["owner"], "owner-a");
     assert_eq!(ledger["entries"]["skill-beta"]["owner"], "owner-b");
 }
@@ -509,12 +511,12 @@ fn same_skill_same_owner_is_idempotent_under_race() {
 
     let (a, b) = run_two(
         move || {
-            ai_hooker::skill_by_id("claude")
+            agent_config::skill_by_id("claude")
                 .unwrap()
                 .install_skill(&scope_a, &spec_a)
         },
         move || {
-            ai_hooker::skill_by_id("claude")
+            agent_config::skill_by_id("claude")
                 .unwrap()
                 .install_skill(&scope_b, &spec_b)
         },
@@ -524,7 +526,7 @@ fn same_skill_same_owner_is_idempotent_under_race() {
     assert_ok(b);
     let skills_root = dir.path().join(".claude/skills");
     assert!(skills_root.join("shared-skill/SKILL.md").is_file());
-    let ledger = read_ledger(&skills_root.join(".ai-hooker-skills.json"));
+    let ledger = read_ledger(&skills_root.join(".agent-config-skills.json"));
     let entries = ledger["entries"].as_object().unwrap();
     assert_eq!(entries.len(), 1);
     assert_eq!(entries["shared-skill"]["owner"], "same-owner");
@@ -535,7 +537,7 @@ fn same_skill_same_owner_updates_remain_valid_under_race() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().to_path_buf();
     let scope = Scope::Local(root.clone());
-    ai_hooker::skill_by_id("claude")
+    agent_config::skill_by_id("claude")
         .unwrap()
         .install_skill(
             &scope,
@@ -550,12 +552,12 @@ fn same_skill_same_owner_updates_remain_valid_under_race() {
 
     let (a, b) = run_two(
         move || {
-            ai_hooker::skill_by_id("claude")
+            agent_config::skill_by_id("claude")
                 .unwrap()
                 .install_skill(&scope_a, &spec_a)
         },
         move || {
-            ai_hooker::skill_by_id("claude")
+            agent_config::skill_by_id("claude")
                 .unwrap()
                 .install_skill(&scope_b, &spec_b)
         },
@@ -567,7 +569,7 @@ fn same_skill_same_owner_updates_remain_valid_under_race() {
         fs::read_to_string(dir.path().join(".claude/skills/updated-skill/SKILL.md")).unwrap();
     assert!(skill_md.contains("Variant A") || skill_md.contains("Variant B"));
     assert!(!skill_md.contains("Base."));
-    let ledger = read_ledger(&dir.path().join(".claude/skills/.ai-hooker-skills.json"));
+    let ledger = read_ledger(&dir.path().join(".claude/skills/.agent-config-skills.json"));
     assert_eq!(ledger["entries"]["updated-skill"]["owner"], "owner-a");
 }
 
@@ -582,12 +584,12 @@ fn same_skill_different_owners_returns_controlled_error_under_race() {
 
     let (a, b) = run_two(
         move || {
-            ai_hooker::skill_by_id("claude")
+            agent_config::skill_by_id("claude")
                 .unwrap()
                 .install_skill(&scope_a, &spec_a)
         },
         move || {
-            ai_hooker::skill_by_id("claude")
+            agent_config::skill_by_id("claude")
                 .unwrap()
                 .install_skill(&scope_b, &spec_b)
         },
@@ -600,7 +602,7 @@ fn same_skill_different_owners_returns_controlled_error_under_race() {
     );
     let skills_root = dir.path().join(".claude/skills");
     assert!(skills_root.join("contended-skill/SKILL.md").is_file());
-    let ledger = read_ledger(&skills_root.join(".ai-hooker-skills.json"));
+    let ledger = read_ledger(&skills_root.join(".agent-config-skills.json"));
     let owner = ledger["entries"]["contended-skill"]["owner"]
         .as_str()
         .unwrap();

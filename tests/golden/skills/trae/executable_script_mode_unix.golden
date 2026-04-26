@@ -29,7 +29,7 @@ Ok(
             "[ROOT]/.trae/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.trae/skills/.ai-hooker-skills.json",
+            "[ROOT]/.trae/skills/.agent-config-skills.json",
         ),
         files: [
             Exists {
@@ -70,7 +70,7 @@ directories:
 - .trae/skills/golden-skill/references
 - .trae/skills/golden-skill/scripts
 files:
-- .trae/skills/.ai-hooker-skills.json
+- .trae/skills/.agent-config-skills.json
   content:
 ```text
 {

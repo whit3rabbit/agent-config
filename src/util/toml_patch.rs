@@ -10,7 +10,7 @@ use std::path::Path;
 
 use toml_edit::{DocumentMut, Item, Table};
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::status::ConfigPresence;
 
 /// Read a TOML document, returning an empty document when the file is missing.
@@ -18,17 +18,17 @@ use crate::status::ConfigPresence;
 /// Errors propagate verbatim if the file exists but is invalid TOML; callers
 /// should surface this rather than overwriting potentially-precious user
 /// config.
-pub(crate) fn read_or_empty(path: &Path) -> Result<DocumentMut, HookerError> {
+pub(crate) fn read_or_empty(path: &Path) -> Result<DocumentMut, AgentConfigError> {
     let text = match fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(DocumentMut::new()),
-        Err(e) => return Err(HookerError::io(path, e)),
+        Err(e) => return Err(AgentConfigError::io(path, e)),
     };
     if text.trim().is_empty() {
         return Ok(DocumentMut::new());
     }
     text.parse::<DocumentMut>()
-        .map_err(|e| HookerError::toml(path, e))
+        .map_err(|e| AgentConfigError::toml(path, e))
 }
 
 /// Serialize a TOML document, ensuring a trailing newline.
@@ -50,7 +50,7 @@ pub(crate) fn upsert_named_table(
     parent: &[&str],
     name: &str,
     table: Table,
-) -> Result<bool, HookerError> {
+) -> Result<bool, AgentConfigError> {
     let parent_table = ensure_table(doc, parent)?;
     let new_item = Item::Table(table);
     let changed = match parent_table.get(name) {
@@ -69,7 +69,7 @@ pub(crate) fn remove_named_table(
     doc: &mut DocumentMut,
     parent: &[&str],
     name: &str,
-) -> Result<bool, HookerError> {
+) -> Result<bool, AgentConfigError> {
     let Some(parent_table) = traverse_table_mut(doc, parent) else {
         return Ok(false);
     };
@@ -104,13 +104,13 @@ pub(crate) fn config_presence(
     config_path: &Path,
     parent: &[&str],
     name: &str,
-) -> Result<ConfigPresence, HookerError> {
+) -> Result<ConfigPresence, AgentConfigError> {
     if !config_path.exists() {
         return Ok(ConfigPresence::Absent);
     }
     let doc = match read_or_empty(config_path) {
         Ok(d) => d,
-        Err(HookerError::TomlInvalid { source, .. }) => {
+        Err(AgentConfigError::TomlInvalid { source, .. }) => {
             return Ok(ConfigPresence::Invalid {
                 reason: source.to_string(),
             });
@@ -124,7 +124,10 @@ pub(crate) fn config_presence(
     })
 }
 
-fn ensure_table<'a>(doc: &'a mut DocumentMut, path: &[&str]) -> Result<&'a mut Table, HookerError> {
+fn ensure_table<'a>(
+    doc: &'a mut DocumentMut,
+    path: &[&str],
+) -> Result<&'a mut Table, AgentConfigError> {
     let mut cur: &mut Table = doc.as_table_mut();
     for key in path {
         if !cur.contains_key(key) {
@@ -134,7 +137,7 @@ fn ensure_table<'a>(doc: &'a mut DocumentMut, path: &[&str]) -> Result<&'a mut T
             .get_mut(key)
             .and_then(Item::as_table_mut)
             .ok_or_else(|| {
-                HookerError::Other(anyhow::anyhow!(
+                AgentConfigError::Other(anyhow::anyhow!(
                     "expected TOML table at path segment {:?}, found a non-table item",
                     key
                 ))
@@ -197,7 +200,7 @@ mod tests {
         let p = dir.path().join("bad.toml");
         fs::write(&p, b"=oops\n").unwrap();
         let err = read_or_empty(&p).unwrap_err();
-        assert!(matches!(err, HookerError::TomlInvalid { .. }));
+        assert!(matches!(err, AgentConfigError::TomlInvalid { .. }));
     }
 
     #[test]

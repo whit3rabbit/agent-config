@@ -22,7 +22,7 @@ Ok(
             "[ROOT]/.claude/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.claude/skills/.ai-hooker-skills.json",
+            "[ROOT]/.claude/skills/.agent-config-skills.json",
         ),
         files: [
             Exists {

@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::scope::{Scope, ScopeKind};
 use fluent_uri::Uri;
 
@@ -13,9 +13,9 @@ use super::validate::{validate_identifier, IdentifierKind};
 /// MCP servers are keyed by [`name`](Self::name) (the literal string the harness
 /// uses to load the server), not by an arbitrary tag. To support multi-consumer
 /// coexistence the library records ownership in a sidecar ledger
-/// (`<config-dir>/.ai-hooker-mcp.json`) keyed by name → `owner_tag`. Removing a
+/// (`<config-dir>/.agent-config-mcp.json`) keyed by name → `owner_tag`. Removing a
 /// server owned by a different consumer (or by a hand-edit) returns
-/// [`HookerError::NotOwnedByCaller`].
+/// [`AgentConfigError::NotOwnedByCaller`].
 ///
 /// Build via [`McpSpec::builder`].
 #[derive(Debug, Clone)]
@@ -56,21 +56,24 @@ impl McpSpec {
 
     /// Validate that both `name` and `owner_tag` use the same safe character
     /// set as [`HookSpec::tag`](crate::HookSpec::tag).
-    pub(crate) fn validate(&self) -> Result<(), HookerError> {
+    pub(crate) fn validate(&self) -> Result<(), AgentConfigError> {
         Self::validate_name(&self.name)?;
         validate_identifier(&self.owner_tag, IdentifierKind::OwnerTag)?;
         validate_transport(&self.transport)
     }
 
     /// Validate just the server name (used by uninstall, which has no spec).
-    pub(crate) fn validate_name(name: &str) -> Result<(), HookerError> {
+    pub(crate) fn validate_name(name: &str) -> Result<(), AgentConfigError> {
         validate_identifier(name, IdentifierKind::McpName)
     }
 
     /// Enforce this spec's local inline-secret policy for a target scope.
-    pub(crate) fn validate_local_secret_policy(&self, scope: &Scope) -> Result<(), HookerError> {
+    pub(crate) fn validate_local_secret_policy(
+        &self,
+        scope: &Scope,
+    ) -> Result<(), AgentConfigError> {
         if let Some(key) = self.refused_local_inline_secret_key(scope) {
-            return Err(HookerError::InlineSecretInLocalScope {
+            return Err(AgentConfigError::InlineSecretInLocalScope {
                 name: self.name.clone(),
                 key: key.to_string(),
             });
@@ -297,15 +300,15 @@ impl McpSpecBuilder {
     }
 
     /// Fallible variant of [`build`](Self::build).
-    pub fn try_build(self) -> Result<McpSpec, HookerError> {
+    pub fn try_build(self) -> Result<McpSpec, AgentConfigError> {
         if let Some(error) = self.builder_error {
-            return Err(HookerError::Other(anyhow::anyhow!(error)));
+            return Err(AgentConfigError::Other(anyhow::anyhow!(error)));
         }
-        let owner_tag = self.owner_tag.ok_or(HookerError::MissingSpecField {
+        let owner_tag = self.owner_tag.ok_or(AgentConfigError::MissingSpecField {
             id: "<mcp builder>",
             field: "owner",
         })?;
-        let transport = self.transport.ok_or(HookerError::MissingSpecField {
+        let transport = self.transport.ok_or(AgentConfigError::MissingSpecField {
             id: "<mcp builder>",
             field: "transport",
         })?;
@@ -327,7 +330,7 @@ impl McpSpecBuilder {
     }
 }
 
-fn validate_transport(transport: &McpTransport) -> Result<(), HookerError> {
+fn validate_transport(transport: &McpTransport) -> Result<(), AgentConfigError> {
     match transport {
         McpTransport::Stdio { command, args, env } => {
             if command.trim().is_empty() {
@@ -356,7 +359,7 @@ fn validate_remote_transport(
     kind: &str,
     url: &str,
     headers: &BTreeMap<String, String>,
-) -> Result<(), HookerError> {
+) -> Result<(), AgentConfigError> {
     validate_http_url(kind, url)?;
     for (name, value) in headers {
         validate_header_name(name)?;
@@ -365,7 +368,7 @@ fn validate_remote_transport(
     Ok(())
 }
 
-fn validate_http_url(kind: &str, url: &str) -> Result<(), HookerError> {
+fn validate_http_url(kind: &str, url: &str) -> Result<(), AgentConfigError> {
     if url.chars().any(char::is_control) {
         return Err(invalid_mcp_spec(format!(
             "{kind} MCP URL must not contain control characters"
@@ -393,7 +396,7 @@ fn validate_http_url(kind: &str, url: &str) -> Result<(), HookerError> {
     Ok(())
 }
 
-fn validate_env_name(name: &str) -> Result<(), HookerError> {
+fn validate_env_name(name: &str) -> Result<(), AgentConfigError> {
     if name.is_empty() {
         return Err(invalid_mcp_spec(
             "MCP environment variable name must not be empty",
@@ -407,7 +410,7 @@ fn validate_env_name(name: &str) -> Result<(), HookerError> {
     validate_no_control_chars("MCP environment variable name", name)
 }
 
-fn validate_header_name(name: &str) -> Result<(), HookerError> {
+fn validate_header_name(name: &str) -> Result<(), AgentConfigError> {
     if name.is_empty() {
         return Err(invalid_mcp_spec("MCP header name must not be empty"));
     }
@@ -419,11 +422,11 @@ fn validate_header_name(name: &str) -> Result<(), HookerError> {
     Ok(())
 }
 
-fn validate_value(kind: &str, value: &str) -> Result<(), HookerError> {
+fn validate_value(kind: &str, value: &str) -> Result<(), AgentConfigError> {
     validate_no_control_chars(kind, value)
 }
 
-fn validate_no_control_chars(kind: &str, value: &str) -> Result<(), HookerError> {
+fn validate_no_control_chars(kind: &str, value: &str) -> Result<(), AgentConfigError> {
     if value.chars().any(char::is_control) {
         return Err(invalid_mcp_spec(format!(
             "{kind} must not contain control characters"
@@ -456,8 +459,8 @@ fn is_header_token_char(c: char) -> bool {
     )
 }
 
-fn invalid_mcp_spec(message: impl Into<String>) -> HookerError {
-    HookerError::Other(anyhow::anyhow!(message.into()))
+fn invalid_mcp_spec(message: impl Into<String>) -> AgentConfigError {
+    AgentConfigError::Other(anyhow::anyhow!(message.into()))
 }
 
 fn is_inline_secret_env_value(name: &str, value: &str) -> bool {
@@ -562,7 +565,7 @@ mod tests {
         assert!(spec.validate_local_secret_policy(&global).is_ok());
         assert!(matches!(
             spec.validate_local_secret_policy(&local),
-            Err(HookerError::InlineSecretInLocalScope { key, .. }) if key == "GITHUB_TOKEN"
+            Err(AgentConfigError::InlineSecretInLocalScope { key, .. }) if key == "GITHUB_TOKEN"
         ));
 
         let allowed = McpSpec::builder("github")
@@ -619,7 +622,9 @@ mod tests {
             .stdio("cmd", Vec::<String>::new())
             .try_build()
             .unwrap_err();
-        assert!(matches!(err, HookerError::MissingSpecField { field, .. } if field == "owner"));
+        assert!(
+            matches!(err, AgentConfigError::MissingSpecField { field, .. } if field == "owner")
+        );
     }
 
     #[test]
@@ -628,7 +633,9 @@ mod tests {
             .owner("myapp")
             .try_build()
             .unwrap_err();
-        assert!(matches!(err, HookerError::MissingSpecField { field, .. } if field == "transport"));
+        assert!(
+            matches!(err, AgentConfigError::MissingSpecField { field, .. } if field == "transport")
+        );
     }
 
     #[test]
@@ -638,7 +645,7 @@ mod tests {
             .stdio("cmd", Vec::<String>::new())
             .try_build()
             .unwrap_err();
-        assert!(matches!(err, HookerError::InvalidTag { .. }));
+        assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
     }
 
     #[test]
@@ -648,7 +655,7 @@ mod tests {
             .stdio("cmd", Vec::<String>::new())
             .try_build()
             .unwrap_err();
-        assert!(matches!(err, HookerError::InvalidTag { .. }));
+        assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
     }
 
     #[test]
@@ -659,7 +666,7 @@ mod tests {
             .env("IGNORED", "yes")
             .try_build()
             .unwrap_err();
-        assert!(matches!(err, HookerError::Other(_)));
+        assert!(matches!(err, AgentConfigError::Other(_)));
     }
 
     #[test]
@@ -670,7 +677,7 @@ mod tests {
             .header("Authorization", "Bearer token")
             .try_build()
             .unwrap_err();
-        assert!(matches!(err, HookerError::Other(_)));
+        assert!(matches!(err, AgentConfigError::Other(_)));
     }
 
     #[test]
@@ -681,7 +688,7 @@ mod tests {
             .stdio("cmd", Vec::<String>::new())
             .try_build()
             .unwrap_err();
-        assert!(matches!(err, HookerError::Other(_)));
+        assert!(matches!(err, AgentConfigError::Other(_)));
     }
 
     #[test]
@@ -692,7 +699,7 @@ mod tests {
             .http("https://example.com/mcp")
             .try_build()
             .unwrap_err();
-        assert!(matches!(err, HookerError::Other(_)));
+        assert!(matches!(err, AgentConfigError::Other(_)));
     }
 
     #[test]
@@ -702,7 +709,7 @@ mod tests {
             .stdio("  ", Vec::<String>::new())
             .try_build()
             .unwrap_err();
-        assert!(matches!(err, HookerError::Other(_)));
+        assert!(matches!(err, AgentConfigError::Other(_)));
     }
 
     #[test]
@@ -721,7 +728,7 @@ mod tests {
                 .try_build()
                 .unwrap_err();
             assert!(
-                matches!(err, HookerError::Other(_)),
+                matches!(err, AgentConfigError::Other(_)),
                 "expected invalid URL for {bad:?}"
             );
         }
@@ -737,7 +744,7 @@ mod tests {
                 .try_build()
                 .unwrap_err();
             assert!(
-                matches!(err, HookerError::Other(_)),
+                matches!(err, AgentConfigError::Other(_)),
                 "expected invalid env key for {key:?}"
             );
         }
@@ -748,7 +755,7 @@ mod tests {
             .env("GOOD_NAME", "line\nbreak")
             .try_build()
             .unwrap_err();
-        assert!(matches!(err, HookerError::Other(_)));
+        assert!(matches!(err, AgentConfigError::Other(_)));
     }
 
     #[test]
@@ -761,7 +768,7 @@ mod tests {
                 .try_build()
                 .unwrap_err();
             assert!(
-                matches!(err, HookerError::Other(_)),
+                matches!(err, AgentConfigError::Other(_)),
                 "expected invalid header key for {key:?}"
             );
         }
@@ -772,6 +779,6 @@ mod tests {
             .header("Authorization", "line\nbreak")
             .try_build()
             .unwrap_err();
-        assert!(matches!(err, HookerError::Other(_)));
+        assert!(matches!(err, AgentConfigError::Other(_)));
     }
 }

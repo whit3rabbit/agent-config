@@ -1,6 +1,6 @@
 //! Status-only probes for tagged-array hook configs.
 //!
-//! Read a settings file, find any `_ai_hooker_tag = <tag>` entries under the
+//! Read a settings file, find any `_agent_config_tag = <tag>` entries under the
 //! given parent key, and report a [`ConfigPresence`]. Parse failures are
 //! converted to [`ConfigPresence::Invalid`] so the caller can surface them
 //! as drift instead of bubbling up an error.
@@ -9,24 +9,24 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::status::ConfigPresence;
 
 use super::common::{matches_tag, read_or_empty, traverse_object};
 
-/// Count tagged hook entries (with `_ai_hooker_tag == tag`) across every
+/// Count tagged hook entries (with `_agent_config_tag == tag`) across every
 /// array directly under `parent_path` in the settings file at `config_path`.
 pub(crate) fn tagged_hook_presence(
     config_path: &Path,
     parent_path: &[&str],
     tag: &str,
-) -> Result<ConfigPresence, HookerError> {
+) -> Result<ConfigPresence, AgentConfigError> {
     if !config_path.exists() {
         return Ok(ConfigPresence::Absent);
     }
     let root = match read_or_empty(config_path) {
         Ok(v) => v,
-        Err(HookerError::JsonInvalid { source, .. }) => {
+        Err(AgentConfigError::JsonInvalid { source, .. }) => {
             return Ok(ConfigPresence::Invalid {
                 reason: source.to_string(),
             });
@@ -45,13 +45,13 @@ pub(crate) fn tagged_hook_presence_for_event(
     config_path: &Path,
     array_path: &[&str],
     tag: &str,
-) -> Result<ConfigPresence, HookerError> {
+) -> Result<ConfigPresence, AgentConfigError> {
     if !config_path.exists() {
         return Ok(ConfigPresence::Absent);
     }
     let root = match read_or_empty(config_path) {
         Ok(v) => v,
-        Err(HookerError::JsonInvalid { source, .. }) => {
+        Err(AgentConfigError::JsonInvalid { source, .. }) => {
             return Ok(ConfigPresence::Invalid {
                 reason: source.to_string(),
             });
@@ -122,7 +122,7 @@ mod tests {
             &json!({
                 "hooks": {
                     "PreToolUse": [
-                        { "matcher": "Bash", "_ai_hooker_tag": "alpha" }
+                        { "matcher": "Bash", "_agent_config_tag": "alpha" }
                     ]
                 }
             }),
@@ -140,8 +140,8 @@ mod tests {
             &json!({
                 "hooks": {
                     "PreToolUse": [
-                        { "_ai_hooker_tag": "alpha" },
-                        { "_ai_hooker_tag": "alpha" }
+                        { "_agent_config_tag": "alpha" },
+                        { "_agent_config_tag": "alpha" }
                     ]
                 }
             }),
@@ -166,7 +166,7 @@ mod tests {
         write(
             &p,
             &json!({
-                "hooks": { "PreToolUse": [{ "_ai_hooker_tag": "other" }] }
+                "hooks": { "PreToolUse": [{ "_agent_config_tag": "other" }] }
             }),
         );
         let r = tagged_hook_presence(&p, &["hooks"], "alpha").unwrap();
@@ -180,7 +180,7 @@ mod tests {
         write(
             &p,
             &json!({
-                "pre_run_command": [{ "_ai_hooker_tag": "alpha" }]
+                "pre_run_command": [{ "_agent_config_tag": "alpha" }]
             }),
         );
         let r = tagged_hook_presence_for_event(&p, &["pre_run_command"], "alpha").unwrap();

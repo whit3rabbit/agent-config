@@ -26,14 +26,14 @@ Ok(
             "[ROOT]/.roo/mcp.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.roo/.ai-hooker-mcp.json",
+            "[ROOT]/.roo/.agent-config-mcp.json",
         ),
         files: [
             Exists {
                 path: "[ROOT]/.roo/mcp.json",
             },
             Exists {
-                path: "[ROOT]/.roo/.ai-hooker-mcp.json",
+                path: "[ROOT]/.roo/.agent-config-mcp.json",
             },
         ],
         warnings: [],
@@ -58,7 +58,7 @@ Ok(
                     "other-owner",
                 ),
                 path: Some(
-                    "[ROOT]/.roo/.ai-hooker-mcp.json",
+                    "[ROOT]/.roo/.agent-config-mcp.json",
                 ),
             },
         ],
@@ -72,7 +72,7 @@ ROOT tree:
 directories:
 - .roo
 files:
-- .roo/.ai-hooker-mcp.json
+- .roo/.agent-config-mcp.json
   content:
 ```text
 {

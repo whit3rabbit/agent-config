@@ -1,6 +1,6 @@
 # iFlow CLI
 
-ID: `iflow` — `ai_hooker::by_id("iflow")`
+ID: `iflow` — `agent_config::by_id("iflow")`
 
 iFlow combines hooks and MCP servers in a single `settings.json`.
 
@@ -40,7 +40,7 @@ iFlow combines hooks and MCP servers in a single `settings.json`.
       {
         "matcher": "Bash",
         "hooks": [{ "type": "command", "command": "myapp hook iflow" }],
-        "_ai_hooker_tag": "myapp"
+        "_agent_config_tag": "myapp"
       }
     ]
   }
@@ -90,7 +90,7 @@ Per-server `includeTools` / `excludeTools` arrays are supported by iFlow but
 are caller-provided via the standard `McpSpec` plus harness defaults; this
 crate does not synthesise either.
 
-Ownership is recorded in a sidecar `<config-dir>/.ai-hooker-mcp.json` ledger
+Ownership is recorded in a sidecar `<config-dir>/.agent-config-mcp.json` ledger
 so MCP and hooks coexist in the same file.
 
 ## References

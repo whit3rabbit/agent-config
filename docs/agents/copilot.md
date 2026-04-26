@@ -1,6 +1,6 @@
 # GitHub Copilot
 
-ID: `copilot` — `ai_hooker::by_id("copilot")`
+ID: `copilot` — `agent_config::by_id("copilot")`
 
 ## Hooks
 
@@ -112,7 +112,7 @@ write `AGENTS.md`.
 ```
 
 VS Code Copilot can also read `<root>/.vscode/mcp.json` with a `servers`
-object. `ai-hooker` targets the Copilot CLI/cloud-agent contract here.
+object. `agent-config` targets the Copilot CLI/cloud-agent contract here.
 
 ## Skills
 
@@ -123,7 +123,7 @@ object. `ai-hooker` targets the Copilot CLI/cloud-agent contract here.
 
 Each skill is a directory containing `SKILL.md` with required `name` and
 `description` frontmatter. Copilot also supports `allowed-tools`,
-`user-invocable`, and `disable-model-invocation` frontmatter, but `ai-hooker`
+`user-invocable`, and `disable-model-invocation` frontmatter, but `agent-config`
 only renders the shared fields exposed by `SkillSpec`.
 
 ## References

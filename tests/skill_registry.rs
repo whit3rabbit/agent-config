@@ -1,7 +1,9 @@
+#![allow(unused_must_use)]
+
 //! Public-API smoke test for the skills surface — parallel to
 //! `tests/registry.rs` and `tests/mcp_registry.rs`.
 
-use ai_hooker::{skill_by_id, skill_capable, Scope, ScopeKind, SkillSpec};
+use agent_config::{skill_by_id, skill_capable, Scope, ScopeKind, SkillSpec};
 use std::collections::HashSet;
 
 const SKILL_CAPABLE: &[&str] = &[
@@ -66,7 +68,7 @@ fn skill_capable_excludes_non_skill_agents() {
 
 #[test]
 fn skill_capable_subset_of_all_integrations() {
-    let main_ids: HashSet<_> = ai_hooker::all().into_iter().map(|i| i.id()).collect();
+    let main_ids: HashSet<_> = agent_config::all().into_iter().map(|i| i.id()).collect();
     for agent in skill_capable() {
         assert!(
             main_ids.contains(agent.id()),
@@ -158,7 +160,7 @@ fn skill_install_refuses_owner_mismatch_per_agent() {
         agent.install_skill(&scope, &spec).unwrap();
         let err = agent.install_skill(&scope, &other_owner).unwrap_err();
         assert!(
-            matches!(err, ai_hooker::HookerError::NotOwnedByCaller { .. }),
+            matches!(err, agent_config::AgentConfigError::NotOwnedByCaller { .. }),
             "{id} should refuse another owner"
         );
         agent
@@ -183,7 +185,7 @@ fn local_skill_install_rejects_global_only_agents() {
         .unwrap_err();
     assert!(matches!(
         err,
-        ai_hooker::HookerError::UnsupportedScope {
+        agent_config::AgentConfigError::UnsupportedScope {
             scope: ScopeKind::Local,
             ..
         }
@@ -198,7 +200,10 @@ fn invalid_skill_name_rejected() {
     let err = agent
         .uninstall_skill(&scope, "bad name with spaces", "myapp")
         .unwrap_err();
-    assert!(matches!(err, ai_hooker::HookerError::InvalidTag { .. }));
+    assert!(matches!(
+        err,
+        agent_config::AgentConfigError::InvalidTag { .. }
+    ));
 }
 
 #[test]
@@ -218,7 +223,7 @@ fn skill_name_contract_rejects_non_kebab_case() {
             .try_build()
             .unwrap_err();
         assert!(
-            matches!(err, ai_hooker::HookerError::InvalidTag { .. }),
+            matches!(err, agent_config::AgentConfigError::InvalidTag { .. }),
             "{bad:?} should be rejected"
         );
     }

@@ -12,7 +12,7 @@ use std::path::Path;
 
 use serde_json::{Map, Value};
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, UninstallReport};
 use crate::plan::{has_refusal, PlannedChange, RefusalReason};
 use crate::spec::{McpSpec, McpTransport};
@@ -34,7 +34,7 @@ pub(crate) enum ConfigFormat {
 pub(crate) type ServerBuilder = fn(&McpSpec) -> Value;
 
 /// Returns true if `name` exists in the MCP ownership ledger.
-pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, HookerError> {
+pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, AgentConfigError> {
     ownership::contains(ledger_path, name)
 }
 
@@ -47,18 +47,18 @@ pub(crate) fn config_presence(
     servers_path: &[&str],
     name: &str,
     format: ConfigFormat,
-) -> Result<ConfigPresence, HookerError> {
+) -> Result<ConfigPresence, AgentConfigError> {
     if !config_path.exists() {
         return Ok(ConfigPresence::Absent);
     }
     let root = match read_or_empty(config_path, format) {
         Ok(v) => v,
-        Err(HookerError::JsonInvalid { source, .. }) => {
+        Err(AgentConfigError::JsonInvalid { source, .. }) => {
             return Ok(ConfigPresence::Invalid {
                 reason: source.to_string(),
             });
         }
-        Err(HookerError::Other(e)) => {
+        Err(AgentConfigError::Other(e)) => {
             return Ok(ConfigPresence::Invalid {
                 reason: e.to_string(),
             });
@@ -80,7 +80,7 @@ pub(crate) fn install(
     servers_path: &[&str],
     build_server: ServerBuilder,
     format: ConfigFormat,
-) -> Result<InstallReport, HookerError> {
+) -> Result<InstallReport, AgentConfigError> {
     file_lock::with_lock(config_path, || {
         let mut report = InstallReport::default();
 
@@ -140,12 +140,12 @@ pub(crate) fn plan_install(
     servers_path: &[&str],
     build_server: ServerBuilder,
     format: ConfigFormat,
-) -> Result<Vec<PlannedChange>, HookerError> {
+) -> Result<Vec<PlannedChange>, AgentConfigError> {
     let mut changes = Vec::new();
 
     let mut root = match read_or_empty(config_path, format) {
         Ok(root) => root,
-        Err(HookerError::JsonInvalid { .. }) | Err(HookerError::Other(_)) => {
+        Err(AgentConfigError::JsonInvalid { .. }) | Err(AgentConfigError::Other(_)) => {
             changes.push(PlannedChange::Refuse {
                 path: Some(config_path.to_path_buf()),
                 reason: RefusalReason::InvalidConfig,
@@ -213,7 +213,7 @@ pub(crate) fn uninstall(
     kind: &'static str,
     servers_path: &[&str],
     format: ConfigFormat,
-) -> Result<UninstallReport, HookerError> {
+) -> Result<UninstallReport, AgentConfigError> {
     if !config_path.exists() && !ledger_path.exists() {
         return Ok(UninstallReport {
             not_installed: true,
@@ -270,11 +270,11 @@ pub(crate) fn plan_uninstall(
     kind: &'static str,
     servers_path: &[&str],
     format: ConfigFormat,
-) -> Result<Vec<PlannedChange>, HookerError> {
+) -> Result<Vec<PlannedChange>, AgentConfigError> {
     let mut changes = Vec::new();
     let mut root = match read_or_empty(config_path, format) {
         Ok(root) => root,
-        Err(HookerError::JsonInvalid { .. }) | Err(HookerError::Other(_)) => {
+        Err(AgentConfigError::JsonInvalid { .. }) | Err(AgentConfigError::Other(_)) => {
             changes.push(PlannedChange::Refuse {
                 path: Some(config_path.to_path_buf()),
                 reason: RefusalReason::InvalidConfig,
@@ -416,7 +416,7 @@ pub(crate) fn command_array_value(spec: &McpSpec) -> Value {
     Value::Object(obj)
 }
 
-fn read_or_empty(path: &Path, format: ConfigFormat) -> Result<Value, HookerError> {
+fn read_or_empty(path: &Path, format: ConfigFormat) -> Result<Value, AgentConfigError> {
     match format {
         ConfigFormat::Json => json_patch::read_or_empty(path),
         ConfigFormat::Jsonc => read_jsonc_or_empty(path),
@@ -424,13 +424,13 @@ fn read_or_empty(path: &Path, format: ConfigFormat) -> Result<Value, HookerError
     }
 }
 
-fn read_jsonc_or_empty(path: &Path) -> Result<Value, HookerError> {
+fn read_jsonc_or_empty(path: &Path) -> Result<Value, AgentConfigError> {
     let text = fs_atomic::read_to_string_or_empty(path)?;
     if text.trim().is_empty() {
         return Ok(Value::Object(Map::new()));
     }
     jsonc_parser::parse_to_serde_value::<Value>(&text, &Default::default()).map_err(|e| {
-        HookerError::Other(anyhow::anyhow!(
+        AgentConfigError::Other(anyhow::anyhow!(
             "invalid JSONC in {}: {}",
             path.display(),
             e
@@ -453,7 +453,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn paths(dir: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
-        (dir.join("config.jsonc"), dir.join(".ai-hooker-mcp.json"))
+        (dir.join("config.jsonc"), dir.join(".agent-config-mcp.json"))
     }
 
     fn stdio_spec(name: &str, owner: &str) -> McpSpec {
@@ -559,7 +559,7 @@ mod tests {
             ConfigFormat::Json,
         )
         .unwrap_err();
-        assert!(matches!(err, HookerError::NotOwnedByCaller { .. }));
+        assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
     }
 
     #[test]
@@ -582,7 +582,7 @@ mod tests {
         .unwrap_err();
         assert!(matches!(
             err,
-            HookerError::NotOwnedByCaller { actual: None, .. }
+            AgentConfigError::NotOwnedByCaller { actual: None, .. }
         ));
     }
 
@@ -607,7 +607,7 @@ mod tests {
         .unwrap_err();
         assert!(matches!(
             err,
-            HookerError::NotOwnedByCaller { actual: None, .. }
+            AgentConfigError::NotOwnedByCaller { actual: None, .. }
         ));
     }
 }

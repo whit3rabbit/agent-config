@@ -6,13 +6,13 @@
 
 use std::path::PathBuf;
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 
-/// Returns the user's home directory or a [`HookerError::PathResolution`] if
+/// Returns the user's home directory or a [`AgentConfigError::PathResolution`] if
 /// the platform doesn't expose one.
-pub fn home_dir() -> Result<PathBuf, HookerError> {
+pub fn home_dir() -> Result<PathBuf, AgentConfigError> {
     dirs::home_dir().ok_or_else(|| {
-        HookerError::PathResolution("could not determine user home directory".into())
+        AgentConfigError::PathResolution("could not determine user home directory".into())
     })
 }
 
@@ -21,29 +21,29 @@ pub fn home_dir() -> Result<PathBuf, HookerError> {
 /// On macOS this is `~/Library/Application Support`. OpenCode, however, uses
 /// `~/.config/opencode` even on macOS, so callers that need OpenCode's path
 /// should prefer [`opencode_plugins_dir`] which encodes that quirk.
-pub fn config_dir() -> Result<PathBuf, HookerError> {
+pub fn config_dir() -> Result<PathBuf, AgentConfigError> {
     dirs::config_dir().ok_or_else(|| {
-        HookerError::PathResolution("could not determine user config directory".into())
+        AgentConfigError::PathResolution("could not determine user config directory".into())
     })
 }
 
 /// `~/.claude` (all platforms).
-pub fn claude_home() -> Result<PathBuf, HookerError> {
+pub fn claude_home() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".claude"))
 }
 
 /// `~/.cursor` (all platforms).
-pub fn cursor_home() -> Result<PathBuf, HookerError> {
+pub fn cursor_home() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".cursor"))
 }
 
 /// `~/.gemini` (all platforms).
-pub fn gemini_home() -> Result<PathBuf, HookerError> {
+pub fn gemini_home() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".gemini"))
 }
 
 /// `$CODEX_HOME` if set, else `~/.codex`.
-pub fn codex_home() -> Result<PathBuf, HookerError> {
+pub fn codex_home() -> Result<PathBuf, AgentConfigError> {
     if let Some(h) = std::env::var_os("CODEX_HOME") {
         return Ok(PathBuf::from(h));
     }
@@ -51,24 +51,24 @@ pub fn codex_home() -> Result<PathBuf, HookerError> {
 }
 
 /// `~/.openclaw` (all platforms).
-pub fn openclaw_home() -> Result<PathBuf, HookerError> {
+pub fn openclaw_home() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".openclaw"))
 }
 
 /// `~/.hermes` (all platforms).
-pub fn hermes_home() -> Result<PathBuf, HookerError> {
+pub fn hermes_home() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".hermes"))
 }
 
 /// OpenCode forces its plugin directory under `~/.config/opencode/plugins`
 /// regardless of platform conventions. Returns that path.
-pub fn opencode_plugins_dir() -> Result<PathBuf, HookerError> {
+pub fn opencode_plugins_dir() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".config").join("opencode").join("plugins"))
 }
 
 /// `~/.config/opencode/opencode.json` — OpenCode's main config, where the
 /// object-based `mcp` map lives.
-pub fn opencode_config_file() -> Result<PathBuf, HookerError> {
+pub fn opencode_config_file() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?
         .join(".config")
         .join("opencode")
@@ -76,23 +76,23 @@ pub fn opencode_config_file() -> Result<PathBuf, HookerError> {
 }
 
 /// `~/.config/kilo/kilo.jsonc` — Kilo Code's global JSONC config.
-pub fn kilo_config_file() -> Result<PathBuf, HookerError> {
+pub fn kilo_config_file() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".config").join("kilo").join("kilo.jsonc"))
 }
 
 /// `~/.claude.json` — Claude Code's user/local MCP config file.
-pub fn claude_mcp_user_file() -> Result<PathBuf, HookerError> {
+pub fn claude_mcp_user_file() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".claude.json"))
 }
 
 /// `~/.cursor/mcp.json` — Cursor's MCP user-config file.
-pub fn cursor_mcp_user_file() -> Result<PathBuf, HookerError> {
+pub fn cursor_mcp_user_file() -> Result<PathBuf, AgentConfigError> {
     Ok(cursor_home()?.join("mcp.json"))
 }
 
 /// VS Code globalStorage directory for an extension in the stable `Code`
 /// profile.
-pub fn vscode_global_storage(extension_id: &str) -> Result<PathBuf, HookerError> {
+pub fn vscode_global_storage(extension_id: &str) -> Result<PathBuf, AgentConfigError> {
     Ok(config_dir()?
         .join("Code")
         .join("User")
@@ -101,26 +101,26 @@ pub fn vscode_global_storage(extension_id: &str) -> Result<PathBuf, HookerError>
 }
 
 /// Cline's global MCP settings file inside VS Code globalStorage.
-pub fn cline_mcp_global_file() -> Result<PathBuf, HookerError> {
+pub fn cline_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
     Ok(vscode_global_storage("saoudrizwan.claude-dev")?
         .join("settings")
         .join("cline_mcp_settings.json"))
 }
 
 /// Roo Code's global MCP settings file inside VS Code globalStorage.
-pub fn roo_mcp_global_file() -> Result<PathBuf, HookerError> {
+pub fn roo_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
     Ok(vscode_global_storage("rooveterinaryinc.roo-cline")?
         .join("settings")
         .join("mcp_settings.json"))
 }
 
 /// `~/.gemini/antigravity/mcp_config.json` — Antigravity's global MCP config.
-pub fn antigravity_mcp_global_file() -> Result<PathBuf, HookerError> {
+pub fn antigravity_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
     Ok(gemini_home()?.join("antigravity").join("mcp_config.json"))
 }
 
 /// `~/.codeium/windsurf/mcp_config.json` — Windsurf's global MCP config.
-pub fn windsurf_mcp_global_file() -> Result<PathBuf, HookerError> {
+pub fn windsurf_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?
         .join(".codeium")
         .join("windsurf")
@@ -148,7 +148,7 @@ mod tests {
 
     #[test]
     fn home_dirs_append_correct_suffix() {
-        let cases: Vec<(Result<PathBuf, HookerError>, &str)> = vec![
+        let cases: Vec<(Result<PathBuf, AgentConfigError>, &str)> = vec![
             (claude_home(), ".claude"),
             (cursor_home(), ".cursor"),
             (gemini_home(), ".gemini"),

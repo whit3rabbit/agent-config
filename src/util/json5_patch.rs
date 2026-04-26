@@ -8,17 +8,17 @@ use std::path::Path;
 
 use serde_json::{Map, Value};
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::util::fs_atomic;
 
 /// Read a JSON5 file, returning an empty object when missing or blank.
-pub(crate) fn read_or_empty(path: &Path) -> Result<Value, HookerError> {
+pub(crate) fn read_or_empty(path: &Path) -> Result<Value, AgentConfigError> {
     let text = fs_atomic::read_to_string_or_empty(path)?;
     if text.trim().is_empty() {
         return Ok(Value::Object(Map::new()));
     }
     json5::from_str::<Value>(&text).map_err(|e| {
-        HookerError::Other(anyhow::anyhow!(
+        AgentConfigError::Other(anyhow::anyhow!(
             "invalid JSON5 in {}: {}",
             path.display(),
             e

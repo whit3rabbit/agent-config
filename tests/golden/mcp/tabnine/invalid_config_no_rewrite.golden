@@ -27,7 +27,7 @@ Ok(
             "[ROOT]/.tabnine/agent/settings.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.tabnine/agent/.ai-hooker-mcp.json",
+            "[ROOT]/.tabnine/agent/.agent-config-mcp.json",
         ),
         files: [
             Invalid {
@@ -35,7 +35,7 @@ Ok(
                 reason: "key must be a string at line 1 column 3",
             },
             Missing {
-                path: "[ROOT]/.tabnine/agent/.ai-hooker-mcp.json",
+                path: "[ROOT]/.tabnine/agent/.agent-config-mcp.json",
             },
         ],
         warnings: [],

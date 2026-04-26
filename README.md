@@ -1,4 +1,4 @@
-# ai-hooker
+# agent-config
 
 A Rust library that installs hooks, prompt rules, MCP servers, and skills into
 AI coding harnesses.
@@ -26,8 +26,8 @@ Safety guarantees that apply to every integration:
 - **Idempotent.** Calling `install` twice with the same spec is a no-op
   after the first.
 - **Reversible.** `uninstall` removes only the tagged content. Hook JSON
-  entries carry an `_ai_hooker_tag` marker; markdown blocks are wrapped in
-  `<!-- BEGIN AI-HOOKER:<tag> --> ... <!-- END AI-HOOKER:<tag> -->`
+  entries carry an `_agent_config_tag` marker; markdown blocks are wrapped in
+  `<!-- BEGIN AGENT-CONFIG:<tag> --> ... <!-- END AGENT-CONFIG:<tag> -->`
   fences. MCP servers and skills use sidecar ledgers. Multiple consumers
   coexist without stepping on each other.
 
@@ -82,9 +82,11 @@ Safety guarantees that apply to every integration:
 [Hermes Agent]: docs/agents/hermes.md
 
 Per-harness install paths, JSON shapes, and event/matcher mappings are
-documented in [`docs/agents/`](docs/agents/README.md). Native OpenClaw
-hook/plugin installation is still deferred because upstream exposes that as a
-CLI-managed plugin lifecycle rather than a stable file-backed hook contract.
+documented in [`docs/agents/`](docs/agents/README.md). The release support
+contract is summarized in [`docs/support-matrix.md`](docs/support-matrix.md).
+Native OpenClaw hook/plugin installation is still deferred because upstream
+exposes that as a CLI-managed plugin lifecycle rather than a stable file-backed
+hook contract.
 
 ## How to use it in your Rust app
 
@@ -92,15 +94,15 @@ Add the dependency:
 
 ```toml
 [dependencies]
-ai-hooker = "0.1"
+agent-config = "0.1"
 ```
 
 ### Install a hook
 
 ```rust
-use ai_hooker::{by_id, Event, HookSpec, Matcher, Scope};
+use agent_config::{by_id, Event, HookSpec, Matcher, Scope};
 
-fn main() -> ai_hooker::Result<()> {
+fn main() -> agent_config::Result<()> {
     let spec = HookSpec::builder("myapp")              // your consumer tag
         .command_program("myapp", ["hook", "claude"])  // what the harness runs
         .matcher(Matcher::Bash)                        // filter to shell calls
@@ -124,7 +126,7 @@ a specific project root.
 The `tag` field is **your application's identifier**, not the harness's.
 Pick something stable and ASCII alnum / `_` / `-`. It namespaces every
 file, JSON entry, and markdown fence the library writes, so multiple tools
-built on `ai-hooker` can install side-by-side.
+built on `agent-config` can install side-by-side.
 
 Use `command_program(program, args)` for hook commands by default. It preserves
 program/argument boundaries and shell-quotes arguments for harnesses that only
@@ -167,9 +169,9 @@ the original `HookSpec`.
 ### Install an MCP server
 
 ```rust
-use ai_hooker::{mcp_by_id, McpSpec, Scope};
+use agent_config::{mcp_by_id, McpSpec, Scope};
 
-fn main() -> ai_hooker::Result<()> {
+fn main() -> agent_config::Result<()> {
     let spec = McpSpec::builder("github")
         .owner("myapp")
         .stdio("npx", ["-y", "@modelcontextprotocol/server-github"])
@@ -189,17 +191,17 @@ into the project file is intentional.
 
 MCP uninstall is keyed by server name plus owner tag. If another consumer owns
 the server, or the server was hand-installed and has no ownership ledger entry,
-`uninstall_mcp` returns `HookerError::NotOwnedByCaller`.
+`uninstall_mcp` returns `AgentConfigError::NotOwnedByCaller`.
 
 ```rust
-use ai_hooker::{mcp_by_id, HookerError, Scope};
+use agent_config::{mcp_by_id, AgentConfigError, Scope};
 
-fn remove_github_mcp() -> ai_hooker::Result<()> {
+fn remove_github_mcp() -> agent_config::Result<()> {
     let codex = mcp_by_id("codex").expect("codex supports MCP");
     match codex.uninstall_mcp(&Scope::Global, "github", "myapp") {
         Ok(report) if report.not_installed => println!("nothing to remove"),
         Ok(report) => println!("removed: {:?}", report.removed),
-        Err(HookerError::NotOwnedByCaller { actual, .. }) => {
+        Err(AgentConfigError::NotOwnedByCaller { actual, .. }) => {
             println!("github MCP is owned by {:?}", actual);
         }
         Err(err) => return Err(err),
@@ -211,9 +213,9 @@ fn remove_github_mcp() -> ai_hooker::Result<()> {
 ### Install a skill
 
 ```rust
-use ai_hooker::{skill_by_id, Scope, SkillSpec};
+use agent_config::{skill_by_id, Scope, SkillSpec};
 
-fn main() -> ai_hooker::Result<()> {
+fn main() -> agent_config::Result<()> {
     let spec = SkillSpec::builder("my-skill")
         .owner("myapp")
         .description("Use when my app needs custom repository context.")
@@ -229,14 +231,14 @@ fn main() -> ai_hooker::Result<()> {
 Skill uninstall uses the same ownership model as MCP:
 
 ```rust
-let claude = ai_hooker::skill_by_id("claude").unwrap();
-claude.uninstall_skill(&ai_hooker::Scope::Global, "my-skill", "myapp")?;
+let claude = agent_config::skill_by_id("claude").unwrap();
+claude.uninstall_skill(&agent_config::Scope::Global, "my-skill", "myapp")?;
 ```
 
 ### Iterate every supported harness
 
 ```rust
-use ai_hooker::{all, mcp_capable, skill_capable, Scope};
+use agent_config::{all, mcp_capable, skill_capable, Scope};
 
 for integration in all() {
     if integration.is_installed(&Scope::Global, "myapp")? {
@@ -255,7 +257,7 @@ for skills in skill_capable() {
 
 `Integration::supported_scopes()` tells you which scopes a given harness
 accepts. Copilot, for example, is `Local` only; calling `install` on it
-with `Scope::Global` returns `HookerError::UnsupportedScope`.
+with `Scope::Global` returns `AgentConfigError::UnsupportedScope`.
 
 Use `mcp_capable()` / `mcp_by_id()` for MCP support and `skill_capable()` /
 `skill_by_id()` for skills. Their scope sets can differ from hook support:
@@ -263,7 +265,7 @@ Cline hooks are local-only, while Cline MCP is global-only.
 
 ### Errors
 
-All operations return `Result<T, HookerError>`. Variants worth handling
+All operations return `Result<T, AgentConfigError>`. Variants worth handling
 explicitly:
 
 - `UnsupportedScope`: the harness does not accept this scope kind.
@@ -273,7 +275,7 @@ explicitly:
 - `BackupExists`: a first-touch `<path>.bak` could not be created safely.
   Existing backups are normally preserved and reused.
 - `NotOwnedByCaller`: an MCP server or skill is owned by another consumer or
-  was hand-installed without an ai-hooker ledger entry.
+  was hand-installed without an agent-config ledger entry.
 - `Io` and `JsonInvalid` carry the offending path.
 
 ## License

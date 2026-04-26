@@ -6,7 +6,7 @@ uninstall_result:
 Ok(
     UninstallReport {
         removed: [
-            "[HOME]/.hermes/skills/ai-hooker/golden-skill",
+            "[HOME]/.hermes/skills/agent-config/golden-skill",
         ],
         patched: [],
         restored: [],
@@ -21,17 +21,17 @@ Ok(
         },
         status: Absent,
         config_path: Some(
-            "[HOME]/.hermes/skills/ai-hooker/golden-skill",
+            "[HOME]/.hermes/skills/agent-config/golden-skill",
         ),
         ledger_path: Some(
-            "[HOME]/.hermes/skills/ai-hooker/.ai-hooker-skills.json",
+            "[HOME]/.hermes/skills/agent-config/.agent-config-skills.json",
         ),
         files: [
             Missing {
-                path: "[HOME]/.hermes/skills/ai-hooker/golden-skill",
+                path: "[HOME]/.hermes/skills/agent-config/golden-skill",
             },
             Missing {
-                path: "[HOME]/.hermes/skills/ai-hooker/golden-skill/SKILL.md",
+                path: "[HOME]/.hermes/skills/agent-config/golden-skill/SKILL.md",
             },
         ],
         warnings: [],
@@ -61,4 +61,4 @@ HOME tree:
 directories:
 - .hermes
 - .hermes/skills
-- .hermes/skills/ai-hooker
+- .hermes/skills/agent-config

@@ -14,14 +14,16 @@
 use std::path::{Path, PathBuf};
 
 use crate::agents::planning as agent_planning;
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
 use crate::plan::{InstallPlan, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{HookSpec, McpSpec, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{file_lock, fs_atomic, mcp_json_object, md_block, ownership, skills_dir};
+use crate::util::{
+    file_lock, fs_atomic, mcp_json_object, md_block, ownership, safe_fs, skills_dir,
+};
 
 /// Forge CLI installer.
 pub struct ForgeAgent;
@@ -36,21 +38,21 @@ impl ForgeAgent {
         home.join(".forge")
     }
 
-    fn rules_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn rules_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => Self::forge_home_from_home(&paths::home_dir()?).join("AGENTS.md"),
             Scope::Local(p) => p.join("AGENTS.md"),
         })
     }
 
-    fn mcp_path(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => Self::forge_home_from_home(&paths::home_dir()?).join(".mcp.json"),
             Scope::Local(p) => p.join(".mcp.json"),
         })
     }
 
-    fn skills_root(scope: &Scope) -> Result<PathBuf, HookerError> {
+    fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => Self::forge_home_from_home(&paths::home_dir()?).join("skills"),
             Scope::Local(p) => p.join(".forge").join("skills"),
@@ -77,13 +79,17 @@ impl Integration for ForgeAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let path = Self::rules_path(scope)?;
         StatusReport::for_markdown_block_hook(tag, path)
     }
 
-    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install(
+        &self,
+        scope: &Scope,
+        spec: &HookSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::markdown_install(
             Integration::id(self),
             scope,
@@ -93,7 +99,7 @@ impl Integration for ForgeAgent {
         )
     }
 
-    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::markdown_uninstall(
             Integration::id(self),
             scope,
@@ -102,19 +108,22 @@ impl Integration for ForgeAgent {
         )
     }
 
-    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
+    fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
-        let rules = spec.rules.as_ref().ok_or(HookerError::MissingSpecField {
-            id: "forge",
-            field: "rules",
-        })?;
+        let rules = spec
+            .rules
+            .as_ref()
+            .ok_or(AgentConfigError::MissingSpecField {
+                id: "forge",
+                field: "rules",
+            })?;
         let path = Self::rules_path(scope)?;
         scope.ensure_contained(&path)?;
         let mut report = InstallReport::default();
         file_lock::with_lock(&path, || {
             let host = fs_atomic::read_to_string_or_empty(&path)?;
             let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
-            let outcome = fs_atomic::write_atomic(&path, new_host.as_bytes(), true)?;
+            let outcome = safe_fs::write(scope, &path, new_host.as_bytes(), true)?;
             if outcome.no_change {
                 report.already_installed = true;
             } else if outcome.existed {
@@ -125,12 +134,12 @@ impl Integration for ForgeAgent {
             if let Some(b) = outcome.backup {
                 report.backed_up.push(b);
             }
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
         Ok(report)
     }
 
-    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, HookerError> {
+    fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let path = Self::rules_path(scope)?;
         scope.ensure_contained(&path)?;
@@ -145,17 +154,17 @@ impl Integration for ForgeAgent {
             }
 
             if stripped.trim().is_empty() {
-                if fs_atomic::restore_backup_if_matches(&path, stripped.as_bytes())? {
+                if safe_fs::restore_backup_if_matches(scope, &path, stripped.as_bytes())? {
                     report.restored.push(path.clone());
                 } else {
-                    fs_atomic::remove_if_exists(&path)?;
+                    safe_fs::remove_file(scope, &path)?;
                     report.removed.push(path.clone());
                 }
             } else {
-                fs_atomic::write_atomic(&path, stripped.as_bytes(), false)?;
+                safe_fs::write(scope, &path, stripped.as_bytes(), false)?;
                 report.patched.push(path.clone());
             }
-            Ok::<(), HookerError>(())
+            Ok::<(), AgentConfigError>(())
         })?;
         Ok(report)
     }
@@ -175,7 +184,7 @@ impl McpSurface for ForgeAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         let cfg = Self::mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -191,7 +200,11 @@ impl McpSurface for ForgeAgent {
         ))
     }
 
-    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+    fn plan_install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::mcp_json_object_install(
             McpSurface::id(self),
             scope,
@@ -205,7 +218,7 @@ impl McpSurface for ForgeAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::mcp_json_object_uninstall(
             McpSurface::id(self),
             scope,
@@ -215,7 +228,11 @@ impl McpSurface for ForgeAgent {
         )
     }
 
-    fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
+    fn install_mcp(
+        &self,
+        scope: &Scope,
+        spec: &McpSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
         spec.validate_local_secret_policy(scope)?;
@@ -229,7 +246,7 @@ impl McpSurface for ForgeAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::mcp_path(scope)?;
@@ -253,7 +270,7 @@ impl SkillSurface for ForgeAgent {
         scope: &Scope,
         name: &str,
         expected_owner: &str,
-    ) -> Result<StatusReport, HookerError> {
+    ) -> Result<StatusReport, AgentConfigError> {
         SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
         let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
@@ -272,7 +289,7 @@ impl SkillSurface for ForgeAgent {
         &self,
         scope: &Scope,
         spec: &SkillSpec,
-    ) -> Result<InstallPlan, HookerError> {
+    ) -> Result<InstallPlan, AgentConfigError> {
         agent_planning::skill_install(
             SkillSurface::id(self),
             scope,
@@ -286,7 +303,7 @@ impl SkillSurface for ForgeAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallPlan, HookerError> {
+    ) -> Result<UninstallPlan, AgentConfigError> {
         agent_planning::skill_uninstall(
             SkillSurface::id(self),
             scope,
@@ -296,7 +313,11 @@ impl SkillSurface for ForgeAgent {
         )
     }
 
-    fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
+    fn install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
@@ -307,7 +328,7 @@ impl SkillSurface for ForgeAgent {
         scope: &Scope,
         name: &str,
         owner_tag: &str,
-    ) -> Result<UninstallReport, HookerError> {
+    ) -> Result<UninstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)

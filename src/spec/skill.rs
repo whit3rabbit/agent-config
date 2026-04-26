@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use crate::error::HookerError;
+use crate::error::AgentConfigError;
 
 use super::validate::{validate_identifier, IdentifierKind};
 
@@ -56,10 +56,10 @@ impl SkillSpec {
     }
 
     /// Validate `name` and `owner_tag`.
-    pub(crate) fn validate(&self) -> Result<(), HookerError> {
+    pub(crate) fn validate(&self) -> Result<(), AgentConfigError> {
         Self::validate_name(&self.name)?;
         if self.frontmatter.description.trim().is_empty() {
-            return Err(HookerError::MissingSpecField {
+            return Err(AgentConfigError::MissingSpecField {
                 id: "<skill spec>",
                 field: "frontmatter.description",
             });
@@ -68,7 +68,7 @@ impl SkillSpec {
     }
 
     /// Validate just the skill name (used by uninstall, which has no spec).
-    pub(crate) fn validate_name(name: &str) -> Result<(), HookerError> {
+    pub(crate) fn validate_name(name: &str) -> Result<(), AgentConfigError> {
         validate_identifier(name, IdentifierKind::SkillName)
     }
 }
@@ -163,8 +163,8 @@ impl SkillSpecBuilder {
     }
 
     /// Fallible variant of [`build`](Self::build).
-    pub fn try_build(self) -> Result<SkillSpec, HookerError> {
-        let owner_tag = self.owner_tag.ok_or(HookerError::MissingSpecField {
+    pub fn try_build(self) -> Result<SkillSpec, AgentConfigError> {
+        let owner_tag = self.owner_tag.ok_or(AgentConfigError::MissingSpecField {
             id: "<skill builder>",
             field: "owner",
         })?;

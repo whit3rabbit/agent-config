@@ -26,7 +26,7 @@ Ok(
             "[ROOT]/.forge/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.forge/skills/.ai-hooker-skills.json",
+            "[ROOT]/.forge/skills/.agent-config-skills.json",
         ),
         files: [
             Exists {
@@ -58,7 +58,7 @@ Ok(
                     "other-owner",
                 ),
                 path: Some(
-                    "[ROOT]/.forge/skills/.ai-hooker-skills.json",
+                    "[ROOT]/.forge/skills/.agent-config-skills.json",
                 ),
             },
         ],
@@ -74,7 +74,7 @@ directories:
 - .forge/skills
 - .forge/skills/golden-skill
 files:
-- .forge/skills/.ai-hooker-skills.json
+- .forge/skills/.agent-config-skills.json
   content:
 ```text
 {

@@ -26,7 +26,7 @@ Ok(
             "[ROOT]/.trae/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.trae/skills/.ai-hooker-skills.json",
+            "[ROOT]/.trae/skills/.agent-config-skills.json",
         ),
         files: [
             Exists {
@@ -58,7 +58,7 @@ Ok(
                     "other-owner",
                 ),
                 path: Some(
-                    "[ROOT]/.trae/skills/.ai-hooker-skills.json",
+                    "[ROOT]/.trae/skills/.agent-config-skills.json",
                 ),
             },
         ],
@@ -74,7 +74,7 @@ directories:
 - .trae/skills
 - .trae/skills/golden-skill
 files:
-- .trae/skills/.ai-hooker-skills.json
+- .trae/skills/.agent-config-skills.json
   content:
 ```text
 {
