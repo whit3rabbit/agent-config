@@ -1,0 +1,91 @@
+surface: skills
+agent: trae
+scenario: uninstall_removes_skill_and_ledger_entry
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [
+            "[ROOT]/.trae/skills/golden-skill",
+        ],
+        patched: [],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Skill {
+            name: "golden-skill",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.trae/skills/golden-skill",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.trae/skills/.ai-hooker-skills.json",
+        ),
+        files: [
+            Missing {
+                path: "[ROOT]/.trae/skills/golden-skill",
+            },
+            Missing {
+                path: "[ROOT]/.trae/skills/golden-skill/SKILL.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Skill {
+            integration_id: "trae",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-skill",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .trae
+- .trae/skills
+- .trae/skills/sibling-skill
+files:
+- .trae/skills/.ai-hooker-skills.json
+  content:
+```text
+{
+  "entries": {
+    "sibling-skill": {
+      "content_hash": "20f0b63d50b45ef6bd0f8a2988c4e2289c193ddf343556ff38ac2dc2efdfaf3d",
+      "owner": "golden-owner"
+    }
+  },
+  "version": 2
+}
+```
+- .trae/skills/sibling-skill/SKILL.md
+  content:
+```text
+---
+name: sibling-skill
+description: Use during golden snapshot tests.
+---
+
+## Goal
+Preserve the config shape.
+```
+
+HOME tree:
+<empty>

@@ -172,6 +172,7 @@ impl Integration for HermesAgent {
         })?;
         let path = Self::prompt_path(scope)?;
         let mut report = InstallReport::default();
+        scope.ensure_contained(&path)?;
         file_lock::with_lock(&path, || {
             let host = fs_atomic::read_to_string_or_empty(&path)?;
             let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
@@ -195,6 +196,7 @@ impl Integration for HermesAgent {
         HookSpec::validate_tag(tag)?;
         let path = Self::prompt_path(scope)?;
         let mut report = UninstallReport::default();
+        scope.ensure_contained(&path)?;
         file_lock::with_lock(&path, || {
             let host = fs_atomic::read_to_string_or_empty(&path)?;
             let (stripped, removed) = md_block::remove(&host, tag);

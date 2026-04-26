@@ -208,6 +208,65 @@ pub(crate) fn ensure_trailing_newline(s: &str) -> String {
     }
 }
 
+/// Verify that `path` (when canonicalized) stays within `root`.
+///
+/// Both `path.parent()` and `root` are canonicalized via `fs::canonicalize`.
+/// If the canonical parent does not start with the canonical root, returns
+/// [`HookerError::PathResolution`]. If the parent directory does not yet exist,
+/// returns `Ok(())` (new-file writes under a project root are safe because
+/// `write_atomic` creates the parent).
+pub(crate) fn ensure_contained(path: &Path, root: &Path) -> Result<(), HookerError> {
+    let parent = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => return Ok(()),
+    };
+    if !parent.exists() {
+        return Ok(());
+    }
+    let canonical_parent = fs::canonicalize(parent).map_err(|e| HookerError::io(parent, e))?;
+    let canonical_root = fs::canonicalize(root).map_err(|e| HookerError::io(root, e))?;
+    if !canonical_parent.starts_with(&canonical_root) {
+        return Err(HookerError::PathResolution(format!(
+            "resolved path {} escapes project root {}",
+            canonical_parent.display(),
+            canonical_root.display()
+        )));
+    }
+    Ok(())
+}
+
+/// Reject the write target if it is a symlink.
+///
+/// Uses `fs::symlink_metadata` to detect symlinks without following them.
+/// Returns [`HookerError::PathResolution`] if `path` is a symlink.
+#[allow(dead_code)]
+pub(crate) fn reject_symlink(path: &Path) -> Result<(), HookerError> {
+    match fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_type().is_symlink() => Err(HookerError::PathResolution(format!(
+            "refusing to write through symlink at {}",
+            path.display()
+        ))),
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(HookerError::io(path, e)),
+    }
+}
+
+/// Like [`write_atomic`], but first verifies that `path` stays within `root`
+/// and is not a symlink. Intended for `Scope::Local` writes where the caller
+/// supplies a project root that must contain all writes.
+#[allow(dead_code)]
+pub(crate) fn write_atomic_contained(
+    path: &Path,
+    content: &[u8],
+    make_backup: bool,
+    root: &Path,
+) -> Result<WriteOutcome, HookerError> {
+    reject_symlink(path)?;
+    ensure_contained(path, root)?;
+    write_atomic(path, content, make_backup)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -392,5 +451,80 @@ mod tests {
         assert_eq!(fs::read(backup_path(&path)).unwrap(), b"original");
         let final_bytes = fs::read(&path).unwrap();
         assert!(final_bytes == b"new-a" || final_bytes == b"new-b");
+    }
+
+    #[test]
+    fn ensure_contained_allows_path_under_root() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("sub").join("config.json");
+        fs::create_dir_all(dir.path().join("sub")).unwrap();
+        fs::write(&file, b"{}").unwrap();
+        ensure_contained(&file, dir.path()).unwrap();
+    }
+
+    #[test]
+    fn ensure_contained_rejects_path_outside_root() {
+        let dir = tempdir().unwrap();
+        let outside = dir.path().join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        let file = outside.join("config.json");
+        fs::write(&file, b"{}").unwrap();
+        let root = dir.path().join("inside");
+        fs::create_dir_all(&root).unwrap();
+        let err = ensure_contained(&file, &root).unwrap_err();
+        assert!(matches!(err, HookerError::PathResolution(ref msg) if msg.contains("escapes")));
+    }
+
+    #[test]
+    fn ensure_contained_allows_nonexistent_parent() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("new").join("config.json");
+        assert!(!file.parent().unwrap().exists());
+        ensure_contained(&file, dir.path()).unwrap();
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn ensure_contained_rejects_symlink_escape() {
+        use std::os::unix::fs::symlink;
+        let dir = tempdir().unwrap();
+        let project = dir.path().join("project");
+        let escape = dir.path().join("escape");
+        fs::create_dir_all(&project).unwrap();
+        fs::create_dir_all(&escape).unwrap();
+        fs::write(escape.join("secret"), b"leaked").unwrap();
+        let link = project.join("evil-link");
+        symlink(&escape, &link).unwrap();
+        let target = link.join("config.json");
+        let err = ensure_contained(&target, &project).unwrap_err();
+        assert!(matches!(err, HookerError::PathResolution(ref msg) if msg.contains("escapes")));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn reject_symlink_detects_symlink() {
+        use std::os::unix::fs::symlink;
+        let dir = tempdir().unwrap();
+        let target = dir.path().join("real");
+        fs::write(&target, b"real").unwrap();
+        let link = dir.path().join("link");
+        symlink(&target, &link).unwrap();
+        let err = reject_symlink(&link).unwrap_err();
+        assert!(matches!(err, HookerError::PathResolution(ref msg) if msg.contains("symlink")));
+    }
+
+    #[test]
+    fn reject_symlink_allows_regular_file() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("config.json");
+        fs::write(&file, b"{}").unwrap();
+        reject_symlink(&file).unwrap();
+    }
+
+    #[test]
+    fn reject_symlink_allows_nonexistent() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("ghost");
+        reject_symlink(&file).unwrap();
     }
 }

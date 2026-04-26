@@ -1,0 +1,108 @@
+surface: hooks
+agent: tabnine
+scenario: uninstall_one_preserves_sibling
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [],
+        patched: [
+            "[ROOT]/.tabnine/agent/settings.json",
+        ],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.tabnine/agent/settings.json",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/.tabnine/agent/settings.json",
+            },
+        ],
+        warnings: [
+            BackupExists {
+                path: "[ROOT]/.tabnine/agent/settings.json.bak",
+            },
+        ],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "tabnine",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/.tabnine/agent/settings.json.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .tabnine
+- .tabnine/agent
+files:
+- .tabnine/agent/settings.json
+  content:
+```text
+{
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook"
+          }
+        ],
+        "_ai_hooker_tag": "sibling-hook"
+      }
+    ]
+  }
+}
+```
+- .tabnine/agent/settings.json.bak
+  content:
+```text
+{
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook"
+          }
+        ],
+        "_ai_hooker_tag": "golden-hook"
+      }
+    ]
+  }
+}
+```
+
+HOME tree:
+<empty>

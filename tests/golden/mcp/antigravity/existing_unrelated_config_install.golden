@@ -74,10 +74,11 @@ files:
 {
   "entries": {
     "golden-server": {
+      "content_hash": "1cf96055fdb01520ca5491ca8bcc90ddb68e5ed215469ef2486e8b6254ee3a8f",
       "owner": "golden-owner"
     }
   },
-  "version": 1
+  "version": 2
 }
 ```
 - .agent/mcp_config.json

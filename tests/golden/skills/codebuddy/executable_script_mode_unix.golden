@@ -1,0 +1,117 @@
+surface: skills
+agent: codebuddy
+scenario: executable_script_mode_unix
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/.codebuddy/skills/golden-skill/SKILL.md",
+            "[ROOT]/.codebuddy/skills/golden-skill/scripts/run.sh",
+            "[ROOT]/.codebuddy/skills/golden-skill/references/notes.md",
+            "[ROOT]/.codebuddy/skills/golden-skill/assets/sample.txt",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Skill {
+            name: "golden-skill",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/.codebuddy/skills/golden-skill",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.codebuddy/skills/.ai-hooker-skills.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.codebuddy/skills/golden-skill",
+            },
+            Exists {
+                path: "[ROOT]/.codebuddy/skills/golden-skill/SKILL.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Skill {
+            integration_id: "codebuddy",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-skill",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .codebuddy
+- .codebuddy/skills
+- .codebuddy/skills/golden-skill
+- .codebuddy/skills/golden-skill/assets
+- .codebuddy/skills/golden-skill/references
+- .codebuddy/skills/golden-skill/scripts
+files:
+- .codebuddy/skills/.ai-hooker-skills.json
+  content:
+```text
+{
+  "entries": {
+    "golden-skill": {
+      "content_hash": "6dd3e0a529f97c1d4a17b631f7efd33d8552fdbbc895f8438e6b88e2e4448f2a",
+      "owner": "golden-owner"
+    }
+  },
+  "version": 2
+}
+```
+- .codebuddy/skills/golden-skill/SKILL.md
+  content:
+```text
+---
+name: golden-skill
+description: Use during golden snapshot tests with assets.
+---
+
+## Goal
+Preserve the full skill directory.
+```
+- .codebuddy/skills/golden-skill/assets/sample.txt
+  content:
+```text
+asset payload
+```
+- .codebuddy/skills/golden-skill/references/notes.md
+  content:
+```text
+# Notes
+Keep this reference.
+```
+- .codebuddy/skills/golden-skill/scripts/run.sh
+  mode: 755
+  content:
+```text
+#!/bin/sh
+echo golden
+```
+
+HOME tree:
+<empty>

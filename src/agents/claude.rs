@@ -173,6 +173,7 @@ impl Integration for ClaudeAgent {
         let mut report = InstallReport::default();
 
         let settings = Self::settings_path(scope)?;
+        scope.ensure_contained(&settings)?;
         {
             let _settings_lock = file_lock::FileLock::acquire(&settings)?;
             let mut root = json_patch::read_or_empty(&settings)?;
@@ -210,6 +211,7 @@ impl Integration for ClaudeAgent {
 
         if let Some(rules) = &spec.rules {
             let memory = Self::memory_path(scope)?;
+            scope.ensure_contained(&memory)?;
             let _memory_lock = file_lock::FileLock::acquire(&memory)?;
             let host = fs_atomic::read_to_string_or_empty(&memory)?;
             let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
@@ -235,6 +237,7 @@ impl Integration for ClaudeAgent {
         let mut report = UninstallReport::default();
 
         let settings = Self::settings_path(scope)?;
+        scope.ensure_contained(&settings)?;
         if settings.exists() {
             let _settings_lock = file_lock::FileLock::acquire(&settings)?;
             let mut root = json_patch::read_or_empty(&settings)?;
@@ -256,6 +259,7 @@ impl Integration for ClaudeAgent {
         }
 
         let memory = Self::memory_path(scope)?;
+        scope.ensure_contained(&memory)?;
         let _memory_lock = file_lock::FileLock::acquire(&memory)?;
         let host = fs_atomic::read_to_string_or_empty(&memory)?;
         let (stripped, removed) = md_block::remove(&host, tag);
@@ -348,6 +352,7 @@ impl McpSurface for ClaudeAgent {
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
+        scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::install(&cfg, &ledger, spec)
     }
@@ -361,6 +366,7 @@ impl McpSurface for ClaudeAgent {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::mcp_path(scope)?;
+        scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::uninstall(&cfg, &ledger, name, owner_tag, "mcp server")
     }
@@ -434,6 +440,7 @@ impl SkillSurface for ClaudeAgent {
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let root = Self::skills_root(scope)?;
+        scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
     }
 
@@ -446,6 +453,7 @@ impl SkillSurface for ClaudeAgent {
         SkillSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let root = Self::skills_root(scope)?;
+        scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
     }
 }

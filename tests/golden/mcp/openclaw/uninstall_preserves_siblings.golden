@@ -75,10 +75,11 @@ files:
 {
   "entries": {
     "sibling-server": {
+      "content_hash": "497d34bfd9b3d1d07fe3e9fffaa85348b6a530ec3ac0d538620d18c331ea8ad8",
       "owner": "golden-owner"
     }
   },
-  "version": 1
+  "version": 2
 }
 ```
 - .openclaw/openclaw.json

@@ -69,10 +69,11 @@ files:
 {
   "entries": {
     "golden-server": {
+      "content_hash": "1c18024e4cebb6a0b031d7aa91e96e5f02b4bb853756b42eea59e89f697b5aa2",
       "owner": "golden-owner"
     }
   },
-  "version": 1
+  "version": 2
 }
 ```
 - .hermes/config.yaml

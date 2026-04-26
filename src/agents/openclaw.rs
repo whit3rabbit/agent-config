@@ -164,6 +164,7 @@ impl Integration for OpenClawAgent {
         })?;
         let path = Self::prompt_path(scope)?;
         let mut report = InstallReport::default();
+        scope.ensure_contained(&path)?;
         file_lock::with_lock(&path, || {
             let host = fs_atomic::read_to_string_or_empty(&path)?;
             let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
@@ -187,6 +188,7 @@ impl Integration for OpenClawAgent {
         HookSpec::validate_tag(tag)?;
         let path = Self::prompt_path(scope)?;
         let mut report = UninstallReport::default();
+        scope.ensure_contained(&path)?;
         file_lock::with_lock(&path, || {
             let host = fs_atomic::read_to_string_or_empty(&path)?;
             let (stripped, removed) = md_block::remove(&host, tag);
@@ -367,6 +369,7 @@ impl SkillSurface for OpenClawAgent {
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
         let root = Self::skills_root(scope)?;
+        scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
     }
 
@@ -377,6 +380,7 @@ impl SkillSurface for OpenClawAgent {
         owner_tag: &str,
     ) -> Result<UninstallReport, HookerError> {
         let root = Self::skills_root(scope)?;
+        scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
     }
 }

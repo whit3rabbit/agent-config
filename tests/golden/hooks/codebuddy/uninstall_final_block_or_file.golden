@@ -1,0 +1,59 @@
+surface: hooks
+agent: codebuddy
+scenario: uninstall_final_block_or_file
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [
+            "[ROOT]/.codebuddy/settings.json",
+            "[ROOT]/CLAUDE.md",
+        ],
+        patched: [],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.codebuddy/settings.json",
+        ),
+        ledger_path: None,
+        files: [
+            Missing {
+                path: "[ROOT]/.codebuddy/settings.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "codebuddy",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .codebuddy
+
+HOME tree:
+<empty>

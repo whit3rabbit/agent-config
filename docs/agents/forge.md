@@ -1,0 +1,54 @@
+# Forge
+
+ID: `forge` — `ai_hooker::by_id("forge")`
+
+## Surfaces
+
+| Surface | Scope          | Notes                                  |
+| ------- | -------------- | -------------------------------------- |
+| Hooks   | -              | Not part of Forge's documented surface |
+| Prompt  | Global + Local | Fenced block in `AGENTS.md`            |
+| MCP     | Global + Local | `mcpServers` JSON map at `.mcp.json`   |
+| Skills  | Global + Local | `SKILL.md` directories                 |
+
+## Prompt instructions
+
+| | |
+| --- | --- |
+| User scope file | `~/.forge/AGENTS.md` |
+| Project scope file | `<root>/AGENTS.md` |
+| Format | Tagged HTML-comment fence |
+
+## MCP servers
+
+| Scope | File |
+| --- | --- |
+| Global | `~/.forge/.mcp.json` |
+| Local | `<root>/.mcp.json` |
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@example/server"]
+    }
+  }
+}
+```
+
+Ownership is recorded in a sidecar `<config-dir>/.ai-hooker-mcp.json` ledger.
+
+## Skills
+
+| Scope | Path |
+| --- | --- |
+| User | `~/.forge/skills/<name>/` |
+| Project | `<root>/.forge/skills/<name>/` |
+
+## References
+
+- <https://forgecode.dev/docs>
+- <https://github.com/forge-agents/forge>
+
+Accessed: 2026-04-26.

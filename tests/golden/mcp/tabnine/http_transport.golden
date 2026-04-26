@@ -1,0 +1,96 @@
+surface: mcp
+agent: tabnine
+scenario: http_transport
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/.tabnine/agent/settings.json",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/.tabnine/agent/settings.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.tabnine/agent/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.tabnine/agent/settings.json",
+            },
+            Exists {
+                path: "[ROOT]/.tabnine/agent/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "tabnine",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .tabnine
+- .tabnine/agent
+files:
+- .tabnine/agent/.ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "content_hash": "865fd8376635686373cbd6499ed6c9ffd3a72b4b687ea9e14eeb7374588fbf71",
+      "owner": "golden-owner"
+    }
+  },
+  "version": 2
+}
+```
+- .tabnine/agent/settings.json
+  content:
+```text
+{
+  "mcpServers": {
+    "golden-server": {
+      "type": "http",
+      "url": "https://example.test/mcp",
+      "headers": {
+        "Authorization": "Bearer golden-token"
+      }
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

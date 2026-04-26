@@ -74,10 +74,11 @@ files:
 {
   "entries": {
     "sibling-server": {
+      "content_hash": "37243c0d48ed79824d2f5c2316e4daa2908fb28b1fe51e6b8d24765827d12e7c",
       "owner": "golden-owner"
     }
   },
-  "version": 1
+  "version": 2
 }
 ```
 - .codex/config.toml

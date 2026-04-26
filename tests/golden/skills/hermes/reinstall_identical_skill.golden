@@ -70,10 +70,11 @@ files:
 {
   "entries": {
     "golden-skill": {
+      "content_hash": "514bf376c8c933a19c837c64f505f5c3b186b7bbe8386edb3ad939b36ad058d9",
       "owner": "golden-owner"
     }
   },
-  "version": 1
+  "version": 2
 }
 ```
 - .hermes/skills/ai-hooker/golden-skill/SKILL.md

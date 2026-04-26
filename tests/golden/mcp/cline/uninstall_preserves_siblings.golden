@@ -81,10 +81,11 @@ files:
 {
   "entries": {
     "sibling-server": {
+      "content_hash": "9ec13ebbac47e92d19435bde9efbdb50a1120ba22187987e22eb70f648c8b763",
       "owner": "golden-owner"
     }
   },
-  "version": 1
+  "version": 2
 }
 ```
 - Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json

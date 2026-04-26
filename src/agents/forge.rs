@@ -109,6 +109,7 @@ impl Integration for ForgeAgent {
             field: "rules",
         })?;
         let path = Self::rules_path(scope)?;
+        scope.ensure_contained(&path)?;
         let mut report = InstallReport::default();
         file_lock::with_lock(&path, || {
             let host = fs_atomic::read_to_string_or_empty(&path)?;
@@ -132,6 +133,7 @@ impl Integration for ForgeAgent {
     fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, HookerError> {
         HookSpec::validate_tag(tag)?;
         let path = Self::rules_path(scope)?;
+        scope.ensure_contained(&path)?;
         let mut report = UninstallReport::default();
         file_lock::with_lock(&path, || {
             let host = fs_atomic::read_to_string_or_empty(&path)?;
@@ -216,6 +218,7 @@ impl McpSurface for ForgeAgent {
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
+        scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::install(&cfg, &ledger, spec)
     }
@@ -229,6 +232,7 @@ impl McpSurface for ForgeAgent {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::mcp_path(scope)?;
+        scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::uninstall(&cfg, &ledger, name, owner_tag, "mcp server")
     }
@@ -293,6 +297,7 @@ impl SkillSurface for ForgeAgent {
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
         let root = Self::skills_root(scope)?;
+        scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
     }
 
@@ -303,6 +308,7 @@ impl SkillSurface for ForgeAgent {
         owner_tag: &str,
     ) -> Result<UninstallReport, HookerError> {
         let root = Self::skills_root(scope)?;
+        scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
     }
 }

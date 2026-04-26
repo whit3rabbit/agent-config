@@ -1,0 +1,95 @@
+surface: mcp
+agent: iflow
+scenario: sse_transport
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/.iflow/settings.json",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/.iflow/settings.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.iflow/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.iflow/settings.json",
+            },
+            Exists {
+                path: "[ROOT]/.iflow/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "iflow",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .iflow
+files:
+- .iflow/.ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "content_hash": "6dc4e209bad78de6997faea7be0a8bc4a153bbc6ac3d1153314d3f6833fab418",
+      "owner": "golden-owner"
+    }
+  },
+  "version": 2
+}
+```
+- .iflow/settings.json
+  content:
+```text
+{
+  "mcpServers": {
+    "golden-server": {
+      "type": "sse",
+      "url": "https://example.test/sse",
+      "headers": {
+        "X-Golden": "true"
+      }
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

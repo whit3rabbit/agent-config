@@ -1,8 +1,9 @@
 # ai-hooker
 
 A Rust library that installs hooks, prompt rules, MCP servers, and skills into
-AI coding harnesses (Claude Code, Cursor, Gemini CLI, OpenClaw, Hermes Agent,
-Codex, Copilot, OpenCode, Cline, Roo, Windsurf, Kilo Code, Antigravity).
+AI coding harnesses (Claude Code, Cursor, Gemini CLI, Codex, Copilot,
+OpenCode, Cline, Roo, Windsurf, Kilo Code, Antigravity, Amp, CodeBuddy,
+Forge, iFlow, Junie, Qoder, Qwen, Tabnine, Trae, OpenClaw, Hermes).
 
 You supply a `HookSpec`, `McpSpec`, or `SkillSpec`. The library knows where
 each harness keeps its config, what shape that config takes, and how to write
@@ -31,21 +32,53 @@ Safety guarantees that apply to every integration:
 
 ## What is supported
 
-| Harness                | ID            | Hooks              | Prompt rules | MCP    | Skills |
-| ---------------------- | ------------- | ------------------ | ------------ | ------ | ------ |
-| Claude Code            | `claude`      | Global + Local     | yes          | Global + Local | Global + Local |
-| Cursor                 | `cursor`      | Global + Local     | -            | Global + Local | Global + Local |
-| Gemini CLI             | `gemini`      | Global + Local     | yes          | Global + Local | Global + Local |
-| OpenClaw               | `openclaw`    | -                  | yes (Local)  | Global | Global + Local |
-| Hermes Agent           | `hermes`      | -                  | yes (Local)  | Global | Global |
-| Codex CLI              | `codex`       | Global + Local     | yes          | Global + Local | Global + Local |
-| GitHub Copilot         | `copilot`     | Local              | yes          | Global + Local | Global + Local |
-| OpenCode               | `opencode`    | Global + Local     | -            | Global + Local | Global + Local |
-| Cline                  | `cline`       | Local              | yes          | Global | Global + Local |
-| Roo Code               | `roo`         | -                  | yes          | Global + Local | -      |
-| Windsurf               | `windsurf`    | Local              | yes          | Global + Local | Global + Local |
-| Kilo Code              | `kilocode`    | -                  | yes          | Global + Local | Global + Local |
-| Google Antigravity     | `antigravity` | -                  | yes          | Global + Local | Global + Local |
+| Harness                | ID            | Hooks              | Prompt rules | MCP              | Skills           |
+| ---------------------- | ------------- | ------------------ | ------------ | ---------------- | ---------------- |
+| [Claude Code]          | `claude`      | Global + Local     | yes          | Global + Local   | Global + Local   |
+| [Cursor]               | `cursor`      | Global + Local     | -            | Global + Local   | Global + Local   |
+| [Gemini CLI]           | `gemini`      | Global + Local     | yes          | Global + Local   | Global + Local   |
+| [Codex CLI]            | `codex`       | Global + Local     | yes          | Global + Local   | Global + Local   |
+| [GitHub Copilot]       | `copilot`     | Local              | yes          | Global + Local   | Global + Local   |
+| [OpenCode]             | `opencode`    | Global + Local     | -            | Global + Local   | Global + Local   |
+| [Cline]                | `cline`       | Local              | yes          | Global           | Global + Local   |
+| [Roo Code]             | `roo`         | -                  | yes          | Global + Local   | -                |
+| [Windsurf]             | `windsurf`    | Local              | yes          | Global + Local   | Global + Local   |
+| [Kilo Code]            | `kilocode`    | -                  | yes          | Global + Local   | Global + Local   |
+| [Google Antigravity]   | `antigravity` | -                  | yes          | Global + Local   | Global + Local   |
+| [Amp]                  | `amp`         | -                  | yes          | Global + Local   | Global + Local   |
+| [CodeBuddy CLI]        | `codebuddy`   | Global + Local     | yes          | -                | Global + Local   |
+| [Forge]                | `forge`       | -                  | yes          | Global + Local   | Global + Local   |
+| [iFlow CLI]            | `iflow`       | Global + Local     | -            | Global + Local   | -                |
+| [JetBrains Junie]      | `junie`       | -                  | yes (Local)  | Global + Local   | -                |
+| [Qoder CLI]            | `qodercli`    | -                  | yes          | Global + Local   | -                |
+| [Qwen Code]            | `qwen`        | -                  | yes          | Global + Local   | Global + Local   |
+| [Tabnine CLI]          | `tabnine`     | Global + Local     | -            | Global + Local   | -                |
+| [Trae]                 | `trae`        | -                  | yes (Local)  | -                | Global + Local   |
+| [OpenClaw]             | `openclaw`    | -                  | yes (Local)  | Global           | Global + Local   |
+| [Hermes Agent]         | `hermes`      | -                  | yes (Local)  | Global           | Global           |
+
+[Claude Code]: docs/agents/claude.md
+[Cursor]: docs/agents/cursor.md
+[Gemini CLI]: docs/agents/gemini.md
+[Codex CLI]: docs/agents/codex.md
+[GitHub Copilot]: docs/agents/copilot.md
+[OpenCode]: docs/agents/opencode.md
+[Cline]: docs/agents/cline.md
+[Roo Code]: docs/agents/roo.md
+[Windsurf]: docs/agents/windsurf.md
+[Kilo Code]: docs/agents/kilocode.md
+[Google Antigravity]: docs/agents/antigravity.md
+[Amp]: docs/agents/amp.md
+[CodeBuddy CLI]: docs/agents/codebuddy.md
+[Forge]: docs/agents/forge.md
+[iFlow CLI]: docs/agents/iflow.md
+[JetBrains Junie]: docs/agents/junie.md
+[Qoder CLI]: docs/agents/qodercli.md
+[Qwen Code]: docs/agents/qwen.md
+[Tabnine CLI]: docs/agents/tabnine.md
+[Trae]: docs/agents/trae.md
+[OpenClaw]: docs/agents/openclaw.md
+[Hermes Agent]: docs/agents/hermes.md
 
 Per-harness install paths, JSON shapes, and event/matcher mappings are
 documented in [`docs/agents/`](docs/agents/README.md). Native OpenClaw

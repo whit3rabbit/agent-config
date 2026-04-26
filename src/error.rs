@@ -102,6 +102,16 @@ pub enum HookerError {
         actual: Option<String>,
     },
 
+    /// A config file has been modified since this library installed an entry
+    /// into it. The backup will not be restored to avoid overwriting user
+    /// changes. The caller should inspect the file and resolve the drift
+    /// manually.
+    #[error("config at {path} has drifted since install (content hash mismatch)")]
+    ConfigDrifted {
+        /// The config file whose content no longer matches the recorded hash.
+        path: PathBuf,
+    },
+
     /// Anything else, with context.
     #[error("{0}")]
     Other(#[from] anyhow::Error),
@@ -230,5 +240,12 @@ mod tests {
 
         let other = HookerError::Other(anyhow::anyhow!("misc"));
         assert_eq!(format!("{other}"), "misc");
+
+        let drifted = HookerError::ConfigDrifted {
+            path: PathBuf::from("/e/config.json"),
+        };
+        let drifted_msg = format!("{drifted}");
+        assert!(drifted_msg.contains("/e/config.json"));
+        assert!(drifted_msg.contains("drifted"));
     }
 }

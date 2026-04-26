@@ -14,6 +14,7 @@ use std::path::PathBuf;
 
 use serde_json::json;
 
+use crate::agents::planning as agent_planning;
 use crate::error::HookerError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
@@ -171,11 +172,15 @@ impl Integration for MyagentAgent {
         let mut report = InstallReport::default();
 
         let p = Self::hooks_path(scope)?;
-        {
-            // Cross-process file lock prevents concurrent installs from
-            // racing on the same file. Drop the guard before touching any
-            // other file you also want to lock independently.
-            let _hooks_lock = file_lock::FileLock::acquire(&p)?;
+        // Symlink/path-traversal defense: for `Scope::Local`, refuse to mutate
+        // any path whose parent canonicalizes outside the project root. No-op
+        // for `Scope::Global`. Always call this BEFORE acquiring a lock or
+        // touching the file.
+        scope.ensure_contained(&p)?;
+        // `with_lock` acquires a cross-process file lock for the closure body
+        // and drops it on exit (success or error). Drop the guard before
+        // locking a different file independently.
+        file_lock::with_lock(&p, || {
             let mut root = json_patch::read_or_empty(&p)?;
 
             let event_key = event_to_string(&spec.event);
@@ -207,27 +212,31 @@ impl Integration for MyagentAgent {
             } else {
                 report.already_installed = true;
             }
-        }
+            Ok::<(), HookerError>(())
+        })?;
 
         // Optional rules-markdown injection. Delete this `if let` block (and
         // the `rules_path` helper above) if your harness has no rules file.
         if let Some(rules) = &spec.rules {
             let rules_file = Self::rules_path(scope)?;
-            let _rules_lock = file_lock::FileLock::acquire(&rules_file)?;
-            let host = fs_atomic::read_to_string_or_empty(&rules_file)?;
-            let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
-            let outcome = fs_atomic::write_atomic(&rules_file, new_host.as_bytes(), true)?;
-            if !outcome.no_change {
-                if outcome.existed {
-                    report.patched.push(outcome.path.clone());
-                } else {
-                    report.created.push(outcome.path.clone());
+            scope.ensure_contained(&rules_file)?;
+            file_lock::with_lock(&rules_file, || {
+                let host = fs_atomic::read_to_string_or_empty(&rules_file)?;
+                let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
+                let outcome = fs_atomic::write_atomic(&rules_file, new_host.as_bytes(), true)?;
+                if !outcome.no_change {
+                    if outcome.existed {
+                        report.patched.push(outcome.path.clone());
+                    } else {
+                        report.created.push(outcome.path.clone());
+                    }
+                    report.already_installed = false;
                 }
-                report.already_installed = false;
-            }
-            if let Some(b) = outcome.backup {
-                report.backed_up.push(b);
-            }
+                if let Some(b) = outcome.backup {
+                    report.backed_up.push(b);
+                }
+                Ok::<(), HookerError>(())
+            })?;
         }
 
         Ok(report)
@@ -238,15 +247,19 @@ impl Integration for MyagentAgent {
         let mut report = UninstallReport::default();
 
         let p = Self::hooks_path(scope)?;
-        {
-            let _hooks_lock = file_lock::FileLock::acquire(&p)?;
-            if p.exists() {
+        scope.ensure_contained(&p)?;
+        if p.exists() {
+            file_lock::with_lock(&p, || {
                 let mut root = json_patch::read_or_empty(&p)?;
                 let changed =
                     json_patch::remove_tagged_array_entries_under(&mut root, &["hooks"], tag)?;
                 if changed {
                     let empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
                     let bytes = json_patch::to_pretty(&root);
+                    // `restore_backup_if_matches` only restores the `.bak` if
+                    // the desired post-uninstall content matches what the
+                    // backup holds. Stale backups (touched after install) are
+                    // left in place rather than overwriting user changes.
                     if empty && fs_atomic::restore_backup_if_matches(&p, &bytes)? {
                         report.restored.push(p.clone());
                     } else if empty {
@@ -257,27 +270,31 @@ impl Integration for MyagentAgent {
                         report.patched.push(p.clone());
                     }
                 }
-            }
+                Ok::<(), HookerError>(())
+            })?;
         }
 
         // Delete this rules-cleanup block if your harness has no rules file.
         let rules_file = Self::rules_path(scope)?;
-        let _rules_lock = file_lock::FileLock::acquire(&rules_file)?;
-        let host = fs_atomic::read_to_string_or_empty(&rules_file)?;
-        let (stripped, removed) = md_block::remove(&host, tag);
-        if removed {
-            if stripped.trim().is_empty() {
-                if fs_atomic::restore_backup_if_matches(&rules_file, stripped.as_bytes())? {
-                    report.restored.push(rules_file.clone());
+        scope.ensure_contained(&rules_file)?;
+        file_lock::with_lock(&rules_file, || {
+            let host = fs_atomic::read_to_string_or_empty(&rules_file)?;
+            let (stripped, removed) = md_block::remove(&host, tag);
+            if removed {
+                if stripped.trim().is_empty() {
+                    if fs_atomic::restore_backup_if_matches(&rules_file, stripped.as_bytes())? {
+                        report.restored.push(rules_file.clone());
+                    } else {
+                        fs_atomic::remove_if_exists(&rules_file)?;
+                        report.removed.push(rules_file.clone());
+                    }
                 } else {
-                    fs_atomic::remove_if_exists(&rules_file)?;
-                    report.removed.push(rules_file.clone());
+                    fs_atomic::write_atomic(&rules_file, stripped.as_bytes(), false)?;
+                    report.patched.push(rules_file.clone());
                 }
-            } else {
-                fs_atomic::write_atomic(&rules_file, stripped.as_bytes(), false)?;
-                report.patched.push(rules_file.clone());
             }
-        }
+            Ok::<(), HookerError>(())
+        })?;
 
         if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
             report.not_installed = true;
@@ -295,6 +312,11 @@ impl Integration for MyagentAgent {
 // `src/agents/codex.rs`. For object-map shapes under arbitrary keys, see
 // `src/agents/opencode.rs` and `src/agents/copilot.rs`. For YAML maps see
 // `src/agents/hermes.rs`.
+//
+// The `mcp_json_object` helpers internally compute and record a SHA-256
+// content hash in the sidecar ledger (schema v2). Custom MCP impls (TOML,
+// JSONC, etc.) need to compute the hash explicitly via
+// `ownership::content_hash(...)` and pass it to `ownership::record_install`.
 
 impl McpSurface for MyagentAgent {
     fn id(&self) -> &'static str {
@@ -330,17 +352,12 @@ impl McpSurface for MyagentAgent {
     }
 
     fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
-        spec.validate()?;
-        let target = PlanTarget::Mcp {
-            integration_id: McpSurface::id(self),
-            scope: scope.clone(),
-            name: spec.name.clone(),
-            owner: spec.owner_tag.clone(),
-        };
-        let cfg = Self::mcp_path(scope)?;
-        let ledger = ownership::mcp_ledger_for(&cfg);
-        let changes = mcp_json_object::plan_install(&cfg, &ledger, spec)?;
-        Ok(InstallPlan::from_changes(target, changes))
+        agent_planning::mcp_json_object_install(
+            McpSurface::id(self),
+            scope,
+            spec,
+            Self::mcp_path(scope),
+        )
     }
 
     fn plan_uninstall_mcp(
@@ -349,24 +366,19 @@ impl McpSurface for MyagentAgent {
         name: &str,
         owner_tag: &str,
     ) -> Result<UninstallPlan, HookerError> {
-        McpSpec::validate_name(name)?;
-        HookSpec::validate_tag(owner_tag)?;
-        let target = PlanTarget::Mcp {
-            integration_id: McpSurface::id(self),
-            scope: scope.clone(),
-            name: name.to_string(),
-            owner: owner_tag.to_string(),
-        };
-        let cfg = Self::mcp_path(scope)?;
-        let ledger = ownership::mcp_ledger_for(&cfg);
-        let changes =
-            mcp_json_object::plan_uninstall(&cfg, &ledger, name, owner_tag, "mcp server")?;
-        Ok(UninstallPlan::from_changes(target, changes))
+        agent_planning::mcp_json_object_uninstall(
+            McpSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::mcp_path(scope),
+        )
     }
 
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
+        scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::install(&cfg, &ledger, spec)
     }
@@ -380,6 +392,7 @@ impl McpSurface for MyagentAgent {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::mcp_path(scope)?;
+        scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::uninstall(&cfg, &ledger, name, owner_tag, "mcp server")
     }
@@ -429,16 +442,12 @@ impl SkillSurface for MyagentAgent {
         scope: &Scope,
         spec: &SkillSpec,
     ) -> Result<InstallPlan, HookerError> {
-        spec.validate()?;
-        let target = PlanTarget::Skill {
-            integration_id: SkillSurface::id(self),
-            scope: scope.clone(),
-            name: spec.name.clone(),
-            owner: spec.owner_tag.clone(),
-        };
-        let root = Self::skills_root(scope)?;
-        let changes = skills_dir::plan_install(&root, spec)?;
-        Ok(InstallPlan::from_changes(target, changes))
+        agent_planning::skill_install(
+            SkillSurface::id(self),
+            scope,
+            spec,
+            Self::skills_root(scope),
+        )
     }
 
     fn plan_uninstall_skill(
@@ -447,22 +456,19 @@ impl SkillSurface for MyagentAgent {
         name: &str,
         owner_tag: &str,
     ) -> Result<UninstallPlan, HookerError> {
-        SkillSpec::validate_name(name)?;
-        HookSpec::validate_tag(owner_tag)?;
-        let target = PlanTarget::Skill {
-            integration_id: SkillSurface::id(self),
-            scope: scope.clone(),
-            name: name.to_string(),
-            owner: owner_tag.to_string(),
-        };
-        let root = Self::skills_root(scope)?;
-        let changes = skills_dir::plan_uninstall(&root, name, owner_tag)?;
-        Ok(UninstallPlan::from_changes(target, changes))
+        agent_planning::skill_uninstall(
+            SkillSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::skills_root(scope),
+        )
     }
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let root = Self::skills_root(scope)?;
+        scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
     }
 
@@ -475,6 +481,7 @@ impl SkillSurface for MyagentAgent {
         SkillSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let root = Self::skills_root(scope)?;
+        scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
     }
 }

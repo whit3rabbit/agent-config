@@ -22,10 +22,14 @@ fn registry_exposes_every_supported_integration() {
         "kilocode",
         "antigravity",
         "amp",
+        "codebuddy",
         "forge",
+        "iflow",
         "junie",
         "qodercli",
         "qwen",
+        "tabnine",
+        "trae",
     ] {
         assert!(ids.contains(expected), "missing integration: {expected}");
     }
@@ -48,10 +52,14 @@ fn by_id_returns_each_registered_integration() {
         "kilocode",
         "antigravity",
         "amp",
+        "codebuddy",
         "forge",
+        "iflow",
         "junie",
         "qodercli",
         "qwen",
+        "tabnine",
+        "trae",
     ] {
         let agent = by_id(id).expect(id);
         assert_eq!(agent.id(), id);

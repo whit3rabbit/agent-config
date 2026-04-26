@@ -66,10 +66,11 @@ files:
 {
   "entries": {
     "golden-server": {
+      "content_hash": "d0ff9e05fac958d2c864046f47bc9706f7fc58d24f6830c670f961877e346cb4",
       "owner": "golden-owner"
     }
   },
-  "version": 1
+  "version": 2
 }
 ```
 - opencode.json

@@ -1,0 +1,80 @@
+surface: mcp
+agent: iflow
+scenario: invalid_config_no_rewrite
+
+install_result:
+Err(
+    JsonInvalid {
+        path: "[ROOT]/.iflow/settings.json",
+        source: Error("key must be a string", line: 1, column: 3),
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Drifted {
+            issues: [
+                InvalidConfig {
+                    path: "[ROOT]/.iflow/settings.json",
+                    reason: "key must be a string at line 1 column 3",
+                },
+            ],
+        },
+        config_path: Some(
+            "[ROOT]/.iflow/settings.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.iflow/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Invalid {
+                path: "[ROOT]/.iflow/settings.json",
+                reason: "key must be a string at line 1 column 3",
+            },
+            Missing {
+                path: "[ROOT]/.iflow/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "iflow",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            MalformedConfig {
+                path: "[ROOT]/.iflow/settings.json",
+                reason: "key must be a string at line 1 column 3",
+            },
+        ],
+        suggested_actions: [
+            ManualReview,
+        ],
+    },
+)
+invalid_preserved: true
+
+ROOT tree:
+directories:
+- .iflow
+files:
+- .iflow/settings.json
+  content:
+```text
+{ invalid json
+```
+
+HOME tree:
+<empty>

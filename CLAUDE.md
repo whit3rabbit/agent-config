@@ -25,6 +25,17 @@ cargo clippy --all-targets     # lints lib + tests + examples
 
 No external services or network required. All tests use `tempfile` for isolation.
 
+### Golden fixtures
+
+Per-agent config-shape fixtures live under `tests/golden/<surface>/<agent>/`.
+Regenerate after adding a harness or changing serialization:
+
+```bash
+AI_HOOKER_UPDATE_GOLDENS=1 cargo test --test golden
+```
+
+Inspect the diff before committing.
+
 ### Concurrency and Docker notes
 
 Concurrency coverage lives in `tests/concurrency.rs`, with helper-level stress
@@ -143,6 +154,12 @@ duplicated as generic file writes. Permission changes are represented with
 
 For a copy-paste starting point, see [`templates/new-harness/`](templates/new-harness/README.md).
 
+Every entry in `mcp_capable()` and `skill_capable()` must also appear in
+`all()` (enforced by `tests/{mcp,skill}_registry.rs::*_subset_of_all_integrations`).
+A harness with skills or MCP but no documented hook/prompt surface cannot
+be registered without speculating on a rules file — defer it instead. See
+"Deferred harnesses" below.
+
 1. Create `src/agents/<name>.rs` implementing `Integration`
 2. If prompt-only (just writes an `.md` file), consider reusing `PromptAgent`;
    if it also supports MCP or skills, create a dedicated module
@@ -174,6 +191,15 @@ Per-agent reference is in [`docs/agents/`](docs/agents/README.md). The matrix:
 | antigravity          | -     | done   | done  | done   |
 | openclaw             | -     | done   | done  | done   |
 | hermes               | -     | done   | done  | done   |
+| amp                  | -     | done   | done  | done   |
+| codebuddy            | done  | done   | -     | done   |
+| forge                | -     | done   | done  | done   |
+| iflow                | done  | -      | done  | -      |
+| junie                | -     | done   | done  | -      |
+| qodercli             | -     | done   | done  | -      |
+| qwen                 | -     | done   | done  | done   |
+| tabnine              | done  | -      | done  | -      |
+| trae                 | -     | done   | -     | done   |
 
 ## Future-work checklist
 
@@ -294,6 +320,8 @@ previews, and dry-run non-mutation.
 ## Conventions
 
 - Public errors: `thiserror`-typed (`HookerError`). Internal helpers may use `anyhow`. Never panic on user input.
+- Every mutating method (`install`, `uninstall`, `install_mcp`, `install_skill`, etc.) must call `scope.ensure_contained(&path)?` before touching disk. No-op for `Scope::Global`; canonicalizes for `Scope::Local`. Skipping it opens a symlink-traversal hole. See `docs/SECURITY.md`.
+- Cross-process file locks use `file_lock::with_lock(&path, || { ... Ok::<(), HookerError>(()) })?;` (closure pattern). Drop the closure before locking a different file.
 - Atomic writes only (`util::fs_atomic::write_atomic`); never `std::fs::write` directly on a path the user owns.
 - First-touch backups (`<path>.bak`) for any file we modify but did not create. Refuses to clobber an existing `.bak`.
 - Idempotency markers:
@@ -314,9 +342,29 @@ previews, and dry-run non-mutation.
 - Run `cargo test` (not just `--lib`) before declaring anything done; the integration tests live in `tests/`.
 - `unsafe_code` is forbidden; `missing_docs` is a warning.
 - `#[allow(dead_code)]` markers (e.g. `src/util/mcp_json_array.rs`, the array helpers in `json_patch.rs`) are deliberate scaffolding kept for future surfaces — leave them alone unless explicitly asked to delete.
+- If you encounter compile errors in files you didn't touch (e.g., a helper signature changed mid-session), fix only the call-site cascade required to compile. Don't speculatively complete an in-flight refactor.
 
 ## Things deliberately not in scope
 
 - Auto-detecting which harnesses are installed on the host. Consumer's job.
 - Shipping default markdown content. Consumer supplies it.
 - A CLI binary. Lives downstream.
+
+## Deferred harnesses
+
+Researched 2026-04-26 against spec-kit's supported list. The following
+harnesses are intentionally not registered. The architecture requires every
+agent in `registry::all()` to implement `Integration` (hooks or prompt rules),
+so harnesses with neither documented surface — even if they have skills or
+MCP — cannot be registered without speculating about file paths.
+
+| ID       | Reason                                                                 |
+| -------- | ---------------------------------------------------------------------- |
+| auggie   | MCP and prompt-rules file contracts not in public docs                 |
+| bob      | IDE-primary; only MCP partially documented; no skills/hooks contract   |
+| goose    | YAML recipes don't fit the `SkillSurface` model; needs separate design |
+| kimi     | TOML MCP and skills documented, but no rules/hook surface; would need a speculative `Integration` impl |
+| kiro-cli | Hooks live in per-event JSON files and MCP in agent-config files; both shapes need bespoke ledgers |
+| pi       | MCP only via the optional `pi-mcp-adapter` extension package           |
+| shai     | Per-agent config-file format not publicly documented                   |
+| vibe     | Skills documented, but no rules/hook surface                           |

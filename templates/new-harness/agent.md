@@ -1,8 +1,13 @@
 <!--
 Doc template for `docs/agents/<id>.md`. Replace placeholders, then delete the
 sections (and their `<!-- DELETE IF NOT SUPPORTED -->` markers) that don't
-apply to your harness. See `docs/agents/claude.md` and `docs/agents/codex.md`
-for fully filled-in examples.
+apply to your harness. See `docs/agents/claude.md` (full surfaces),
+`docs/agents/qwen.md` (prompt + MCP + skills, no hooks), and
+`docs/agents/junie.md` (local-only prompt + dual-scope MCP) for fully
+filled-in examples.
+
+Always end with a trailing line: `Accessed: YYYY-MM-DD.` so future readers
+can judge whether the upstream contract may have moved.
 -->
 
 # <Display Name>
@@ -22,6 +27,7 @@ Every implemented surface exposes `status`, `validate`, `plan_install`,
 `plan_uninstall`, `install`, and `uninstall` (plus the `mcp_*` / `skill_*`
 variants for those surfaces). The plan methods are side-effect-free.
 
+<!-- DELETE THIS WHOLE SECTION IF YOUR HARNESS HAS NO HOOK SURFACE -->
 ## Hooks
 
 ### User scope (`Scope::Global`)
@@ -108,8 +114,9 @@ fenced span in place.
 | Mechanism | `mcpServers` object map |
 
 Ownership is recorded in a sidecar `<config-dir>/.ai-hooker-mcp.json` ledger
-so multiple consumers coexist; `uninstall_mcp` returns
-`HookerError::NotOwnedByCaller` on owner mismatch or hand-installed entries.
+(schema v2: includes a SHA-256 content hash for drift detection). Multiple
+consumers coexist; `uninstall_mcp` returns `HookerError::NotOwnedByCaller`
+on owner mismatch or hand-installed entries.
 
 ### Example
 
@@ -164,3 +171,5 @@ description: When to activate this skill.
 - <https://docs.example.com/<id>/hooks>
 - <https://docs.example.com/<id>/mcp>
 - <https://docs.example.com/<id>/skills>
+
+Accessed: YYYY-MM-DD.

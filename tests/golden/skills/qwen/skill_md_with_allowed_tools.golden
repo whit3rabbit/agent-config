@@ -70,10 +70,11 @@ files:
 {
   "entries": {
     "golden-skill": {
+      "content_hash": "89ed6c3753811a5c4a6c0497b3c758b8a77f4a308e5df207f95d194636cdcd65",
       "owner": "golden-owner"
     }
   },
-  "version": 1
+  "version": 2
 }
 ```
 - .qwen/skills/golden-skill/SKILL.md

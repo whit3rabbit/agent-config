@@ -72,7 +72,7 @@ fn read_json(path: &Path) -> Value {
 
 fn read_ledger(path: &Path) -> Value {
     let ledger = read_json(path);
-    assert_eq!(ledger["version"], 1);
+    assert_eq!(ledger["version"], 2);
     assert!(
         ledger["entries"].is_object(),
         "ledger entries should be an object"

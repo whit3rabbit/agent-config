@@ -1,0 +1,137 @@
+surface: hooks
+agent: codebuddy
+scenario: different_consumer_preserved
+
+install_result:
+Ok(
+    InstallReport {
+        created: [],
+        patched: [
+            "[ROOT]/.codebuddy/settings.json",
+            "[ROOT]/CLAUDE.md",
+        ],
+        backed_up: [
+            "[ROOT]/.codebuddy/settings.json.bak",
+            "[ROOT]/CLAUDE.md.bak",
+        ],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: InstalledOwned {
+            owner: "golden-hook",
+        },
+        config_path: Some(
+            "[ROOT]/.codebuddy/settings.json",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/.codebuddy/settings.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "codebuddy",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/.codebuddy/settings.json.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .codebuddy
+files:
+- .codebuddy/settings.json
+  content:
+```text
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook"
+          }
+        ],
+        "_ai_hooker_tag": "sibling-hook"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook"
+          }
+        ],
+        "_ai_hooker_tag": "golden-hook"
+      }
+    ]
+  }
+}
+```
+- .codebuddy/settings.json.bak
+  content:
+```text
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook"
+          }
+        ],
+        "_ai_hooker_tag": "sibling-hook"
+      }
+    ]
+  }
+}
+```
+- CLAUDE.md
+  content:
+```text
+<!-- BEGIN AI-HOOKER:sibling-hook -->
+Use sibling hook rules.
+<!-- END AI-HOOKER:sibling-hook -->
+
+<!-- BEGIN AI-HOOKER:golden-hook -->
+Use golden hook rules.
+<!-- END AI-HOOKER:golden-hook -->
+```
+- CLAUDE.md.bak
+  content:
+```text
+<!-- BEGIN AI-HOOKER:sibling-hook -->
+Use sibling hook rules.
+<!-- END AI-HOOKER:sibling-hook -->
+```
+
+HOME tree:
+<empty>

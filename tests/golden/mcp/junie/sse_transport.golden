@@ -69,10 +69,11 @@ files:
 {
   "entries": {
     "golden-server": {
+      "content_hash": "6dc4e209bad78de6997faea7be0a8bc4a153bbc6ac3d1153314d3f6833fab418",
       "owner": "golden-owner"
     }
   },
-  "version": 1
+  "version": 2
 }
 ```
 - .junie/mcp/mcp.json

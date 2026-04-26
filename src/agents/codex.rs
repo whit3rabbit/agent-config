@@ -169,6 +169,7 @@ impl Integration for CodexAgent {
         let mut report = InstallReport::default();
 
         let p = Self::hooks_path(scope)?;
+        scope.ensure_contained(&p)?;
         file_lock::with_lock(&p, || {
             let mut root = json_patch::read_or_empty(&p)?;
 
@@ -206,6 +207,7 @@ impl Integration for CodexAgent {
 
         if let Some(rules) = &spec.rules {
             let agents = Self::agents_path(scope)?;
+            scope.ensure_contained(&agents)?;
             file_lock::with_lock(&agents, || {
                 let host = fs_atomic::read_to_string_or_empty(&agents)?;
                 let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
@@ -232,6 +234,7 @@ impl Integration for CodexAgent {
         let mut report = UninstallReport::default();
 
         let p = Self::hooks_path(scope)?;
+        scope.ensure_contained(&p)?;
         if p.exists() {
             file_lock::with_lock(&p, || {
                 let mut root = json_patch::read_or_empty(&p)?;
@@ -255,6 +258,7 @@ impl Integration for CodexAgent {
         }
 
         let agents = Self::agents_path(scope)?;
+        scope.ensure_contained(&agents)?;
         file_lock::with_lock(&agents, || {
             let host = fs_atomic::read_to_string_or_empty(&agents)?;
             let (stripped, removed) = md_block::remove(&host, tag);
@@ -449,6 +453,7 @@ impl McpSurface for CodexAgent {
         spec.validate()?;
         let mut report = InstallReport::default();
         let cfg = Self::config_toml_path(scope)?;
+        scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
 
         file_lock::with_lock(&cfg, || {
@@ -469,7 +474,7 @@ impl McpSurface for CodexAgent {
             let prior_owner = ownership::owner_of(&ledger, &spec.name)?;
             let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
 
-            if changed {
+            let written_bytes: Option<Vec<u8>> = if changed {
                 let bytes = toml_patch::to_string(&doc);
                 let outcome = fs_atomic::write_atomic(&cfg, &bytes, true)?;
                 if outcome.existed {
@@ -480,10 +485,17 @@ impl McpSurface for CodexAgent {
                 if let Some(b) = outcome.backup {
                     report.backed_up.push(b);
                 }
-            }
+                Some(bytes)
+            } else {
+                None
+            };
 
             if changed || owner_changed {
-                ownership::record_install(&ledger, &spec.name, &spec.owner_tag)?;
+                let hash = match written_bytes.as_deref() {
+                    Some(b) => Some(ownership::content_hash(b)),
+                    None => ownership::file_content_hash(&cfg)?,
+                };
+                ownership::record_install(&ledger, &spec.name, &spec.owner_tag, hash.as_deref())?;
             }
             if !changed && !owner_changed {
                 report.already_installed = true;
@@ -504,6 +516,7 @@ impl McpSurface for CodexAgent {
         let mut report = UninstallReport::default();
 
         let cfg = Self::config_toml_path(scope)?;
+        scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
 
         if !cfg.exists() && !ledger.exists() {
@@ -610,6 +623,7 @@ impl SkillSurface for CodexAgent {
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
         let root = Self::skills_root(scope)?;
+        scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
     }
 
@@ -620,6 +634,7 @@ impl SkillSurface for CodexAgent {
         owner_tag: &str,
     ) -> Result<UninstallReport, HookerError> {
         let root = Self::skills_root(scope)?;
+        scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
     }
 }

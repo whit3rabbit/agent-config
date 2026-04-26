@@ -66,10 +66,11 @@ files:
 {
   "entries": {
     "golden-server": {
+      "content_hash": "e987902ec504392100b03cccc7f288c247d0f83469e8d997821838075f477831",
       "owner": "golden-owner"
     }
   },
-  "version": 1
+  "version": 2
 }
 ```
 - kilo.jsonc

@@ -87,7 +87,8 @@ pub(crate) fn install(skills_root: &Path, spec: &SkillSpec) -> Result<InstallRep
         let owner_changed = prior.as_deref() != Some(spec.owner_tag.as_str());
 
         if owner_changed || !report.created.is_empty() || !report.patched.is_empty() {
-            ownership::record_install(&led, &spec.name, &spec.owner_tag)?;
+            let hash = ownership::file_content_hash(&skill_md_path)?;
+            ownership::record_install(&led, &spec.name, &spec.owner_tag, hash.as_deref())?;
         }
 
         if report.created.is_empty() && report.patched.is_empty() && !owner_changed {

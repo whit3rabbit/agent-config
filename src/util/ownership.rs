@@ -7,18 +7,20 @@
 //! some harnesses reject unknown keys, and the TOML/JSON-array variants do
 //! not all round-trip extra fields cleanly.
 //!
-//! Instead, every install records `{ "name": { "owner": "<tag>" } }` in a
-//! sibling file (e.g., `~/.cursor/.ai-hooker-mcp.json`). Uninstall consults
-//! the ledger first; if the recorded owner differs from the caller (or the
-//! entry exists in the harness config but not in the ledger), we refuse with
-//! [`HookerError::NotOwnedByCaller`] rather than risk clobbering work this
-//! caller did not perform.
+//! Instead, every install records `{ "name": { "owner": "<tag>", "content_hash": "<sha256-hex>" } }`
+//! in a sibling file (e.g., `~/.cursor/.ai-hooker-mcp.json`). Uninstall
+//! consults the ledger first; if the recorded owner differs from the caller
+//! (or the entry exists in the harness config but not in the ledger), we
+//! refuse with [`HookerError::NotOwnedByCaller`] rather than risk clobbering
+//! work this caller did not perform. If the content hash no longer matches
+//! the config file on disk, we refuse with [`HookerError::ConfigDrifted`].
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
+use sha2::{Digest, Sha256};
 
 use crate::error::HookerError;
 use crate::util::{file_lock, fs_atomic, json_patch};
@@ -39,20 +41,50 @@ pub(crate) fn mcp_ledger_for(config_path: &Path) -> PathBuf {
 const VERSION_KEY: &str = "version";
 const ENTRIES_KEY: &str = "entries";
 const OWNER_KEY: &str = "owner";
+const CONTENT_HASH_KEY: &str = "content_hash";
 
 /// Current ledger schema version. Bumped on incompatible changes.
-const CURRENT_VERSION: u64 = 1;
+const CURRENT_VERSION: u64 = 2;
+
+/// Compute a SHA-256 hex digest of `data`.
+pub(crate) fn content_hash(data: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    format!("{:x}", hasher.finalize())
+}
+
+/// Read the file at `path` and return its SHA-256 hex digest.
+/// Returns `None` if the file does not exist.
+pub(crate) fn file_content_hash(path: &Path) -> Result<Option<String>, HookerError> {
+    match fs::read(path) {
+        Ok(data) => Ok(Some(content_hash(&data))),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(HookerError::io(path, e)),
+    }
+}
 
 /// Record an install. Creates the ledger file if missing.
+///
+/// `content_hash` is an optional SHA-256 hex digest of the config file
+/// content as it should appear after this install. When provided, it enables
+/// drift detection on uninstall: if the config file no longer matches, the
+/// caller receives [`HookerError::ConfigDrifted`] instead of a silent backup
+/// restore.
 pub(crate) fn record_install(
     ledger_path: &Path,
     name: &str,
     owner: &str,
+    content_hash: Option<&str>,
 ) -> Result<(), HookerError> {
     file_lock::with_lock(ledger_path, || {
         let mut root = json_patch::read_or_empty(ledger_path)?;
         let entries = ensure_shape(&mut root);
-        entries.insert(name.to_string(), json!({ OWNER_KEY: owner }));
+        let mut entry = Map::new();
+        entry.insert(OWNER_KEY.to_string(), Value::String(owner.to_string()));
+        if let Some(hash) = content_hash {
+            entry.insert(CONTENT_HASH_KEY.to_string(), Value::String(hash.to_string()));
+        }
+        entries.insert(name.to_string(), Value::Object(entry));
         fs_atomic::write_atomic(ledger_path, &json_patch::to_pretty(&root), false)?;
         Ok(())
     })
@@ -107,14 +139,24 @@ pub(crate) enum StrictLedgerRead {
     Missing,
     /// The ledger file is present and has the expected schema.
     Valid {
-        /// Map of ledger entry name to owner tag.
-        entries: BTreeMap<String, String>,
+        /// Map of ledger entry name to (owner tag, optional content hash).
+        entries: BTreeMap<String, LedgerEntry>,
     },
     /// The ledger file is present but not valid ledger JSON.
     Malformed {
         /// Human-readable parse or shape error.
         reason: String,
     },
+}
+
+/// One entry parsed from the sidecar ledger.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LedgerEntry {
+    /// The consumer tag that owns this entry.
+    pub owner: String,
+    /// SHA-256 hex digest of the config file content at install time, if
+    /// recorded (v2 ledgers). `None` for v1 ledgers.
+    pub content_hash: Option<String>,
 }
 
 /// Read a ledger without repairing or normalizing it.
@@ -168,7 +210,17 @@ pub(crate) fn read_strict(ledger_path: &Path) -> Result<StrictLedgerRead, Hooker
                 reason: format!("ledger entry {name:?} must contain string owner"),
             });
         };
-        entries.insert(name.clone(), owner.to_string());
+        let content_hash = entry
+            .get(CONTENT_HASH_KEY)
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        entries.insert(
+            name.clone(),
+            LedgerEntry {
+                owner: owner.to_string(),
+                content_hash,
+            },
+        );
     }
 
     Ok(StrictLedgerRead::Valid { entries })
@@ -177,6 +229,52 @@ pub(crate) fn read_strict(ledger_path: &Path) -> Result<StrictLedgerRead, Hooker
 /// True if `name` has any owner recorded in the ledger.
 pub(crate) fn contains(ledger_path: &Path, name: &str) -> Result<bool, HookerError> {
     Ok(owner_of(ledger_path, name)?.is_some())
+}
+
+/// Look up the content hash recorded for `name`, if any.
+#[allow(dead_code)]
+pub(crate) fn content_hash_of(
+    ledger_path: &Path,
+    name: &str,
+) -> Result<Option<String>, HookerError> {
+    let root = json_patch::read_or_empty(ledger_path)?;
+    Ok(root
+        .get(ENTRIES_KEY)
+        .and_then(Value::as_object)
+        .and_then(|m| m.get(name))
+        .and_then(|v| v.get(CONTENT_HASH_KEY))
+        .and_then(Value::as_str)
+        .map(str::to_owned))
+}
+
+/// Check whether the config file at `config_path` still matches the content
+/// hash recorded in the ledger for `name`.
+///
+/// Returns `Ok(())` if:
+/// - no hash was recorded (v1 ledger), or
+/// - the hash matches the current file content, or
+/// - the config file does not exist (already removed).
+///
+/// Returns [`HookerError::ConfigDrifted`] if the hash is recorded but the
+/// current file content differs.
+#[allow(dead_code)]
+pub(crate) fn check_drift(
+    ledger_path: &Path,
+    name: &str,
+    config_path: &Path,
+) -> Result<(), HookerError> {
+    let expected = content_hash_of(ledger_path, name)?;
+    let Some(expected_hash) = expected else {
+        return Ok(());
+    };
+    let actual = file_content_hash(config_path)?;
+    match actual {
+        None => Ok(()),
+        Some(actual_hash) if actual_hash == expected_hash => Ok(()),
+        Some(_) => Err(HookerError::ConfigDrifted {
+            path: config_path.to_path_buf(),
+        }),
+    }
 }
 
 /// Verify that `name` is owned by `expected`. Returns
@@ -277,7 +375,7 @@ mod tests {
     fn record_install_creates_ledger() {
         let dir = tempdir().unwrap();
         let path = ledger_path(dir.path());
-        record_install(&path, "github", "myapp").unwrap();
+        record_install(&path, "github", "myapp", None).unwrap();
         assert!(path.exists());
         assert_eq!(owner_of(&path, "github").unwrap().as_deref(), Some("myapp"));
     }
@@ -286,8 +384,8 @@ mod tests {
     fn second_install_overwrites_owner() {
         let dir = tempdir().unwrap();
         let path = ledger_path(dir.path());
-        record_install(&path, "github", "appA").unwrap();
-        record_install(&path, "github", "appB").unwrap();
+        record_install(&path, "github", "appA", None).unwrap();
+        record_install(&path, "github", "appB", None).unwrap();
         assert_eq!(owner_of(&path, "github").unwrap().as_deref(), Some("appB"));
     }
 
@@ -295,7 +393,7 @@ mod tests {
     fn record_uninstall_returns_prior_owner() {
         let dir = tempdir().unwrap();
         let path = ledger_path(dir.path());
-        record_install(&path, "github", "myapp").unwrap();
+        record_install(&path, "github", "myapp", None).unwrap();
         let prev = record_uninstall(&path, "github").unwrap();
         assert_eq!(prev.as_deref(), Some("myapp"));
         assert_eq!(owner_of(&path, "github").unwrap(), None);
@@ -305,7 +403,7 @@ mod tests {
     fn uninstall_removes_empty_ledger_file() {
         let dir = tempdir().unwrap();
         let path = ledger_path(dir.path());
-        record_install(&path, "alpha", "myapp").unwrap();
+        record_install(&path, "alpha", "myapp", None).unwrap();
         record_uninstall(&path, "alpha").unwrap();
         assert!(!path.exists(), "ledger should be removed when empty");
     }
@@ -314,8 +412,8 @@ mod tests {
     fn uninstall_keeps_ledger_with_other_entries() {
         let dir = tempdir().unwrap();
         let path = ledger_path(dir.path());
-        record_install(&path, "alpha", "appA").unwrap();
-        record_install(&path, "beta", "appB").unwrap();
+        record_install(&path, "alpha", "appA", None).unwrap();
+        record_install(&path, "beta", "appB", None).unwrap();
         record_uninstall(&path, "alpha").unwrap();
         assert!(path.exists());
         assert_eq!(owner_of(&path, "beta").unwrap().as_deref(), Some("appB"));
@@ -333,7 +431,7 @@ mod tests {
     fn require_owner_passes_on_match() {
         let dir = tempdir().unwrap();
         let path = ledger_path(dir.path());
-        record_install(&path, "x", "myapp").unwrap();
+        record_install(&path, "x", "myapp", None).unwrap();
         require_owner(&path, "x", "myapp", "mcp server", true).unwrap();
     }
 
@@ -341,7 +439,7 @@ mod tests {
     fn require_owner_fails_on_mismatch() {
         let dir = tempdir().unwrap();
         let path = ledger_path(dir.path());
-        record_install(&path, "x", "appA").unwrap();
+        record_install(&path, "x", "appA", None).unwrap();
         let err = require_owner(&path, "x", "appB", "mcp server", true).unwrap_err();
         assert!(matches!(
             err,
@@ -372,7 +470,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = ledger_path(dir.path());
         std::fs::write(&path, r#"{"version":1,"entries":null}"#).unwrap();
-        record_install(&path, "github", "myapp").unwrap();
+        record_install(&path, "github", "myapp", None).unwrap();
         assert_eq!(owner_of(&path, "github").unwrap().as_deref(), Some("myapp"));
     }
 
@@ -381,7 +479,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = ledger_path(dir.path());
         std::fs::write(&path, r#"["not","an","object"]"#).unwrap();
-        record_install(&path, "github", "myapp").unwrap();
+        record_install(&path, "github", "myapp", None).unwrap();
         assert_eq!(owner_of(&path, "github").unwrap().as_deref(), Some("myapp"));
     }
 
@@ -390,7 +488,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = ledger_path(dir.path());
         assert!(!contains(&path, "x").unwrap());
-        record_install(&path, "x", "myapp").unwrap();
+        record_install(&path, "x", "myapp", None).unwrap();
         assert!(contains(&path, "x").unwrap());
     }
 
@@ -402,8 +500,8 @@ mod tests {
         let path_b = path.clone();
 
         let (ra, rb) = run_two(
-            move || record_install(&path_a, "alpha", "appA"),
-            move || record_install(&path_b, "beta", "appB"),
+            move || record_install(&path_a, "alpha", "appA", None),
+            move || record_install(&path_b, "beta", "appB", None),
         );
 
         ra.unwrap();
@@ -420,8 +518,8 @@ mod tests {
         let path_b = path.clone();
 
         let (ra, rb) = run_two(
-            move || record_install(&path_a, "shared", "appA"),
-            move || record_install(&path_b, "shared", "appB"),
+            move || record_install(&path_a, "shared", "appA", None),
+            move || record_install(&path_b, "shared", "appB", None),
         );
 
         ra.unwrap();
@@ -432,5 +530,86 @@ mod tests {
             panic!("ledger should parse after concurrent writes");
         };
         assert_eq!(entries.len(), 1);
+    }
+
+    #[test]
+    fn record_install_stores_content_hash() {
+        let dir = tempdir().unwrap();
+        let path = ledger_path(dir.path());
+        let hash = content_hash(b"test content");
+        record_install(&path, "github", "myapp", Some(&hash)).unwrap();
+        assert_eq!(
+            content_hash_of(&path, "github").unwrap().as_deref(),
+            Some(hash.as_str())
+        );
+    }
+
+    #[test]
+    fn record_install_without_hash_stores_none() {
+        let dir = tempdir().unwrap();
+        let path = ledger_path(dir.path());
+        record_install(&path, "github", "myapp", None).unwrap();
+        assert_eq!(content_hash_of(&path, "github").unwrap(), None);
+    }
+
+    #[test]
+    fn v1_ledger_reads_without_hash() {
+        let dir = tempdir().unwrap();
+        let path = ledger_path(dir.path());
+        std::fs::write(
+            &path,
+            r#"{"version":1,"entries":{"github":{"owner":"myapp"}}}"#,
+        )
+        .unwrap();
+        let StrictLedgerRead::Valid { entries } = read_strict(&path).unwrap() else {
+            panic!("v1 ledger should parse");
+        };
+        let entry = entries.get("github").unwrap();
+        assert_eq!(entry.owner, "myapp");
+        assert!(entry.content_hash.is_none());
+    }
+
+    #[test]
+    fn content_hash_is_deterministic() {
+        let a = content_hash(b"hello world");
+        let b = content_hash(b"hello world");
+        assert_eq!(a, b);
+        let c = content_hash(b"different");
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn check_drift_passes_when_no_hash_recorded() {
+        let dir = tempdir().unwrap();
+        let ledger = ledger_path(dir.path());
+        let config = dir.path().join("config.json");
+        std::fs::write(&config, b"{}").unwrap();
+        record_install(&ledger, "x", "myapp", None).unwrap();
+        check_drift(&ledger, "x", &config).unwrap();
+    }
+
+    #[test]
+    fn check_drift_passes_when_hash_matches() {
+        let dir = tempdir().unwrap();
+        let ledger = ledger_path(dir.path());
+        let config = dir.path().join("config.json");
+        let content = b"{\"mcpServers\":{}}";
+        std::fs::write(&config, content).unwrap();
+        let hash = content_hash(content);
+        record_install(&ledger, "x", "myapp", Some(&hash)).unwrap();
+        check_drift(&ledger, "x", &config).unwrap();
+    }
+
+    #[test]
+    fn check_drift_fails_when_hash_mismatches() {
+        let dir = tempdir().unwrap();
+        let ledger = ledger_path(dir.path());
+        let config = dir.path().join("config.json");
+        std::fs::write(&config, b"original").unwrap();
+        let hash = content_hash(b"original");
+        record_install(&ledger, "x", "myapp", Some(&hash)).unwrap();
+        std::fs::write(&config, b"modified").unwrap();
+        let err = check_drift(&ledger, "x", &config).unwrap_err();
+        assert!(matches!(err, HookerError::ConfigDrifted { .. }));
     }
 }

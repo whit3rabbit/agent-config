@@ -214,14 +214,16 @@ fn ledger_backed_issues(
                         .ledger_path
                         .clone()
                         .unwrap_or_else(|| primary_path(status)),
-                    owner: Some(owner.clone()),
+                    owner: Some(owner.owner.clone()),
                 },
             );
         }
         _ => {}
     }
 
-    if let (Some(expected), Some(actual)) = (expected_owner, owner.as_deref()) {
+    if let (Some(expected), Some(actual)) =
+        (expected_owner, owner.as_ref().map(|e| e.owner.as_str()))
+    {
         if expected != actual {
             push_issue(
                 &mut issues,
@@ -320,8 +322,8 @@ fn add_hook_ledger_issues(
             let Some(hooks_dir) = ledger_path.parent() else {
                 return;
             };
-            for (filename, owner) in entries {
-                if owner != *tag {
+            for (filename, entry) in entries {
+                if entry.owner != *tag {
                     continue;
                 }
                 let script = hooks_dir.join(&filename);
@@ -330,7 +332,7 @@ fn add_hook_ledger_issues(
                         issues,
                         DriftIssue::LedgerOnly {
                             path: ledger_path.clone(),
-                            owner: Some(owner),
+                            owner: Some(entry.owner.clone()),
                         },
                     );
                     continue;

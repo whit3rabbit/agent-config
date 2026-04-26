@@ -66,10 +66,11 @@ files:
 {
   "entries": {
     "golden-server": {
+      "content_hash": "865fd8376635686373cbd6499ed6c9ffd3a72b4b687ea9e14eeb7374588fbf71",
       "owner": "golden-owner"
     }
   },
-  "version": 1
+  "version": 2
 }
 ```
 - .mcp.json

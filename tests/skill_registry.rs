@@ -18,8 +18,10 @@ const SKILL_CAPABLE: &[&str] = &[
     "kilocode",
     "antigravity",
     "amp",
+    "codebuddy",
     "forge",
     "qwen",
+    "trae",
 ];
 
 const LOCAL_SKILL_CAPABLE: &[&str] = &[
@@ -35,8 +37,10 @@ const LOCAL_SKILL_CAPABLE: &[&str] = &[
     "kilocode",
     "antigravity",
     "amp",
+    "codebuddy",
     "forge",
     "qwen",
+    "trae",
 ];
 
 #[test]

@@ -59,7 +59,7 @@ pub(crate) fn install(
         let prior_owner = ownership::owner_of(ledger_path, &spec.name)?;
         let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
 
-        if changed {
+        let written_bytes: Option<Vec<u8>> = if changed {
             let bytes = json_patch::to_pretty(&root);
             let outcome = fs_atomic::write_atomic(config_path, &bytes, true)?;
             if outcome.existed {
@@ -70,10 +70,17 @@ pub(crate) fn install(
             if let Some(b) = outcome.backup {
                 report.backed_up.push(b);
             }
-        }
+            Some(bytes)
+        } else {
+            None
+        };
 
         if changed || owner_changed {
-            ownership::record_install(ledger_path, &spec.name, &spec.owner_tag)?;
+            let hash = match written_bytes.as_deref() {
+                Some(b) => Some(ownership::content_hash(b)),
+                None => ownership::file_content_hash(config_path)?,
+            };
+            ownership::record_install(ledger_path, &spec.name, &spec.owner_tag, hash.as_deref())?;
         }
         if !changed && !owner_changed {
             report.already_installed = true;

@@ -69,10 +69,11 @@ files:
 {
   "entries": {
     "golden-server": {
+      "content_hash": "e2ec68b4d06df22e45bfc5f5444c23cf66e01c9aaa102be34121ae6c85d4a667",
       "owner": "golden-owner"
     }
   },
-  "version": 1
+  "version": 2
 }
 ```
 - .openclaw/openclaw.json

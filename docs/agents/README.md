@@ -8,7 +8,7 @@ One file per supported AI coding harness. Each entry documents:
 - **MCP** and **Skills** — implemented where there is a confirmed file-backed
   or documented config-backed contract.
 
-**Last updated:** 2026-04-25. MCP and skills coverage reflects the current
+**Last updated:** 2026-04-26. MCP and skills coverage reflects the current
 file-backed locations documented by each harness.
 
 ## Implemented
@@ -28,6 +28,15 @@ file-backed locations documented by each harness.
 | [Windsurf](windsurf.md)          | ✓ (Local) | ✓ | ✓ (Global + Local) | ✓ (Global + Local) |
 | [Kilo Code](kilocode.md)         | -                    | ✓ | ✓ (Global + Local, JSONC) | ✓ (Global + Local) |
 | [Google Antigravity](antigravity.md) | -                | ✓ | ✓ (Global + Local) | ✓ (Global + Local) |
+| [Amp](amp.md)                    | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) |
+| [CodeBuddy CLI](codebuddy.md)    | ✓ (Global + Local) | ✓ | - | ✓ (Global + Local) |
+| [Forge](forge.md)                | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) |
+| [iFlow CLI](iflow.md)            | ✓ (Global + Local) | - | ✓ (Global + Local) | - |
+| [JetBrains Junie](junie.md)      | - | ✓ (Local) | ✓ (Global + Local) | - |
+| [Qoder CLI](qodercli.md)         | - | ✓ | ✓ (Global + Local) | - |
+| [Qwen Code](qwen.md)             | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) |
+| [Tabnine CLI](tabnine.md)        | ✓ (Global + Local) | - | ✓ (Global + Local) | - |
+| [Trae](trae.md)                  | - | ✓ (Local) | - | ✓ (Global + Local) |
 
 ## Conventions
 

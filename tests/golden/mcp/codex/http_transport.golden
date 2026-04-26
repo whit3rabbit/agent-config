@@ -68,10 +68,11 @@ files:
 {
   "entries": {
     "golden-server": {
+      "content_hash": "36e9b58fb72ddf82e27a4d614ea6f1315f315118a169a6751ebc0066f2c088a9",
       "owner": "golden-owner"
     }
   },
-  "version": 1
+  "version": 2
 }
 ```
 - .codex/config.toml

@@ -68,10 +68,11 @@ files:
 {
   "entries": {
     "sibling-skill": {
+      "content_hash": "20f0b63d50b45ef6bd0f8a2988c4e2289c193ddf343556ff38ac2dc2efdfaf3d",
       "owner": "golden-owner"
     }
   },
-  "version": 1
+  "version": 2
 }
 ```
 - .github/skills/sibling-skill/SKILL.md

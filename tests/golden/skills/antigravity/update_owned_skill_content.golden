@@ -70,10 +70,11 @@ files:
 {
   "entries": {
     "golden-skill": {
+      "content_hash": "7ae685c07a262ac458d8e2f9a434e76340fc8dd48bcbf271533bdbf8cf48e43c",
       "owner": "golden-owner"
     }
   },
-  "version": 1
+  "version": 2
 }
 ```
 - .agent/skills/golden-skill/SKILL.md

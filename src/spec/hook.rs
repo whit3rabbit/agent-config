@@ -17,6 +17,12 @@ pub struct HookSpec {
 
     /// The shell command the harness should execute. Examples:
     /// `"myapp hook claude"`, `"my-tool intercept --agent cursor"`.
+    ///
+    /// **Security note:** this string is interpolated verbatim into harness
+    /// configs and generated hook scripts. Callers must not pass untrusted
+    /// or user-derived input without sanitization. If the command originates
+    /// from external input, split it into program + args, shell-escape each
+    /// argument, and reassemble before building the spec.
     pub command: String,
 
     /// Which tool calls the hook should match.

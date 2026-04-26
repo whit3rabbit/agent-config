@@ -43,17 +43,31 @@ Trait definitions live in `src/integration.rs`.
    `<Yourname>Agent`, `myagent` → `<id>`, `MyAgent` → `<Display Name>`.
 3. Decide which surfaces apply. Delete the `impl McpSurface` and/or
    `impl SkillSurface` blocks (and the corresponding helpers + imports) you
-   don't need.
+   don't need. If your harness has *no* hooks but does have prompt rules,
+   replace the hooks-aware `install`/`uninstall` body with the markdown-only
+   shape (see `agents::qwen` or `agents::openclaw`).
 4. Fill in the path helpers (`hooks_path`, `rules_path`, `mcp_path`,
    `skills_root`) for both `Scope::Global` and `Scope::Local`.
 5. Adjust `matcher_to_<id>` and `event_to_string` to your harness's syntax.
-6. Register in `src/agents/mod.rs` (one `pub mod`, one `pub use`) and
-   `src/registry.rs` (one entry per surface you implemented).
-7. `cp templates/new-harness/agent.md docs/agents/<id>.md` and fill it in.
-8. Add a smoke test entry in `tests/registry.rs`, `tests/mcp_registry.rs`,
+6. Confirm every mutating method (`install`, `uninstall`, `install_mcp`,
+   `uninstall_mcp`, `install_skill`, `uninstall_skill`) calls
+   `scope.ensure_contained(&path)?` before touching disk.
+7. Register in `src/agents/mod.rs` (one `pub mod`, one `pub use`) and
+   `src/registry.rs` (one entry per surface you implemented). Skill-only
+   and MCP-only agents must still implement `Integration` because
+   `tests/skill_registry.rs` and `tests/mcp_registry.rs` assert
+   subset-of-`all()`.
+8. `cp templates/new-harness/agent.md docs/agents/<id>.md` and fill it in
+   (date, doc URLs, surfaces, format example).
+9. Add a smoke test entry in `tests/registry.rs`, `tests/mcp_registry.rs`,
    `tests/skill_registry.rs`, and/or `tests/plan_api.rs` (only the suites
    you participate in).
-9. Run `cargo test`. Update `docs/agents/README.md` matrix.
+10. Regenerate golden fixtures:
+    `AI_HOOKER_UPDATE_GOLDENS=1 cargo test --test golden`. Inspect the
+    diff before committing.
+11. Run `cargo test` and `cargo clippy --all-targets -- -D warnings`.
+    Update `docs/agents/README.md` matrix and the surface-coverage table
+    in `CLAUDE.md`.
 
 ## Scoping
 
@@ -110,19 +124,24 @@ omit it.
 
 The `install` body in `agent.rs` is the canonical pattern:
 
-1. `file_lock::FileLock::acquire(&path)?` to block concurrent installs from
-   other consumers writing the same file.
-2. `json_patch::read_or_empty(&path)` to load (returns empty `Value` if
+1. `scope.ensure_contained(&path)?` — symlink/path-traversal defense. For
+   `Scope::Local`, refuses to mutate any path whose parent canonicalizes
+   outside the project root. No-op for `Scope::Global`. Always call this
+   BEFORE locking the file or touching it.
+2. `file_lock::with_lock(&path, || { ... })` — acquires a cross-process
+   file lock for the closure body and drops it on exit. Inside the closure:
+3. `json_patch::read_or_empty(&path)` to load (returns empty `Value` if
    missing).
-3. `json_patch::upsert_tagged_array_entry(&mut root, &["hooks", &event_key],
+4. `json_patch::upsert_tagged_array_entry(&mut root, &["hooks", &event_key],
    &spec.tag, entry)` — idempotent insert, returns `true` if anything
    changed.
-4. `fs_atomic::write_atomic(&path, &bytes, true)` — atomic rename, writes a
+5. `fs_atomic::write_atomic(&path, &bytes, true)` — atomic rename, writes a
    one-time `.bak` sibling on first patch (the `true` flag).
 
 Uninstall mirrors it: `remove_tagged_array_entries_under` plus
 `fs_atomic::restore_backup_if_matches` if removing our entry leaves the file
-empty and the backup already matches the desired post-uninstall bytes.
+empty and the backup already matches the desired post-uninstall bytes
+(stale backups are left in place rather than overwriting user changes).
 
 The matcher/event translators are where the harness-specific knowledge
 lives. The full mapping table goes in `docs/agents/<id>.md`.
@@ -131,9 +150,12 @@ lives. The full mapping table goes in `docs/agents/<id>.md`.
 
 Same machinery for everyone; only the destination filename differs:
 
-- Claude → `CLAUDE.md`
-- Codex / OpenClaw → `AGENTS.md`
+- Claude / CodeBuddy → `CLAUDE.md`
+- Codex / OpenClaw / Amp / Forge / Junie / Qoder → `AGENTS.md`
 - Gemini → `GEMINI.md`
+- Qwen → `QWEN.md`
+- Hermes → `.hermes.md`
+- Trae → `.trae/project_rules.md`
 - ...
 
 If `spec.rules` is `Some(...)`, install upserts a fenced HTML-comment block
@@ -153,6 +175,24 @@ without rolling back unrelated edits.
 If your harness has no rules/memory file, delete the `if let Some(rules)`
 block in `install`, the matching cleanup in `uninstall`, and the
 `rules_path` helper.
+
+### Variant: prompt-only Integration (no hooks)
+
+For harnesses with no documented hook surface but a documented prompt-rules
+file (e.g., Amp, Forge, Qwen, Qoder, Junie, Trae, OpenClaw, Hermes), the
+`Integration` impl reduces to a single-file markdown upsert. Replace the
+template's hooks-aware body with the openclaw/qwen/junie shape:
+
+- `install`: require `spec.rules` (return `HookerError::MissingSpecField`
+  if absent), then upsert via `md_block::upsert` and `fs_atomic::write_atomic`.
+- `status`: use `StatusReport::for_markdown_block_hook(tag, path)`.
+- `plan_install` / `plan_uninstall`: delegate to
+  `agent_planning::markdown_install` / `markdown_uninstall`, which handle
+  the `MissingRequiredSpecField` and `UnsupportedScope` refusals for you.
+
+If the prompt is project-only (Junie, OpenClaw, Hermes, Trae), declare
+`supported_scopes()` as `&[ScopeKind::Local]` and gate `rules_path` with a
+`require_local` helper (see `agents::openclaw` and `agents::junie`).
 
 ## MCP servers
 
@@ -196,8 +236,11 @@ If your harness uses TOML, you cannot delegate; you build a `Table` and call
 - `toml_patch::upsert_named_table(&mut doc, &["mcp_servers"], &spec.name,
   build_mcp_table(spec))` for the write.
 - `toml_patch::to_string(&doc)` preserves user comments and key ordering.
-- `ownership::record_install(&ledger, &spec.name, &spec.owner_tag)` updates
-  the sidecar ledger.
+- `ownership::record_install(&ledger, &spec.name, &spec.owner_tag, hash)`
+  updates the sidecar ledger. The 4th arg is an `Option<&str>` content hash
+  for drift detection; pass `Some(ownership::content_hash(&serialized))`
+  on writes that changed the file, or `ownership::file_content_hash(&cfg)?`
+  when reusing the existing on-disk content.
 
 The `build_mcp_table` helper in `codex.rs` handles the three `McpTransport`
 variants (Stdio, Http, Sse). Copy it verbatim if you go this route.
@@ -221,6 +264,12 @@ variants (Stdio, Http, Sse). Copy it verbatim if you go this route.
   `mcp_json_object` / `ownership::record_install`.
 - Uninstall returns `HookerError::NotOwnedByCaller` on owner mismatch or
   hand-installed entries. This is the contract; don't work around it.
+- **Ledger v2 records a content hash** alongside the owner. The standard
+  helpers (`mcp_json_object::install`, `mcp_json_map::install`,
+  `yaml_mcp_map::install`, `skills_dir::install`) compute and persist the
+  SHA-256 hex digest automatically. Custom impls (TOML, JSONC, JSON5) must
+  pass it explicitly via the 4th arg to `ownership::record_install`.
+  See `docs/SECURITY.md` for the drift-detection contract.
 
 ## Skills
 
@@ -250,11 +299,17 @@ Every implemented surface needs a `*_status(scope, ...)` method. The
 template returns a `StatusReport` (defined in `src/status.rs`) built from
 the shared probe helpers:
 
-- Hooks: `json_patch::tagged_hook_presence` →
-  `StatusReport::for_tagged_hook`.
-- MCP (`mcpServers` JSON map): `mcp_json_object::config_presence` plus
+- **Tagged JSON hooks** (Claude/Codex/Gemini envelope):
+  `json_patch::tagged_hook_presence` → `StatusReport::for_tagged_hook`.
+- **Markdown-block-only agents** (no hooks, prompt fence is the surface):
+  `StatusReport::for_markdown_block_hook(tag, path)` does the whole probe
+  in one call — checks the file exists, the fence is well-formed, and the
+  tagged block is present.
+- **Per-file hooks** (Roo's `.roo/rules/<tag>.md`):
+  `StatusReport::for_file_hook`.
+- **MCP (`mcpServers` JSON map)**: `mcp_json_object::config_presence` plus
   `ownership::owner_of` → `StatusReport::for_mcp`.
-- Skills: `skills_dir::paths_for_status` plus `ownership::owner_of` →
+- **Skills**: `skills_dir::paths_for_status` plus `ownership::owner_of` →
   `StatusReport::for_skill`.
 
 Status probes must catch parse failures and surface them as
@@ -370,10 +425,16 @@ tests live in `tests/`.
   AI-HOOKER:<tag> -->` fence format.
 - Any pre-existing file we modify gets a one-time `<path>.bak` sibling on
   first patch (`fs_atomic::write_atomic(_, _, true)`).
+- `restore_backup_if_matches(path, desired_bytes)` is the only way to
+  restore a backup on uninstall: it refuses if the backup no longer
+  matches the desired post-uninstall state. Stale backups stay on disk.
 - Atomic writes only. Never call `std::fs::write` on a path the user owns.
-- Cross-process file locks (`util::file_lock::FileLock::acquire`) wrap
-  every install/uninstall block that touches a shared file. Drop the guard
-  before locking a different file.
+- **`scope.ensure_contained(&path)?` before every mutation.** `Scope::Local`
+  refuses paths whose parent canonicalizes outside the project root;
+  `Scope::Global` is a no-op. Skipping this opens a symlink-traversal hole.
+- Cross-process file locks (`file_lock::with_lock(&path, || { ... })`)
+  wrap every install/uninstall block that touches a shared file. Drop the
+  guard (return from the closure) before locking a different file.
 - Install and uninstall are idempotent: same input, same on-disk end state,
   no spurious diffs.
 - Plan generation is side-effect-free. It must not create config files,
@@ -385,16 +446,27 @@ tests live in `tests/`.
 - Spec types: `src/spec.rs` (HookSpec / McpSpec / SkillSpec)
 - Plan types: `src/plan.rs` (InstallPlan / UninstallPlan / PlannedChange)
 - Status types: `src/status.rs` (StatusReport / InstallStatus / DriftIssue)
+- Scope and containment check: `src/scope.rs`
+  (`Scope::ensure_contained`, no-op for Global, canonicalizes for Local)
 - Path helpers: `src/paths.rs`
-- File locks: `src/util/file_lock.rs`
+- File locks: `src/util/file_lock.rs` (`with_lock` closure pattern)
+- Atomic writes / backup restore: `src/util/fs_atomic.rs`
+  (`write_atomic`, `restore_backup_if_matches`, `ensure_contained`)
+- Ownership ledger (v2 with content hashes): `src/util/ownership.rs`
 - Plan helpers: `src/util/planning.rs`
 - Plan adapters: `src/agents/planning.rs`
 - Utility layer: `src/util/` (don't reinvent these)
-- JSON-shape MCP example: `src/agents/claude.rs`
+- Security model: `docs/SECURITY.md`
+- JSON-shape MCP example (prompt + MCP + skills): `src/agents/claude.rs`
 - TOML-shape MCP example: `src/agents/codex.rs`
 - Object-map MCP variant: `src/agents/opencode.rs`, `src/agents/copilot.rs`
 - JSONC MCP variant: `src/agents/kilocode.rs`
 - JSON5 MCP variant: `src/agents/openclaw.rs`
 - YAML MCP variant: `src/agents/hermes.rs`
+- Markdown-block-only Integration: `src/agents/qwen.rs`,
+  `src/agents/amp.rs`, `src/agents/forge.rs`
+- Local-only Integration with require-rules guard: `src/agents/openclaw.rs`,
+  `src/agents/junie.rs`, `src/agents/trae.rs`
 - Test patterns: `tests/registry.rs`, `tests/mcp_registry.rs`,
-  `tests/skill_registry.rs`, `tests/plan_api.rs`
+  `tests/skill_registry.rs`, `tests/plan_api.rs`, `tests/golden.rs`
+  (regenerate with `AI_HOOKER_UPDATE_GOLDENS=1 cargo test --test golden`)

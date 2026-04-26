@@ -1,0 +1,97 @@
+surface: skills
+agent: trae
+scenario: skill_md_with_allowed_tools
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/.trae/skills/golden-skill/SKILL.md",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Skill {
+            name: "golden-skill",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/.trae/skills/golden-skill",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.trae/skills/.ai-hooker-skills.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.trae/skills/golden-skill",
+            },
+            Exists {
+                path: "[ROOT]/.trae/skills/golden-skill/SKILL.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Skill {
+            integration_id: "trae",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-skill",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .trae
+- .trae/skills
+- .trae/skills/golden-skill
+files:
+- .trae/skills/.ai-hooker-skills.json
+  content:
+```text
+{
+  "entries": {
+    "golden-skill": {
+      "content_hash": "89ed6c3753811a5c4a6c0497b3c758b8a77f4a308e5df207f95d194636cdcd65",
+      "owner": "golden-owner"
+    }
+  },
+  "version": 2
+}
+```
+- .trae/skills/golden-skill/SKILL.md
+  content:
+```text
+---
+name: golden-skill
+description: Use during golden snapshot tests with tools.
+allowed-tools:
+  - Bash
+  - Read
+  - Write
+---
+
+## Goal
+Preserve allowed tools frontmatter.
+```
+
+HOME tree:
+<empty>

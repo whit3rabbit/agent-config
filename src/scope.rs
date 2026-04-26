@@ -32,6 +32,23 @@ impl Scope {
             Scope::Global => None,
         }
     }
+
+    /// Verify that `path` is contained within the local project root.
+    ///
+    /// For [`Scope::Global`], this is a no-op (global writes go to the user's
+    /// home/config directories, which are not project-scoped). For
+    /// [`Scope::Local`], canonicalizes both the resolved path's parent and
+    /// the project root, then checks the parent starts with the root.
+    ///
+    /// Returns [`HookerError::PathResolution`] if the path escapes the root.
+    /// Returns `Ok(())` if the parent directory does not yet exist (a new
+    /// file being created under the project root is safe).
+    pub fn ensure_contained(&self, path: &Path) -> Result<(), crate::error::HookerError> {
+        match self {
+            Scope::Global => Ok(()),
+            Scope::Local(root) => crate::util::fs_atomic::ensure_contained(path, root),
+        }
+    }
 }
 
 /// Discriminant of [`Scope`] without payload, used in the
