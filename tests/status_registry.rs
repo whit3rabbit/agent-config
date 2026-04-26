@@ -45,7 +45,7 @@ const LOCAL_SKILL_AGENTS: &[&str] = &[
 
 fn hook_spec(tag: &str) -> HookSpec {
     HookSpec::builder(tag)
-        .command("smoketest")
+        .command_program("smoketest", [] as [&str; 0])
         .matcher(Matcher::Bash)
         .event(Event::PreToolUse)
         .rules("Use smoketest.")

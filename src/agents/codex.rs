@@ -119,7 +119,7 @@ impl Integration for CodexAgent {
         let matcher_str = matcher_to_codex(&spec.matcher);
         let entry = json!({
             "matcher": matcher_str,
-            "hooks": [{ "type": "command", "command": spec.command }],
+            "hooks": [{ "type": "command", "command": spec.command.render_shell() }],
         });
         planning::plan_tagged_json_upsert(
             &mut changes,
@@ -178,7 +178,7 @@ impl Integration for CodexAgent {
 
             let entry = json!({
                 "matcher": matcher_str,
-                "hooks": [{ "type": "command", "command": spec.command }],
+                "hooks": [{ "type": "command", "command": spec.command.render_shell() }],
             });
 
             let changed = json_patch::upsert_tagged_array_entry(
@@ -324,6 +324,14 @@ impl McpSurface for CodexAgent {
             owner: spec.owner_tag.clone(),
         };
         let cfg = Self::config_toml_path(scope)?;
+        if let Some(plan) = agent_planning::mcp_local_inline_secret_refusal(
+            target.clone(),
+            scope,
+            spec,
+            Some(cfg.clone()),
+        ) {
+            return Ok(plan);
+        }
         let ledger = ownership::mcp_ledger_for(&cfg);
         let mut changes = Vec::new();
         let mut doc = match toml_patch::read_or_empty(&cfg) {
@@ -370,11 +378,17 @@ impl McpSurface for CodexAgent {
         }
         if changes.is_empty() {
             changes.push(PlannedChange::NoOp {
-                path: cfg,
+                path: cfg.clone(),
                 reason: "MCP server is already up to date".into(),
             });
         }
-        Ok(InstallPlan::from_changes(target, changes))
+        Ok(agent_planning::mcp_install_plan_from_changes(
+            target,
+            changes,
+            scope,
+            spec,
+            Some(cfg),
+        ))
     }
 
     fn plan_uninstall_mcp(
@@ -453,6 +467,7 @@ impl McpSurface for CodexAgent {
         spec.validate()?;
         let mut report = InstallReport::default();
         let cfg = Self::config_toml_path(scope)?;
+        spec.validate_local_secret_policy(scope)?;
         scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
 
@@ -714,7 +729,7 @@ mod tests {
 
     fn local_spec(tag: &str) -> HookSpec {
         HookSpec::builder(tag)
-            .command("myapp hook")
+            .command_program("myapp", ["hook"])
             .matcher(Matcher::Bash)
             .event(Event::PreToolUse)
             .build()
@@ -766,7 +781,7 @@ mod tests {
         let agent = CodexAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         let spec = HookSpec::builder("alpha")
-            .command("noop")
+            .command_program("noop", [] as [&str; 0])
             .event(Event::PostToolUse)
             .build();
         agent.install(&scope, &spec).unwrap();
@@ -780,7 +795,7 @@ mod tests {
         let agent = CodexAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         let spec = HookSpec::builder("alpha")
-            .command("noop")
+            .command_program("noop", [] as [&str; 0])
             .rules("Use strict mode.")
             .build();
         agent.install(&scope, &spec).unwrap();

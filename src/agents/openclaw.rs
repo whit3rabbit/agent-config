@@ -289,6 +289,7 @@ impl McpSurface for OpenClawAgent {
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
+        spec.validate_local_secret_policy(scope)?;
         Self::install_mcp_config(&cfg, spec)
     }
 
@@ -431,7 +432,10 @@ mod tests {
     use tempfile::tempdir;
 
     fn rules_spec(tag: &str, rules: &str) -> HookSpec {
-        HookSpec::builder(tag).command("noop").rules(rules).build()
+        HookSpec::builder(tag)
+            .command_program("noop", [] as [&str; 0])
+            .rules(rules)
+            .build()
     }
 
     fn skill(name: &str, owner: &str) -> SkillSpec {

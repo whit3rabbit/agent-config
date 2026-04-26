@@ -15,15 +15,12 @@ pub struct HookSpec {
     /// / `-`, non-empty.
     pub tag: String,
 
-    /// The shell command the harness should execute. Examples:
-    /// `"myapp hook claude"`, `"my-tool intercept --agent cursor"`.
+    /// The command the harness should execute.
     ///
-    /// **Security note:** this string is interpolated verbatim into harness
-    /// configs and generated hook scripts. Callers must not pass untrusted
-    /// or user-derived input without sanitization. If the command originates
-    /// from external input, split it into program + args, shell-escape each
-    /// argument, and reassemble before building the spec.
-    pub command: String,
+    /// Use [`HookSpecBuilder::command_program`] for the safe default. Raw shell
+    /// remains available through [`HookSpecBuilder::command_shell_unchecked`]
+    /// for callers that intentionally need shell syntax.
+    pub command: HookCommand,
 
     /// Which tool calls the hook should match.
     pub matcher: Matcher,
@@ -69,7 +66,7 @@ impl HookSpec {
 #[derive(Debug, Clone)]
 pub struct HookSpecBuilder {
     tag: String,
-    command: Option<String>,
+    command: Option<HookCommand>,
     matcher: Matcher,
     event: Event,
     rules: Option<RulesBlock>,
@@ -78,9 +75,33 @@ pub struct HookSpecBuilder {
 }
 
 impl HookSpecBuilder {
-    /// Set the command the harness should execute when the hook fires.
-    pub fn command(mut self, cmd: impl Into<String>) -> Self {
-        self.command = Some(cmd.into());
+    /// Set the program and arguments the harness should execute when the hook
+    /// fires.
+    ///
+    /// Integrations that only accept shell strings render this command with
+    /// POSIX shell quoting, so arguments containing spaces or shell
+    /// metacharacters remain arguments instead of becoming shell syntax.
+    pub fn command_program<I, S>(mut self, program: impl Into<String>, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.command = Some(HookCommand::Program {
+            program: program.into(),
+            args: args.into_iter().map(Into::into).collect(),
+        });
+        self
+    }
+
+    /// Set an unchecked raw shell command.
+    ///
+    /// This is intentionally explicit: the command string is passed through as
+    /// shell syntax for harnesses and generated scripts. Use this only when the
+    /// full command is trusted and already sanitized.
+    pub fn command_shell_unchecked(mut self, command: impl Into<String>) -> Self {
+        self.command = Some(HookCommand::ShellUnchecked {
+            command: command.into(),
+        });
         self
     }
 
@@ -134,6 +155,7 @@ impl HookSpecBuilder {
             id: "<builder>",
             field: "command",
         })?;
+        command.validate()?;
         Ok(HookSpec {
             tag: self.tag,
             command,
@@ -144,6 +166,110 @@ impl HookSpecBuilder {
             friendly_name: self.friendly_name,
         })
     }
+}
+
+/// Hook command representation.
+///
+/// [`HookCommand::Program`] is the safe default. It stores argv-like program
+/// and argument values, then renders them with shell quoting for harnesses
+/// whose hook APIs only accept strings. [`HookCommand::ShellUnchecked`] is an
+/// escape hatch for trusted raw shell syntax.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum HookCommand {
+    /// A program plus arguments, rendered safely when a shell string is needed.
+    Program {
+        /// Executable name or path.
+        program: String,
+        /// Command arguments.
+        args: Vec<String>,
+    },
+    /// Trusted raw shell syntax.
+    ShellUnchecked {
+        /// Shell command passed through without quoting or escaping.
+        command: String,
+    },
+}
+
+impl HookCommand {
+    /// Construct a safe program command.
+    pub fn program<I, S>(program: impl Into<String>, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        Self::Program {
+            program: program.into(),
+            args: args.into_iter().map(Into::into).collect(),
+        }
+    }
+
+    /// Construct an unchecked raw shell command.
+    pub fn shell_unchecked(command: impl Into<String>) -> Self {
+        Self::ShellUnchecked {
+            command: command.into(),
+        }
+    }
+
+    /// Render the command for harnesses whose hook contract accepts a shell
+    /// command string.
+    pub fn render_shell(&self) -> String {
+        match self {
+            Self::Program { program, args } => std::iter::once(program.as_str())
+                .chain(args.iter().map(String::as_str))
+                .map(shell_quote)
+                .collect::<Vec<_>>()
+                .join(" "),
+            Self::ShellUnchecked { command } => command.clone(),
+        }
+    }
+
+    fn validate(&self) -> Result<(), HookerError> {
+        match self {
+            Self::Program { program, args } => {
+                if program.is_empty() {
+                    return Err(HookerError::InvalidCommand {
+                        reason: "program must not be empty",
+                    });
+                }
+                validate_no_nul(program)?;
+                for arg in args {
+                    validate_no_nul(arg)?;
+                }
+            }
+            Self::ShellUnchecked { command } => {
+                if command.trim().is_empty() {
+                    return Err(HookerError::InvalidCommand {
+                        reason: "shell command must not be empty",
+                    });
+                }
+                validate_no_nul(command)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+fn validate_no_nul(value: &str) -> Result<(), HookerError> {
+    if value.contains('\0') {
+        return Err(HookerError::InvalidCommand {
+            reason: "command values must not contain NUL bytes",
+        });
+    }
+    Ok(())
+}
+
+fn shell_quote(value: &str) -> String {
+    if value.is_empty() {
+        return "''".to_string();
+    }
+    if value
+        .bytes()
+        .all(|b| matches!(b, b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'_' | b'-' | b'.' | b'/' | b':' | b'@' | b'%' | b'+' | b'=' | b','))
+    {
+        return value.to_string();
+    }
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 /// Which tool calls a hook should match.
@@ -208,7 +334,10 @@ mod tests {
 
     #[test]
     fn try_build_rejects_empty_tag() {
-        let err = HookSpec::builder("").command("x").try_build().unwrap_err();
+        let err = HookSpec::builder("")
+            .command_program("x", [] as [&str; 0])
+            .try_build()
+            .unwrap_err();
         assert!(
             matches!(err, HookerError::InvalidTag { reason, .. } if reason == "tag must not be empty")
         );
@@ -217,7 +346,7 @@ mod tests {
     #[test]
     fn try_build_rejects_tag_with_spaces() {
         let err = HookSpec::builder("not valid")
-            .command("x")
+            .command_program("x", [] as [&str; 0])
             .try_build()
             .unwrap_err();
         assert!(matches!(err, HookerError::InvalidTag { reason, .. } if reason.contains("ASCII")));
@@ -226,7 +355,10 @@ mod tests {
     #[test]
     fn try_build_rejects_tag_with_special_chars() {
         for bad in ["tag/slash", "tag.dot", "tag!bang", "tag@at"] {
-            let err = HookSpec::builder(bad).command("x").try_build().unwrap_err();
+            let err = HookSpec::builder(bad)
+                .command_program("x", [] as [&str; 0])
+                .try_build()
+                .unwrap_err();
             assert!(
                 matches!(err, HookerError::InvalidTag { .. }),
                 "expected InvalidTag for {bad:?}"
@@ -238,7 +370,7 @@ mod tests {
     fn try_build_accepts_valid_tags() {
         for ok in ["myapp", "my-app", "my_app", "App123", "A", "z9_z"] {
             HookSpec::builder(ok)
-                .command("x")
+                .command_program("x", [] as [&str; 0])
                 .try_build()
                 .expect("expected valid tag");
         }
@@ -261,7 +393,7 @@ mod tests {
     #[test]
     fn builder_sets_all_fields() {
         let spec = HookSpec::builder("myapp")
-            .command("run")
+            .command_program("run", ["--flag"])
             .matcher(Matcher::Bash)
             .event(Event::PostToolUse)
             .rules("my rules")
@@ -270,7 +402,13 @@ mod tests {
             .build();
 
         assert_eq!(spec.tag, "myapp");
-        assert_eq!(spec.command, "run");
+        assert_eq!(
+            spec.command,
+            HookCommand::Program {
+                program: "run".into(),
+                args: vec!["--flag".into()]
+            }
+        );
         assert!(matches!(spec.matcher, Matcher::Bash));
         assert!(matches!(spec.event, Event::PostToolUse));
         assert!(spec.rules.is_some());
@@ -280,12 +418,63 @@ mod tests {
 
     #[test]
     fn builder_defaults() {
-        let spec = HookSpec::builder("myapp").command("run").build();
+        let spec = HookSpec::builder("myapp")
+            .command_program("run", [] as [&str; 0])
+            .build();
 
         assert!(matches!(spec.matcher, Matcher::All));
         assert!(matches!(spec.event, Event::PreToolUse));
         assert!(spec.rules.is_none());
         assert!(spec.script.is_none());
         assert!(spec.friendly_name.is_none());
+    }
+
+    #[test]
+    fn program_command_renders_shell_safe_arguments() {
+        let command = HookCommand::program(
+            "my hook",
+            [
+                "repo path",
+                "semi;colon",
+                "$(not run)",
+                "`not run`",
+                "line\nbreak",
+                "quote's",
+                "",
+            ],
+        );
+        assert_eq!(
+            command.render_shell(),
+            "'my hook' 'repo path' 'semi;colon' '$(not run)' '`not run`' 'line\nbreak' 'quote'\\''s' ''"
+        );
+    }
+
+    #[test]
+    fn raw_shell_command_is_explicitly_unchecked() {
+        let spec = HookSpec::builder("myapp")
+            .command_shell_unchecked("myapp hook \"$REPO\"")
+            .build();
+        assert_eq!(spec.command.render_shell(), "myapp hook \"$REPO\"");
+    }
+
+    #[test]
+    fn try_build_rejects_invalid_command_values() {
+        let empty_program = HookSpec::builder("myapp")
+            .command_program("", [] as [&str; 0])
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(empty_program, HookerError::InvalidCommand { .. }));
+
+        let nul_arg = HookSpec::builder("myapp")
+            .command_program("myapp", ["bad\0arg"])
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(nul_arg, HookerError::InvalidCommand { .. }));
+
+        let empty_shell = HookSpec::builder("myapp")
+            .command_shell_unchecked(" ")
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(empty_shell, HookerError::InvalidCommand { .. }));
     }
 }

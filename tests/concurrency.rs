@@ -14,7 +14,7 @@ fn hook_spec(tag: &str) -> HookSpec {
 
 fn hook_spec_with_rules(tag: &str, rules: impl Into<String>) -> HookSpec {
     HookSpec::builder(tag)
-        .command("echo concurrency")
+        .command_program("echo", ["concurrency"])
         .matcher(Matcher::Bash)
         .event(Event::PreToolUse)
         .rules(rules)

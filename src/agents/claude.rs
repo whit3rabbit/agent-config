@@ -23,6 +23,7 @@ use std::path::PathBuf;
 
 use serde_json::json;
 
+use crate::agents::planning as agent_planning;
 use crate::error::HookerError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
@@ -119,7 +120,7 @@ impl Integration for ClaudeAgent {
         let matcher_str = matcher_to_claude(&spec.matcher);
         let entry = json!({
             "matcher": matcher_str,
-            "hooks": [{ "type": "command", "command": spec.command }],
+            "hooks": [{ "type": "command", "command": spec.command.render_shell() }],
         });
         planning::plan_tagged_json_upsert(
             &mut changes,
@@ -183,7 +184,7 @@ impl Integration for ClaudeAgent {
 
             let entry = json!({
                 "matcher": matcher_str,
-                "hooks": [{ "type": "command", "command": spec.command }],
+                "hooks": [{ "type": "command", "command": spec.command.render_shell() }],
             });
 
             let changed = json_patch::upsert_tagged_array_entry(
@@ -323,9 +324,23 @@ impl McpSurface for ClaudeAgent {
             owner: spec.owner_tag.clone(),
         };
         let cfg = Self::mcp_path(scope)?;
+        if let Some(plan) = agent_planning::mcp_local_inline_secret_refusal(
+            target.clone(),
+            scope,
+            spec,
+            Some(cfg.clone()),
+        ) {
+            return Ok(plan);
+        }
         let ledger = ownership::mcp_ledger_for(&cfg);
         let changes = mcp_json_object::plan_install(&cfg, &ledger, spec)?;
-        Ok(InstallPlan::from_changes(target, changes))
+        Ok(agent_planning::mcp_install_plan_from_changes(
+            target,
+            changes,
+            scope,
+            spec,
+            Some(cfg),
+        ))
     }
 
     fn plan_uninstall_mcp(
@@ -352,6 +367,7 @@ impl McpSurface for ClaudeAgent {
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
+        spec.validate_local_secret_policy(scope)?;
         scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::install(&cfg, &ledger, spec)
@@ -489,7 +505,7 @@ mod tests {
 
     fn local_spec(tag: &str) -> HookSpec {
         HookSpec::builder(tag)
-            .command("myapp hook")
+            .command_program("myapp", ["hook"])
             .matcher(Matcher::Bash)
             .event(Event::PreToolUse)
             .build()
@@ -573,7 +589,7 @@ mod tests {
         let agent = ClaudeAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         let spec = HookSpec::builder("alpha")
-            .command("noop")
+            .command_program("noop", [] as [&str; 0])
             .matcher(Matcher::Bash)
             .rules("Use myapp prefix.")
             .build();
@@ -659,7 +675,7 @@ mod tests {
         let agent = ClaudeAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         let spec = HookSpec::builder("alpha")
-            .command("noop")
+            .command_program("noop", [] as [&str; 0])
             .event(Event::Custom("myCustomEvent".into()))
             .build();
         agent.install(&scope, &spec).unwrap();
@@ -683,7 +699,7 @@ mod tests {
         McpSpec::builder(name)
             .owner(owner)
             .stdio("npx", ["-y", "@modelcontextprotocol/server-github"])
-            .env("GITHUB_TOKEN", "abc")
+            .env_from_host("GITHUB_TOKEN")
             .build()
     }
 
@@ -779,6 +795,7 @@ mod tests {
                 env: Default::default(),
             },
             friendly_name: None,
+            secret_policy: crate::spec::SecretPolicy::RefuseInlineSecretsInLocalScope,
         };
         let err = agent.install_mcp(&scope, &spec).unwrap_err();
         assert!(matches!(err, HookerError::InvalidTag { .. }));

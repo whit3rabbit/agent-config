@@ -187,6 +187,7 @@ impl McpSurface for AntigravityAgent {
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
+        spec.validate_local_secret_policy(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::install(&cfg, &ledger, spec)
     }
@@ -288,7 +289,10 @@ mod tests {
     use tempfile::tempdir;
 
     fn rules_spec(tag: &str, body: &str) -> HookSpec {
-        HookSpec::builder(tag).command("noop").rules(body).build()
+        HookSpec::builder(tag)
+            .command_program("noop", [] as [&str; 0])
+            .rules(body)
+            .build()
     }
 
     fn skill(name: &str, owner: &str) -> SkillSpec {
@@ -389,7 +393,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = AntigravityAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        let no_rules = HookSpec::builder("alpha").command("noop").build();
+        let no_rules = HookSpec::builder("alpha")
+            .command_program("noop", [] as [&str; 0])
+            .build();
         let err = agent.install(&scope, &no_rules).unwrap_err();
         assert!(matches!(
             err,

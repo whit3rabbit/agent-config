@@ -134,7 +134,7 @@ impl Integration for CopilotAgent {
         let matcher_str = matcher_to_copilot(&spec.matcher);
         let entry = json!({
             "type": "command",
-            "bash": spec.command,
+            "bash": spec.command.render_shell(),
             "matcher": matcher_str,
         });
         let doc = json!({
@@ -196,7 +196,7 @@ impl Integration for CopilotAgent {
         // the file because the filename itself carries the tag.
         let entry = json!({
             "type": "command",
-            "bash": spec.command,
+            "bash": spec.command.render_shell(),
             "matcher": matcher_str,
         });
         let doc = json!({
@@ -360,6 +360,7 @@ impl McpSurface for CopilotAgent {
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
+        spec.validate_local_secret_policy(scope)?;
         scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_map::install(
@@ -497,7 +498,7 @@ mod tests {
 
     fn local_spec(tag: &str) -> HookSpec {
         HookSpec::builder(tag)
-            .command("myapp hook")
+            .command_program("myapp", ["hook"])
             .matcher(Matcher::Bash)
             .event(Event::PreToolUse)
             .build()

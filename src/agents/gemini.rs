@@ -116,7 +116,7 @@ impl Integration for GeminiAgent {
         let entry = json!({
             "matcher": matcher_str,
             "hooks": [
-                { "type": "command", "command": spec.command }
+                { "type": "command", "command": spec.command.render_shell() }
             ],
         });
         planning::plan_tagged_json_upsert(
@@ -181,7 +181,7 @@ impl Integration for GeminiAgent {
             let entry = json!({
                 "matcher": matcher_str,
                 "hooks": [
-                    { "type": "command", "command": spec.command }
+                    { "type": "command", "command": spec.command.render_shell() }
                 ],
             });
 
@@ -346,6 +346,7 @@ impl McpSurface for GeminiAgent {
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
+        spec.validate_local_secret_policy(scope)?;
         scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::install(&cfg, &ledger, spec)
@@ -470,7 +471,7 @@ mod tests {
 
     fn local_spec(tag: &str) -> HookSpec {
         HookSpec::builder(tag)
-            .command("myapp hook")
+            .command_program("myapp", ["hook"])
             .matcher(Matcher::Bash)
             .event(Event::PreToolUse)
             .build()
@@ -518,7 +519,7 @@ mod tests {
         let agent = GeminiAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         let spec = HookSpec::builder("alpha")
-            .command("noop")
+            .command_program("noop", [] as [&str; 0])
             .matcher(Matcher::Bash)
             .rules("Always prefix shell calls.")
             .build();
@@ -551,7 +552,7 @@ mod tests {
         let agent = GeminiAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         let spec = HookSpec::builder("alpha")
-            .command("noop")
+            .command_program("noop", [] as [&str; 0])
             .event(Event::PostToolUse)
             .build();
         agent.install(&scope, &spec).unwrap();

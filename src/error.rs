@@ -61,6 +61,25 @@ pub enum HookerError {
         reason: &'static str,
     },
 
+    /// The caller supplied an invalid hook command.
+    #[error("invalid hook command: {reason}")]
+    InvalidCommand {
+        /// Why the command was rejected.
+        reason: &'static str,
+    },
+
+    /// A project-local MCP install tried to write likely secret material into
+    /// a repository-owned config file.
+    #[error(
+        "mcp server {name:?} includes likely secret env var {key:?} in local scope; refusing to write inline secret to project config"
+    )]
+    InlineSecretInLocalScope {
+        /// MCP server name.
+        name: String,
+        /// Environment variable key that looked secret-bearing.
+        key: String,
+    },
+
     /// A would-be backup file already exists at `<path>.bak`.
     #[error("backup already exists at {0}")]
     BackupExists(PathBuf),
@@ -209,6 +228,17 @@ mod tests {
             reason: "chars",
         };
         assert!(format!("{tag}").contains("bad!"));
+
+        let command = HookerError::InvalidCommand {
+            reason: "empty command",
+        };
+        assert!(format!("{command}").contains("empty command"));
+
+        let secret = HookerError::InlineSecretInLocalScope {
+            name: "github".into(),
+            key: "GITHUB_TOKEN".into(),
+        };
+        assert!(format!("{secret}").contains("GITHUB_TOKEN"));
 
         let backup = HookerError::BackupExists(PathBuf::from("/c.bak"));
         assert!(format!("{backup}").contains("/c.bak"));

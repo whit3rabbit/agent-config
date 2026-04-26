@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use crate::error::HookerError;
+use crate::scope::{Scope, ScopeKind};
 use fluent_uri::Uri;
 
 use super::validate::{validate_identifier, IdentifierKind};
@@ -34,6 +35,10 @@ pub struct McpSpec {
 
     /// Optional human-friendly display name surfaced in install reports.
     pub friendly_name: Option<String>,
+
+    /// Policy for inline env values that look secret-bearing when installing
+    /// into project-local config files.
+    pub secret_policy: SecretPolicy,
 }
 
 impl McpSpec {
@@ -44,6 +49,7 @@ impl McpSpec {
             owner_tag: None,
             transport: None,
             friendly_name: None,
+            secret_policy: SecretPolicy::RefuseInlineSecretsInLocalScope,
             builder_error: None,
         }
     }
@@ -59,6 +65,48 @@ impl McpSpec {
     /// Validate just the server name (used by uninstall, which has no spec).
     pub(crate) fn validate_name(name: &str) -> Result<(), HookerError> {
         validate_identifier(name, IdentifierKind::McpName)
+    }
+
+    /// Enforce this spec's local inline-secret policy for a target scope.
+    pub(crate) fn validate_local_secret_policy(&self, scope: &Scope) -> Result<(), HookerError> {
+        if let Some(key) = self.refused_local_inline_secret_key(scope) {
+            return Err(HookerError::InlineSecretInLocalScope {
+                name: self.name.clone(),
+                key: key.to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Returns the first env key that looks secret-bearing in local scope.
+    pub(crate) fn local_inline_secret_env_key(&self, scope: &Scope) -> Option<&str> {
+        if scope.kind() != ScopeKind::Local {
+            return None;
+        }
+        let McpTransport::Stdio { env, .. } = &self.transport else {
+            return None;
+        };
+        env.iter()
+            .find(|(key, value)| is_inline_secret_env_value(key, value))
+            .map(|(key, _)| key.as_str())
+    }
+
+    /// Returns the first env key refused by the current secret policy.
+    pub(crate) fn refused_local_inline_secret_key(&self, scope: &Scope) -> Option<&str> {
+        if self.secret_policy == SecretPolicy::RefuseInlineSecretsInLocalScope {
+            self.local_inline_secret_env_key(scope)
+        } else {
+            None
+        }
+    }
+
+    /// Returns the first env key allowed by explicit override.
+    pub(crate) fn allowed_local_inline_secret_key(&self, scope: &Scope) -> Option<&str> {
+        if self.secret_policy == SecretPolicy::AllowInlineSecretsInLocalScope {
+            self.local_inline_secret_env_key(scope)
+        } else {
+            None
+        }
     }
 }
 
@@ -94,6 +142,19 @@ pub enum McpTransport {
     },
 }
 
+/// Policy for env values that look secret-bearing in project-local MCP config.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SecretPolicy {
+    /// Refuse local-scope installs that would write likely secret env values.
+    RefuseInlineSecretsInLocalScope,
+    /// Allow likely secret env values even when the config path is local.
+    ///
+    /// Use this only when the caller has made an explicit trust decision about
+    /// the target project config.
+    AllowInlineSecretsInLocalScope,
+}
+
 /// Builder for [`McpSpec`].
 #[derive(Debug, Clone)]
 pub struct McpSpecBuilder {
@@ -101,6 +162,7 @@ pub struct McpSpecBuilder {
     owner_tag: Option<String>,
     transport: Option<McpTransport>,
     friendly_name: Option<String>,
+    secret_policy: SecretPolicy,
     builder_error: Option<String>,
 }
 
@@ -163,6 +225,31 @@ impl McpSpecBuilder {
         self
     }
 
+    /// Set an env variable to a placeholder that references the host
+    /// environment, e.g. `GITHUB_TOKEN=${GITHUB_TOKEN}`.
+    ///
+    /// Placeholders are not treated as inline secrets by the local-scope
+    /// secret policy because the actual secret value is not written.
+    pub fn env_from_host(mut self, key: impl Into<String>) -> Self {
+        let key = key.into();
+        let placeholder = format!("${{{key}}}");
+        self = self.env(key, placeholder);
+        self
+    }
+
+    /// Set an env variable to a caller-provided placeholder.
+    ///
+    /// This is useful when a harness supports its own placeholder syntax. The
+    /// value is still validated as a normal MCP env value.
+    pub fn env_placeholder(
+        mut self,
+        key: impl Into<String>,
+        placeholder: impl Into<String>,
+    ) -> Self {
+        self = self.env(key, placeholder);
+        self
+    }
+
     /// Set or replace one header on an HTTP/SSE transport.
     ///
     /// Calling this before configuring HTTP/SSE, or after configuring stdio,
@@ -187,6 +274,15 @@ impl McpSpecBuilder {
     /// Set a human-friendly display name.
     pub fn friendly_name(mut self, name: impl Into<String>) -> Self {
         self.friendly_name = Some(name.into());
+        self
+    }
+
+    /// Explicitly allow likely secret env values in project-local MCP configs.
+    ///
+    /// The default policy refuses this because local project config files are
+    /// easy to commit, sync, or share accidentally.
+    pub fn allow_local_inline_secrets(mut self) -> Self {
+        self.secret_policy = SecretPolicy::AllowInlineSecretsInLocalScope;
         self
     }
 
@@ -218,6 +314,7 @@ impl McpSpecBuilder {
             owner_tag,
             transport,
             friendly_name: self.friendly_name,
+            secret_policy: self.secret_policy,
         };
         spec.validate()?;
         Ok(spec)
@@ -363,6 +460,39 @@ fn invalid_mcp_spec(message: impl Into<String>) -> HookerError {
     HookerError::Other(anyhow::anyhow!(message.into()))
 }
 
+fn is_inline_secret_env_value(name: &str, value: &str) -> bool {
+    likely_secret_env_name(name) && !value.trim().is_empty() && !is_placeholder_value(value)
+}
+
+fn likely_secret_env_name(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    [
+        "TOKEN",
+        "SECRET",
+        "KEY",
+        "PASSWORD",
+        "AUTH",
+        "BEARER",
+        "CREDENTIAL",
+    ]
+    .iter()
+    .any(|keyword| upper.contains(keyword))
+}
+
+fn is_placeholder_value(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.starts_with("${") && trimmed.ends_with('}') && trimmed.len() > 3 {
+        return true;
+    }
+    trimmed
+        .strip_prefix('$')
+        .is_some_and(|name| !name.is_empty() && name.chars().all(is_env_name_char))
+}
+
+fn is_env_name_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -387,6 +517,65 @@ mod tests {
             }
             other => panic!("expected stdio, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn mcp_builder_env_from_host_uses_placeholder() {
+        let spec = McpSpec::builder("github")
+            .owner("myapp")
+            .stdio("npx", ["server"])
+            .env_from_host("GITHUB_TOKEN")
+            .build();
+
+        assert_eq!(
+            spec.secret_policy,
+            SecretPolicy::RefuseInlineSecretsInLocalScope
+        );
+        assert!(spec
+            .local_inline_secret_env_key(&Scope::Local("/tmp/project".into()))
+            .is_none());
+        match spec.transport {
+            McpTransport::Stdio { env, .. } => {
+                assert_eq!(
+                    env.get("GITHUB_TOKEN").map(String::as_str),
+                    Some("${GITHUB_TOKEN}")
+                );
+            }
+            other => panic!("expected stdio, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn local_inline_secret_policy_detects_likely_secret_env() {
+        let local = Scope::Local("/tmp/project".into());
+        let global = Scope::Global;
+        let spec = McpSpec::builder("github")
+            .owner("myapp")
+            .stdio("npx", ["server"])
+            .env("GITHUB_TOKEN", "abc")
+            .build();
+
+        assert_eq!(
+            spec.local_inline_secret_env_key(&local),
+            Some("GITHUB_TOKEN")
+        );
+        assert!(spec.validate_local_secret_policy(&global).is_ok());
+        assert!(matches!(
+            spec.validate_local_secret_policy(&local),
+            Err(HookerError::InlineSecretInLocalScope { key, .. }) if key == "GITHUB_TOKEN"
+        ));
+
+        let allowed = McpSpec::builder("github")
+            .owner("myapp")
+            .stdio("npx", ["server"])
+            .env("GITHUB_TOKEN", "abc")
+            .allow_local_inline_secrets()
+            .build();
+        assert!(allowed.validate_local_secret_policy(&local).is_ok());
+        assert_eq!(
+            allowed.allowed_local_inline_secret_key(&local),
+            Some("GITHUB_TOKEN")
+        );
     }
 
     #[test]

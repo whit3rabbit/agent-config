@@ -115,7 +115,7 @@ impl Integration for MyagentAgent {
         let matcher_str = matcher_to_myagent(&spec.matcher);
         let entry = json!({
             "matcher": matcher_str,
-            "hooks": [{ "type": "command", "command": spec.command }],
+            "hooks": [{ "type": "command", "command": spec.command.render_shell() }],
         });
         planning::plan_tagged_json_upsert(
             &mut changes,
@@ -188,7 +188,7 @@ impl Integration for MyagentAgent {
 
             let entry = json!({
                 "matcher": matcher_str,
-                "hooks": [{ "type": "command", "command": spec.command }],
+                "hooks": [{ "type": "command", "command": spec.command.render_shell() }],
             });
 
             let changed = json_patch::upsert_tagged_array_entry(
@@ -516,7 +516,7 @@ mod tests {
 
     fn local_spec(tag: &str) -> HookSpec {
         HookSpec::builder(tag)
-            .command("myapp hook")
+            .command_program("myapp", ["hook"])
             .matcher(Matcher::Bash)
             .event(Event::PreToolUse)
             .build()

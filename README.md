@@ -1,9 +1,10 @@
 # ai-hooker
 
 A Rust library that installs hooks, prompt rules, MCP servers, and skills into
-AI coding harnesses (Claude Code, Cursor, Gemini CLI, Codex, Copilot,
-OpenCode, Cline, Roo, Windsurf, Kilo Code, Antigravity, Amp, CodeBuddy,
-Forge, iFlow, Junie, Qoder, Qwen, Tabnine, Trae, OpenClaw, Hermes).
+AI coding harnesses.
+
+It centralizes the per-harness file locations and config shapes so downstream
+tools do not have to reimplement them.
 
 You supply a `HookSpec`, `McpSpec`, or `SkillSpec`. The library knows where
 each harness keeps its config, what shape that config takes, and how to write
@@ -100,10 +101,10 @@ ai-hooker = "0.1"
 use ai_hooker::{by_id, Event, HookSpec, Matcher, Scope};
 
 fn main() -> ai_hooker::Result<()> {
-    let spec = HookSpec::builder("myapp")          // your consumer tag
-        .command("myapp hook claude")              // what the harness runs
-        .matcher(Matcher::Bash)                    // filter to shell calls
-        .event(Event::PreToolUse)                  // before each tool call
+    let spec = HookSpec::builder("myapp")              // your consumer tag
+        .command_program("myapp", ["hook", "claude"])  // what the harness runs
+        .matcher(Matcher::Bash)                        // filter to shell calls
+        .event(Event::PreToolUse)                      // before each tool call
         .build();
 
     let claude = by_id("claude").expect("claude is registered");
@@ -125,11 +126,16 @@ Pick something stable and ASCII alnum / `_` / `-`. It namespaces every
 file, JSON entry, and markdown fence the library writes, so multiple tools
 built on `ai-hooker` can install side-by-side.
 
+Use `command_program(program, args)` for hook commands by default. It preserves
+program/argument boundaries and shell-quotes arguments for harnesses that only
+accept command strings. Raw shell remains available as
+`command_shell_unchecked(...)` when you intentionally need shell syntax.
+
 ### Inject prompt rules at the same time
 
 ```rust
 let spec = HookSpec::builder("myapp")
-    .command("myapp hook claude")
+    .command_program("myapp", ["hook", "claude"])
     .matcher(Matcher::Bash)
     .event(Event::PreToolUse)
     .rules("Run `myapp lint` before committing.")
@@ -167,7 +173,7 @@ fn main() -> ai_hooker::Result<()> {
     let spec = McpSpec::builder("github")
         .owner("myapp")
         .stdio("npx", ["-y", "@modelcontextprotocol/server-github"])
-        .env("GITHUB_TOKEN", "secret")
+        .env_from_host("GITHUB_TOKEN")
         .build();
 
     let codex = mcp_by_id("codex").expect("codex supports MCP");
@@ -175,6 +181,11 @@ fn main() -> ai_hooker::Result<()> {
     Ok(())
 }
 ```
+
+Local MCP installs refuse likely inline secrets by default. Use
+`env_from_host("GITHUB_TOKEN")` to write a host-env placeholder, or use
+`allow_local_inline_secrets()` only for trusted configs where writing the value
+into the project file is intentional.
 
 MCP uninstall is keyed by server name plus owner tag. If another consumer owns
 the server, or the server was hand-installed and has no ownership ledger entry,

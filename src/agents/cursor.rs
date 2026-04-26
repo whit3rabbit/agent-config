@@ -98,7 +98,7 @@ impl Integration for CursorAgent {
         let event_key = event_to_string(&spec.event);
         let matcher_str = matcher_to_cursor(&spec.matcher);
         let entry = json!({
-            "command": spec.command,
+            "command": spec.command.render_shell(),
             "matcher": matcher_str,
         });
         let mut changes = Vec::new();
@@ -159,7 +159,7 @@ impl Integration for CursorAgent {
             let matcher_str = matcher_to_cursor(&spec.matcher);
 
             let entry = json!({
-                "command": spec.command,
+                "command": spec.command.render_shell(),
                 "matcher": matcher_str,
             });
 
@@ -291,6 +291,7 @@ impl McpSurface for CursorAgent {
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
+        spec.validate_local_secret_policy(scope)?;
         scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::install(&cfg, &ledger, spec)
@@ -427,7 +428,7 @@ mod tests {
 
     fn local_spec(tag: &str) -> HookSpec {
         HookSpec::builder(tag)
-            .command("myapp hook")
+            .command_program("myapp", ["hook"])
             .matcher(Matcher::Bash)
             .event(Event::PreToolUse)
             .build()
@@ -550,7 +551,7 @@ mod tests {
         let agent = CursorAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         let spec = HookSpec::builder("alpha")
-            .command("noop")
+            .command_program("noop", [] as [&str; 0])
             .event(Event::PostToolUse)
             .build();
         agent.install(&scope, &spec).unwrap();

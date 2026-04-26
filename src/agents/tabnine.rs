@@ -95,7 +95,7 @@ impl Integration for TabnineAgent {
         let matcher_str = matcher_to_tabnine(&spec.matcher);
         let entry = json!({
             "matcher": matcher_str,
-            "hooks": [{ "type": "command", "command": spec.command }],
+            "hooks": [{ "type": "command", "command": spec.command.render_shell() }],
         });
         planning::plan_tagged_json_upsert(
             &mut changes,
@@ -145,7 +145,7 @@ impl Integration for TabnineAgent {
 
             let entry = json!({
                 "matcher": matcher_str,
-                "hooks": [{ "type": "command", "command": spec.command }],
+                "hooks": [{ "type": "command", "command": spec.command.render_shell() }],
             });
 
             let changed = json_patch::upsert_tagged_array_entry(
@@ -267,6 +267,7 @@ impl McpSurface for TabnineAgent {
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
+        spec.validate_local_secret_policy(scope)?;
         scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::install(&cfg, &ledger, spec)
@@ -315,7 +316,7 @@ mod tests {
 
     fn local_spec(tag: &str) -> HookSpec {
         HookSpec::builder(tag)
-            .command("myapp hook")
+            .command_program("myapp", ["hook"])
             .matcher(Matcher::Bash)
             .event(Event::PreToolUse)
             .build()
@@ -353,7 +354,7 @@ mod tests {
         let agent = TabnineAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         let spec = HookSpec::builder("alpha")
-            .command("noop")
+            .command_program("noop", [] as [&str; 0])
             .event(Event::PostToolUse)
             .build();
         agent.install(&scope, &spec).unwrap();

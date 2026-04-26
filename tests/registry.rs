@@ -78,7 +78,7 @@ fn full_round_trip_against_a_local_project_for_three_agents() {
     let scope = Scope::Local(dir.path().to_path_buf());
 
     let spec = HookSpec::builder("smoketest")
-        .command("smoketest hook")
+        .command_program("smoketest", ["hook"])
         .matcher(Matcher::Bash)
         .event(Event::PreToolUse)
         .rules("Use the smoketest harness for everything.")
@@ -122,7 +122,7 @@ fn custom_event_hooks_round_trip_for_json_hook_agents() {
     for id in ["claude", "cursor", "gemini", "codex", "windsurf"] {
         let agent = by_id(id).expect(id);
         let spec = HookSpec::builder("customtest")
-            .command("customtest hook")
+            .command_program("customtest", ["hook"])
             .matcher(Matcher::Bash)
             .event(Event::Custom("customEvent".into()))
             .build();
@@ -152,7 +152,7 @@ fn invalid_tag_is_rejected_at_install_time() {
     let agent = by_id("cline").unwrap();
 
     let bad_spec = HookSpec::builder("not valid because spaces")
-        .command("noop")
+        .command_program("noop", [] as [&str; 0])
         .rules("x")
         .try_build();
     assert!(matches!(

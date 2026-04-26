@@ -21,7 +21,7 @@ fn skill_spec(name: &str, owner: &str) -> SkillSpec {
 
 fn hook_spec(tag: &str) -> HookSpec {
     HookSpec::builder(tag)
-        .command("echo ok")
+        .command_program("echo", ["ok"])
         .event(Event::PreToolUse)
         .build()
 }

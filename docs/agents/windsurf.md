@@ -99,7 +99,7 @@ frontmatter). Calling with `Scope::Global` returns
       "command": "npx",
       "args": ["@example/server"],
       "env": {
-        "API_KEY": "secret"
+        "API_KEY": "${API_KEY}"
       }
     }
   }

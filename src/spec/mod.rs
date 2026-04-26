@@ -5,6 +5,8 @@ mod mcp;
 mod skill;
 mod validate;
 
-pub use hook::{Event, HookSpec, HookSpecBuilder, Matcher, RulesBlock, ScriptTemplate};
-pub use mcp::{McpSpec, McpSpecBuilder, McpTransport};
+pub use hook::{
+    Event, HookCommand, HookSpec, HookSpecBuilder, Matcher, RulesBlock, ScriptTemplate,
+};
+pub use mcp::{McpSpec, McpSpecBuilder, McpTransport, SecretPolicy};
 pub use skill::{SkillAsset, SkillFrontmatter, SkillSpec, SkillSpecBuilder};

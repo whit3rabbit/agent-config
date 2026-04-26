@@ -228,6 +228,8 @@ pub enum RefusalReason {
     UnsupportedScope,
     /// The supplied spec is missing a field required by this integration.
     MissingRequiredSpecField,
+    /// Local-scope MCP install would write likely secret material inline.
+    InlineSecretInLocalScope,
 }
 
 /// Advisory warning attached to a plan.

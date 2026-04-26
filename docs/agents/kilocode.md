@@ -77,7 +77,7 @@ Calling with `Scope::Global` returns `HookerError::UnsupportedScope`.
       "type": "local",
       "command": ["node", "/path/to/server.js"],
       "environment": {
-        "API_KEY": "secret"
+        "API_KEY": "${API_KEY}"
       }
     }
   }

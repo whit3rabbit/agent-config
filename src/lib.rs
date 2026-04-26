@@ -11,7 +11,7 @@
 //! use ai_hooker::{by_id, HookSpec, Matcher, Event, Scope};
 //!
 //! let spec = HookSpec::builder("myapp")
-//!     .command("myapp hook claude")
+//!     .command_program("myapp", ["hook", "claude"])
 //!     .matcher(Matcher::Bash)
 //!     .event(Event::PreToolUse)
 //!     .build();
@@ -100,8 +100,9 @@ pub use plan::{
 pub use registry::{all, by_id, mcp_by_id, mcp_capable, skill_by_id, skill_capable};
 pub use scope::{Scope, ScopeKind};
 pub use spec::{
-    Event, HookSpec, HookSpecBuilder, Matcher, McpSpec, McpSpecBuilder, McpTransport, RulesBlock,
-    ScriptTemplate, SkillAsset, SkillFrontmatter, SkillSpec, SkillSpecBuilder,
+    Event, HookCommand, HookSpec, HookSpecBuilder, Matcher, McpSpec, McpSpecBuilder, McpTransport,
+    RulesBlock, ScriptTemplate, SecretPolicy, SkillAsset, SkillFrontmatter, SkillSpec,
+    SkillSpecBuilder,
 };
 pub use status::{
     DriftIssue, InstallStatus as StatusInstallStatus, PathStatus, PlanTarget as StatusPlanTarget,

@@ -105,7 +105,7 @@ command = "node"
 args = ["/path/to/server.js"]
 
 [mcp_servers.my_server.env]
-API_KEY = "secret"
+API_KEY = "${API_KEY}"
 ```
 
 Supports both stdio (command/args) and http (url/bearer_token_env_var) transports.

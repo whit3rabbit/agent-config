@@ -125,11 +125,19 @@ user changes.
 1. **Preview before install.** Call `plan_install`, `plan_install_mcp`, or
    `plan_install_skill` before mutating operations. These return a list of
    planned changes without touching disk.
-2. **Use unique owner tags.** Each consumer should use a distinctive tag to
+2. **Use typed hook commands.** Prefer
+   `HookSpec::builder(tag).command_program(program, args)`. It stores
+   program/argument boundaries and renders shell strings with POSIX quoting
+   for harnesses that lack argv-native hook APIs. Use
+   `command_shell_unchecked` only for trusted, intentional shell syntax.
+3. **Avoid local inline MCP secrets.** Project-local MCP configs can be
+   committed or shared. Local installs refuse env values whose names look like
+   secrets by default. Prefer `McpSpec::builder(name).env_from_host("TOKEN")`
+   so the file contains a host-env placeholder, or explicitly call
+   `allow_local_inline_secrets()` when writing the value is intentional.
+4. **Use unique owner tags.** Each consumer should use a distinctive tag to
    avoid collisions.
-3. **Audit regularly.** Call `status()` to check what hooks, MCP servers, and
+5. **Audit regularly.** Call `status()` to check what hooks, MCP servers, and
    skills are installed and whether any drift has occurred.
-4. **Validate commands.** The `HookSpec::command` field is interpolated
-   verbatim into generated scripts. Never pass untrusted input as the command.
-5. **Pin MCP transports.** Prefer `Stdio` with explicit command paths over
+6. **Pin MCP transports.** Prefer `Stdio` with explicit command paths over
    `Http`/`Sse` with user-supplied URLs.

@@ -192,6 +192,7 @@ impl McpSurface for KiloCodeAgent {
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
+        spec.validate_local_secret_policy(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_map::install(
             &cfg,
@@ -305,7 +306,10 @@ mod tests {
     use tempfile::tempdir;
 
     fn rules_spec(tag: &str, body: &str) -> HookSpec {
-        HookSpec::builder(tag).command("noop").rules(body).build()
+        HookSpec::builder(tag)
+            .command_program("noop", [] as [&str; 0])
+            .rules(body)
+            .build()
     }
 
     fn mcp_spec(name: &str, owner: &str) -> McpSpec {

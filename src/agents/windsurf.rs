@@ -192,7 +192,7 @@ impl Integration for WindsurfAgent {
             let event_key = event_to_windsurf(&spec.event);
             let p = self.hooks_path(scope)?;
             let entry = json!({
-                "bash": spec.command,
+                "bash": spec.command.render_shell(),
             });
             planning::plan_tagged_json_upsert(
                 &mut changes,
@@ -258,7 +258,7 @@ impl Integration for WindsurfAgent {
             file_lock::with_lock(&p, || {
                 let mut root_doc = json_patch::read_or_empty(&p)?;
                 let entry = json!({
-                    "bash": spec.command,
+                    "bash": spec.command.render_shell(),
                 });
                 let changed = json_patch::upsert_tagged_array_entry(
                     &mut root_doc,
@@ -386,6 +386,7 @@ impl McpSurface for WindsurfAgent {
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
+        spec.validate_local_secret_policy(scope)?;
         scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::install(&cfg, &ledger, spec)
@@ -524,11 +525,17 @@ mod tests {
     }
 
     fn rules_spec(tag: &str, body: &str) -> HookSpec {
-        HookSpec::builder(tag).command("noop").rules(body).build()
+        HookSpec::builder(tag)
+            .command_program("noop", [] as [&str; 0])
+            .rules(body)
+            .build()
     }
 
     fn hook_spec(tag: &str, event: Event, command: &str) -> HookSpec {
-        HookSpec::builder(tag).command(command).event(event).build()
+        HookSpec::builder(tag)
+            .command_shell_unchecked(command)
+            .event(event)
+            .build()
     }
 
     #[test]

@@ -557,6 +557,8 @@ fn mcp_stdio_env(name: &str, owner: &str) -> McpSpec {
         .stdio("npx", ["-y", "@example/server"])
         .env("API_TOKEN", "golden-token")
         .env("CACHE_DIR", "/tmp/golden-cache")
+        // This fixture preserves raw env serialization shape; policy tests cover default refusal.
+        .allow_local_inline_secrets()
         .build()
 }
 
@@ -578,7 +580,7 @@ fn mcp_sse(name: &str, owner: &str) -> McpSpec {
 
 fn hook_spec(tag: &str, rules: &str) -> HookSpec {
     HookSpec::builder(tag)
-        .command("golden hook")
+        .command_program("golden", ["hook"])
         .matcher(Matcher::Bash)
         .event(Event::PreToolUse)
         .rules(rules)

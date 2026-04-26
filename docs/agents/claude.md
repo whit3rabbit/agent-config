@@ -105,7 +105,7 @@ writes user/local MCP to `~/.claude.json` and project-shared MCP to
       "command": "node",
       "args": ["/path/to/server.js"],
       "env": {
-        "API_KEY": "secret"
+        "API_KEY": "${API_KEY}"
       }
     }
   }

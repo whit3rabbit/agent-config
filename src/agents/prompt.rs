@@ -123,7 +123,10 @@ mod tests {
     use tempfile::tempdir;
 
     fn spec(tag: &str, rules: &str) -> HookSpec {
-        HookSpec::builder(tag).command("noop").rules(rules).build()
+        HookSpec::builder(tag)
+            .command_program("noop", [] as [&str; 0])
+            .rules(rules)
+            .build()
     }
 
     #[test]
@@ -186,7 +189,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let agent = PromptAgent::roo();
         let scope = Scope::Local(dir.path().to_path_buf());
-        let no_rules = HookSpec::builder("alpha").command("noop").build();
+        let no_rules = HookSpec::builder("alpha")
+            .command_program("noop", [] as [&str; 0])
+            .build();
         let err = agent.install(&scope, &no_rules).unwrap_err();
         assert!(matches!(
             err,

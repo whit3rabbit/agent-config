@@ -13,7 +13,7 @@ use ai_hooker::{
 
 fn hook_spec(tag: &str) -> HookSpec {
     HookSpec::builder(tag)
-        .command("echo plan")
+        .command_program("echo", ["plan"])
         .matcher(Matcher::Bash)
         .event(Event::PreToolUse)
         .rules("Use the dry-run plan test rules.")
@@ -22,7 +22,7 @@ fn hook_spec(tag: &str) -> HookSpec {
 
 fn bare_hook_spec(tag: &str) -> HookSpec {
     HookSpec::builder(tag)
-        .command("echo plan")
+        .command_program("echo", ["plan"])
         .matcher(Matcher::Bash)
         .event(Event::PreToolUse)
         .build()
@@ -33,6 +33,14 @@ fn mcp_spec(name: &str, owner: &str) -> McpSpec {
         .owner(owner)
         .stdio("npx", ["-y", "@example/server"])
         .env("FOO", "bar")
+        .build()
+}
+
+fn mcp_secret_spec(name: &str, owner: &str) -> McpSpec {
+    McpSpec::builder(name)
+        .owner(owner)
+        .stdio("npx", ["-y", "@example/server"])
+        .env("GITHUB_TOKEN", "abc")
         .build()
 }
 
@@ -59,6 +67,67 @@ fn executable_skill_spec(name: &str, owner: &str) -> SkillSpec {
 
 fn temp_scope(dir: &tempfile::TempDir) -> Scope {
     Scope::Local(dir.path().to_path_buf())
+}
+
+#[test]
+fn local_mcp_inline_secret_is_refused_by_default() {
+    let dir = tempfile::tempdir().unwrap();
+    let scope = temp_scope(&dir);
+    let claude = mcp_by_id("claude").unwrap();
+    let spec = mcp_secret_spec("github", "plan-app");
+
+    let err = claude.install_mcp(&scope, &spec).unwrap_err();
+    assert!(matches!(
+        err,
+        ai_hooker::HookerError::InlineSecretInLocalScope { key, .. } if key == "GITHUB_TOKEN"
+    ));
+    assert!(!dir.path().join(".mcp.json").exists());
+
+    let plan = claude.plan_install_mcp(&scope, &spec).unwrap();
+    assert!(matches!(plan.status, InstallStatus::Refused));
+    assert!(has_refusal(
+        &plan.changes,
+        RefusalReason::InlineSecretInLocalScope
+    ));
+}
+
+#[test]
+fn local_mcp_inline_secret_can_use_placeholder_or_explicit_allow() {
+    let dir = tempfile::tempdir().unwrap();
+    let scope = temp_scope(&dir);
+    let claude = mcp_by_id("claude").unwrap();
+
+    let placeholder = McpSpec::builder("github")
+        .owner("plan-app")
+        .stdio("npx", ["-y", "@example/server"])
+        .env_from_host("GITHUB_TOKEN")
+        .build();
+    claude.install_mcp(&scope, &placeholder).unwrap();
+    claude.uninstall_mcp(&scope, "github", "plan-app").unwrap();
+
+    let allowed = McpSpec::builder("github")
+        .owner("plan-app")
+        .stdio("npx", ["-y", "@example/server"])
+        .env("GITHUB_TOKEN", "abc")
+        .allow_local_inline_secrets()
+        .build();
+    let plan = claude.plan_install_mcp(&scope, &allowed).unwrap();
+    assert!(matches!(plan.status, InstallStatus::WillChange));
+    assert!(plan
+        .warnings
+        .iter()
+        .any(|warning| warning.message.contains("GITHUB_TOKEN")));
+    claude.install_mcp(&scope, &allowed).unwrap();
+}
+
+#[test]
+fn global_mcp_inline_secret_is_allowed_by_default() {
+    let env = IsolatedGlobalEnv::new();
+    let claude = mcp_by_id("claude").unwrap();
+    let spec = mcp_secret_spec("github", "plan-app");
+
+    claude.install_mcp(&Scope::Global, &spec).unwrap();
+    assert!(env.home_path().join(".claude.json").exists());
 }
 
 static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();

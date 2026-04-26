@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::error::HookerError;
-use crate::plan::{InstallPlan, PlanTarget, RefusalReason, UninstallPlan};
+use crate::plan::{InstallPlan, PlanTarget, PlanWarning, RefusalReason, UninstallPlan};
 use crate::scope::Scope;
 use crate::spec::{HookSpec, McpSpec, SkillSpec};
 use crate::util::{
@@ -170,9 +170,20 @@ pub(crate) fn mcp_json_object_install(
         }
         Err(e) => return Err(e),
     };
+    if let Some(plan) =
+        mcp_local_inline_secret_refusal(target.clone(), scope, spec, Some(config_path.clone()))
+    {
+        return Ok(plan);
+    }
     let ledger = ownership::mcp_ledger_for(&config_path);
     let changes = mcp_json_object::plan_install(&config_path, &ledger, spec)?;
-    Ok(InstallPlan::from_changes(target, changes))
+    Ok(mcp_install_plan_from_changes(
+        target,
+        changes,
+        scope,
+        spec,
+        Some(config_path),
+    ))
 }
 
 pub(crate) fn mcp_json_object_uninstall(
@@ -234,6 +245,11 @@ pub(crate) fn mcp_json_map_install(
         }
         Err(e) => return Err(e),
     };
+    if let Some(plan) =
+        mcp_local_inline_secret_refusal(target.clone(), scope, spec, Some(config_path.clone()))
+    {
+        return Ok(plan);
+    }
     let ledger = ownership::mcp_ledger_for(&config_path);
     let changes = mcp_json_map::plan_install(
         &config_path,
@@ -243,7 +259,13 @@ pub(crate) fn mcp_json_map_install(
         build_server,
         format,
     )?;
-    Ok(InstallPlan::from_changes(target, changes))
+    Ok(mcp_install_plan_from_changes(
+        target,
+        changes,
+        scope,
+        spec,
+        Some(config_path),
+    ))
 }
 
 pub(crate) fn mcp_json_map_uninstall(
@@ -313,10 +335,55 @@ pub(crate) fn mcp_yaml_install(
         }
         Err(e) => return Err(e),
     };
+    if let Some(plan) =
+        mcp_local_inline_secret_refusal(target.clone(), scope, spec, Some(config_path.clone()))
+    {
+        return Ok(plan);
+    }
     let ledger = ownership::mcp_ledger_for(&config_path);
     let changes =
         yaml_mcp_map::plan_install(&config_path, &ledger, spec, servers_path, build_server)?;
-    Ok(InstallPlan::from_changes(target, changes))
+    Ok(mcp_install_plan_from_changes(
+        target,
+        changes,
+        scope,
+        spec,
+        Some(config_path),
+    ))
+}
+
+pub(crate) fn mcp_local_inline_secret_refusal(
+    target: PlanTarget,
+    scope: &Scope,
+    spec: &McpSpec,
+    path: Option<PathBuf>,
+) -> Option<InstallPlan> {
+    spec.refused_local_inline_secret_key(scope)?;
+    Some(InstallPlan::refused(
+        target,
+        path,
+        RefusalReason::InlineSecretInLocalScope,
+    ))
+}
+
+pub(crate) fn mcp_install_plan_from_changes(
+    target: PlanTarget,
+    changes: Vec<crate::plan::PlannedChange>,
+    scope: &Scope,
+    spec: &McpSpec,
+    path: Option<PathBuf>,
+) -> InstallPlan {
+    let mut plan = InstallPlan::from_changes(target, changes);
+    if let Some(key) = spec.allowed_local_inline_secret_key(scope) {
+        plan.warnings.push(PlanWarning {
+            path,
+            message: format!(
+                "MCP server {:?} writes likely secret env var {:?} into a project-local config because local inline secrets were explicitly allowed",
+                spec.name, key
+            ),
+        });
+    }
+    plan
 }
 
 pub(crate) fn mcp_yaml_uninstall(

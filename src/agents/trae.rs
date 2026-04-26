@@ -236,7 +236,10 @@ mod tests {
     use tempfile::tempdir;
 
     fn rules_spec(tag: &str, body: &str) -> HookSpec {
-        HookSpec::builder(tag).command("noop").rules(body).build()
+        HookSpec::builder(tag)
+            .command_program("noop", [] as [&str; 0])
+            .rules(body)
+            .build()
     }
 
     fn skill(name: &str, owner: &str) -> SkillSpec {

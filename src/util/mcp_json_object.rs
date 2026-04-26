@@ -178,6 +178,7 @@ mod tests {
                 headers,
             },
             friendly_name: None,
+            secret_policy: crate::spec::SecretPolicy::RefuseInlineSecretsInLocalScope,
         }
     }
 
