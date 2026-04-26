@@ -262,6 +262,13 @@ fn has_set_permissions(changes: &[PlannedChange]) -> bool {
         .any(|change| matches!(change, PlannedChange::SetPermissions { mode: 0o755, .. }))
 }
 
+fn assert_platform_set_permissions(changes: &[PlannedChange]) {
+    #[cfg(unix)]
+    assert!(has_set_permissions(changes));
+    #[cfg(not(unix))]
+    assert!(!has_set_permissions(changes));
+}
+
 fn has_refusal(changes: &[PlannedChange], expected: RefusalReason) -> bool {
     changes
         .iter()
@@ -797,7 +804,7 @@ fn cline_hook_script_plan_reports_set_permissions() {
         .unwrap();
 
     assert!(matches!(plan.status, PlanStatus::WillChange));
-    assert!(has_set_permissions(&plan.changes));
+    assert_platform_set_permissions(&plan.changes);
     assert_empty_dir(dir.path());
 }
 
@@ -812,7 +819,7 @@ fn executable_skill_asset_plan_reports_set_permissions() {
         .unwrap();
 
     assert!(matches!(plan.status, PlanStatus::WillChange));
-    assert!(has_set_permissions(&plan.changes));
+    assert_platform_set_permissions(&plan.changes);
     assert_empty_dir(dir.path());
 }
 
