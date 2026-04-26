@@ -9,6 +9,19 @@ for fully filled-in examples.
 
 ID: `<id>` — `ai_hooker::by_id("<id>")`
 
+## Surfaces
+
+| Surface | Scope            | Notes                                  |
+| ------- | ---------------- | -------------------------------------- |
+| Hooks   | Global + Local   | JSON envelope under `hooks.<event>`    |
+| Prompt  | Global + Local   | `<id>` rules markdown                  |
+| MCP     | Global + Local   | `mcpServers` JSON object map           |
+| Skills  | Global + Local   | `SKILL.md` directories                 |
+
+Every implemented surface exposes `status`, `validate`, `plan_install`,
+`plan_uninstall`, `install`, and `uninstall` (plus the `mcp_*` / `skill_*`
+variants for those surfaces). The plan methods are side-effect-free.
+
 ## Hooks
 
 ### User scope (`Scope::Global`)
@@ -94,6 +107,10 @@ fenced span in place.
 | Format | JSON |
 | Mechanism | `mcpServers` object map |
 
+Ownership is recorded in a sidecar `<config-dir>/.ai-hooker-mcp.json` ledger
+so multiple consumers coexist; `uninstall_mcp` returns
+`HookerError::NotOwnedByCaller` on owner mismatch or hand-installed entries.
+
 ### Example
 
 ```json
@@ -117,6 +134,8 @@ fenced span in place.
 | --- | --- |
 | User scope | `~/.<id>/skills/<name>/` |
 | Project scope | `<root>/.<id>/skills/<name>/` |
+
+Ownership lives in `<skills_root>/.ai-hooker-skills.json`.
 
 ### Format
 

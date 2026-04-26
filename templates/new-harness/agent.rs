@@ -17,9 +17,13 @@ use serde_json::json;
 use crate::error::HookerError;
 use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
 use crate::paths;
+use crate::plan::{has_refusal, InstallPlan, PlanTarget, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
-use crate::util::{fs_atomic, json_patch, mcp_json_object, md_block, skills_dir};
+use crate::status::StatusReport;
+use crate::util::{
+    file_lock, fs_atomic, json_patch, mcp_json_object, md_block, ownership, planning, skills_dir,
+};
 
 /// <Display Name> harness.
 pub struct MyagentAgent;
@@ -85,14 +89,81 @@ impl Integration for MyagentAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, HookerError> {
+    // The default `is_installed` impl folds `status` into a bool and is
+    // sufficient for any agent that implements `status` correctly. Override
+    // only if you want to skip the richer probe (rare).
+
+    fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
+        HookSpec::validate_tag(tag)?;
         let p = Self::hooks_path(scope)?;
-        let root = json_patch::read_or_empty(&p)?;
-        Ok(json_patch::contains_tagged_array_entry_under(
-            &root,
+        let presence = json_patch::tagged_hook_presence(&p, &["hooks"], tag)?;
+        Ok(StatusReport::for_tagged_hook(tag, p, presence))
+    }
+
+    fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
+        HookSpec::validate_tag(&spec.tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: spec.tag.clone(),
+        };
+        let p = Self::hooks_path(scope)?;
+        let mut changes = Vec::new();
+
+        let event_key = event_to_string(&spec.event);
+        let matcher_str = matcher_to_myagent(&spec.matcher);
+        let entry = json!({
+            "matcher": matcher_str,
+            "hooks": [{ "type": "command", "command": spec.command }],
+        });
+        planning::plan_tagged_json_upsert(
+            &mut changes,
+            &p,
+            &["hooks", event_key.as_str()],
+            &spec.tag,
+            entry,
+            |_| {},
+        )?;
+        if has_refusal(&changes) {
+            return Ok(InstallPlan::from_changes(target, changes));
+        }
+
+        // Optional rules markdown: delete this `if let` block if your harness
+        // has no rules/memory file.
+        if let Some(rules) = &spec.rules {
+            let rules_file = Self::rules_path(scope)?;
+            planning::plan_markdown_upsert(&mut changes, &rules_file, &spec.tag, &rules.content)?;
+        }
+
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, HookerError> {
+        HookSpec::validate_tag(tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: tag.to_string(),
+        };
+        let mut changes = Vec::new();
+        let p = Self::hooks_path(scope)?;
+        planning::plan_tagged_json_remove_under(
+            &mut changes,
+            &p,
             &["hooks"],
             tag,
-        ))
+            planning::json_object_empty,
+            true,
+        )?;
+        if has_refusal(&changes) {
+            return Ok(UninstallPlan::from_changes(target, changes));
+        }
+
+        // Delete this rules cleanup if your harness has no rules file.
+        let rules_file = Self::rules_path(scope)?;
+        planning::plan_markdown_remove(&mut changes, &rules_file, tag)?;
+
+        Ok(UninstallPlan::from_changes(target, changes))
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, HookerError> {
@@ -100,42 +171,49 @@ impl Integration for MyagentAgent {
         let mut report = InstallReport::default();
 
         let p = Self::hooks_path(scope)?;
-        let mut root = json_patch::read_or_empty(&p)?;
+        {
+            // Cross-process file lock prevents concurrent installs from
+            // racing on the same file. Drop the guard before touching any
+            // other file you also want to lock independently.
+            let _hooks_lock = file_lock::FileLock::acquire(&p)?;
+            let mut root = json_patch::read_or_empty(&p)?;
 
-        let event_key = event_to_string(&spec.event);
-        let matcher_str = matcher_to_myagent(&spec.matcher);
+            let event_key = event_to_string(&spec.event);
+            let matcher_str = matcher_to_myagent(&spec.matcher);
 
-        let entry = json!({
-            "matcher": matcher_str,
-            "hooks": [{ "type": "command", "command": spec.command }],
-        });
+            let entry = json!({
+                "matcher": matcher_str,
+                "hooks": [{ "type": "command", "command": spec.command }],
+            });
 
-        let changed = json_patch::upsert_tagged_array_entry(
-            &mut root,
-            &["hooks", &event_key],
-            &spec.tag,
-            entry,
-        )?;
+            let changed = json_patch::upsert_tagged_array_entry(
+                &mut root,
+                &["hooks", &event_key],
+                &spec.tag,
+                entry,
+            )?;
 
-        if changed {
-            let bytes = json_patch::to_pretty(&root);
-            let outcome = fs_atomic::write_atomic(&p, &bytes, true)?;
-            if outcome.existed {
-                report.patched.push(outcome.path.clone());
+            if changed {
+                let bytes = json_patch::to_pretty(&root);
+                let outcome = fs_atomic::write_atomic(&p, &bytes, true)?;
+                if outcome.existed {
+                    report.patched.push(outcome.path.clone());
+                } else {
+                    report.created.push(outcome.path.clone());
+                }
+                if let Some(b) = outcome.backup {
+                    report.backed_up.push(b);
+                }
             } else {
-                report.created.push(outcome.path.clone());
+                report.already_installed = true;
             }
-            if let Some(b) = outcome.backup {
-                report.backed_up.push(b);
-            }
-        } else {
-            report.already_installed = true;
         }
 
         // Optional rules-markdown injection. Delete this `if let` block (and
         // the `rules_path` helper above) if your harness has no rules file.
         if let Some(rules) = &spec.rules {
             let rules_file = Self::rules_path(scope)?;
+            let _rules_lock = file_lock::FileLock::acquire(&rules_file)?;
             let host = fs_atomic::read_to_string_or_empty(&rules_file)?;
             let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
             let outcome = fs_atomic::write_atomic(&rules_file, new_host.as_bytes(), true)?;
@@ -160,27 +238,31 @@ impl Integration for MyagentAgent {
         let mut report = UninstallReport::default();
 
         let p = Self::hooks_path(scope)?;
-        if p.exists() {
-            let mut root = json_patch::read_or_empty(&p)?;
-            let changed =
-                json_patch::remove_tagged_array_entries_under(&mut root, &["hooks"], tag)?;
-            if changed {
-                let empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
-                if empty && fs_atomic::restore_backup(&p)? {
-                    report.restored.push(p.clone());
-                } else if empty {
-                    fs_atomic::remove_if_exists(&p)?;
-                    report.removed.push(p.clone());
-                } else {
-                    let bytes = json_patch::to_pretty(&root);
-                    fs_atomic::write_atomic(&p, &bytes, false)?;
-                    report.patched.push(p.clone());
+        {
+            let _hooks_lock = file_lock::FileLock::acquire(&p)?;
+            if p.exists() {
+                let mut root = json_patch::read_or_empty(&p)?;
+                let changed =
+                    json_patch::remove_tagged_array_entries_under(&mut root, &["hooks"], tag)?;
+                if changed {
+                    let empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
+                    if empty && fs_atomic::restore_backup(&p)? {
+                        report.restored.push(p.clone());
+                    } else if empty {
+                        fs_atomic::remove_if_exists(&p)?;
+                        report.removed.push(p.clone());
+                    } else {
+                        let bytes = json_patch::to_pretty(&root);
+                        fs_atomic::write_atomic(&p, &bytes, false)?;
+                        report.patched.push(p.clone());
+                    }
                 }
             }
         }
 
         // Delete this rules-cleanup block if your harness has no rules file.
         let rules_file = Self::rules_path(scope)?;
+        let _rules_lock = file_lock::FileLock::acquire(&rules_file)?;
         let host = fs_atomic::read_to_string_or_empty(&rules_file)?;
         let (stripped, removed) = md_block::remove(&host, tag);
         if removed {
@@ -210,8 +292,9 @@ impl Integration for MyagentAgent {
 // `mcp_json_object` import) if your harness has no file-backed MCP contract.
 //
 // For TOML-shaped MCP (e.g., Codex's `[mcp_servers.<name>]`), see
-// `src/agents/codex.rs:210-318`. For object-map shapes under arbitrary keys,
-// see `src/agents/opencode.rs` and `src/agents/copilot.rs`.
+// `src/agents/codex.rs`. For object-map shapes under arbitrary keys, see
+// `src/agents/opencode.rs` and `src/agents/copilot.rs`. For YAML maps see
+// `src/agents/hermes.rs`.
 
 impl McpSurface for MyagentAgent {
     fn id(&self) -> &'static str {
@@ -222,17 +305,69 @@ impl McpSurface for MyagentAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn is_mcp_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+    // Default `is_mcp_installed` folds `mcp_status` into a bool. Override
+    // only if you want to bypass the status probe.
+
+    fn mcp_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, HookerError> {
         McpSpec::validate_name(name)?;
         let cfg = Self::mcp_path(scope)?;
-        let ledger = crate::util::ownership::mcp_ledger_for(&cfg);
-        mcp_json_object::is_installed(&ledger, name)
+        let ledger = ownership::mcp_ledger_for(&cfg);
+        let presence = mcp_json_object::config_presence(&cfg, name)?;
+        let recorded = ownership::owner_of(&ledger, name)?;
+        Ok(StatusReport::for_mcp(
+            name,
+            cfg,
+            ledger,
+            presence,
+            expected_owner,
+            recorded,
+        ))
+    }
+
+    fn plan_install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallPlan, HookerError> {
+        spec.validate()?;
+        let target = PlanTarget::Mcp {
+            integration_id: McpSurface::id(self),
+            scope: scope.clone(),
+            name: spec.name.clone(),
+            owner: spec.owner_tag.clone(),
+        };
+        let cfg = Self::mcp_path(scope)?;
+        let ledger = ownership::mcp_ledger_for(&cfg);
+        let changes = mcp_json_object::plan_install(&cfg, &ledger, spec)?;
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall_mcp(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        McpSpec::validate_name(name)?;
+        HookSpec::validate_tag(owner_tag)?;
+        let target = PlanTarget::Mcp {
+            integration_id: McpSurface::id(self),
+            scope: scope.clone(),
+            name: name.to_string(),
+            owner: owner_tag.to_string(),
+        };
+        let cfg = Self::mcp_path(scope)?;
+        let ledger = ownership::mcp_ledger_for(&cfg);
+        let changes =
+            mcp_json_object::plan_uninstall(&cfg, &ledger, name, owner_tag, "mcp server")?;
+        Ok(UninstallPlan::from_changes(target, changes))
     }
 
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec) -> Result<InstallReport, HookerError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
-        let ledger = crate::util::ownership::mcp_ledger_for(&cfg);
+        let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::install(&cfg, &ledger, spec)
     }
 
@@ -245,7 +380,7 @@ impl McpSurface for MyagentAgent {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::mcp_path(scope)?;
-        let ledger = crate::util::ownership::mcp_ledger_for(&cfg);
+        let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::uninstall(&cfg, &ledger, name, owner_tag, "mcp server")
     }
 }
@@ -267,10 +402,62 @@ impl SkillSurface for MyagentAgent {
         &[ScopeKind::Global, ScopeKind::Local]
     }
 
-    fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, HookerError> {
+    // Default `is_skill_installed` folds `skill_status` into a bool.
+
+    fn skill_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, HookerError> {
         SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
-        skills_dir::is_installed(&root, name)
+        let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
+        let recorded = ownership::owner_of(&ledger, name)?;
+        Ok(StatusReport::for_skill(
+            name,
+            dir,
+            manifest,
+            ledger,
+            expected_owner,
+            recorded,
+        ))
+    }
+
+    fn plan_install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallPlan, HookerError> {
+        spec.validate()?;
+        let target = PlanTarget::Skill {
+            integration_id: SkillSurface::id(self),
+            scope: scope.clone(),
+            name: spec.name.clone(),
+            owner: spec.owner_tag.clone(),
+        };
+        let root = Self::skills_root(scope)?;
+        let changes = skills_dir::plan_install(&root, spec)?;
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, HookerError> {
+        SkillSpec::validate_name(name)?;
+        HookSpec::validate_tag(owner_tag)?;
+        let target = PlanTarget::Skill {
+            integration_id: SkillSurface::id(self),
+            scope: scope.clone(),
+            name: name.to_string(),
+            owner: owner_tag.to_string(),
+        };
+        let root = Self::skills_root(scope)?;
+        let changes = skills_dir::plan_uninstall(&root, name, owner_tag)?;
+        Ok(UninstallPlan::from_changes(target, changes))
     }
 
     fn install_skill(&self, scope: &Scope, spec: &SkillSpec) -> Result<InstallReport, HookerError> {
@@ -367,5 +554,23 @@ mod tests {
         assert!(agent.is_installed(&scope, "alpha").unwrap());
         agent.uninstall(&scope, "alpha").unwrap();
         assert!(!agent.is_installed(&scope, "alpha").unwrap());
+    }
+
+    #[test]
+    fn plan_install_then_install_matches() {
+        // Plans must be side-effect-free: the planner should not create the
+        // config file. Then the actual install should succeed and the planned
+        // change set should describe what happened.
+        let dir = tempdir().unwrap();
+        let agent = MyagentAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let spec = local_spec("alpha");
+
+        let plan = agent.plan_install(&scope, &spec).unwrap();
+        assert!(!dir.path().join(".myagent/settings.json").exists());
+        assert!(!plan.changes.is_empty());
+
+        agent.install(&scope, &spec).unwrap();
+        assert!(dir.path().join(".myagent/settings.json").exists());
     }
 }
