@@ -1,8 +1,9 @@
 //! Cross-platform resolution of the per-user directories that AI harnesses use.
 //!
 //! Most harnesses on macOS/Linux store config under `$HOME/.<name>` (dotdir
-//! convention) rather than the XDG config dir. On Windows, `dirs::home_dir`
-//! returns `%USERPROFILE%`, which is what those harnesses ship with too.
+//! convention) rather than the XDG config dir. On Windows, explicit
+//! `%USERPROFILE%`/`%APPDATA%` overrides are honored before falling back to
+//! shell-known folders, which is what those harnesses ship with too.
 
 use std::path::PathBuf;
 
@@ -11,6 +12,16 @@ use crate::error::AgentConfigError;
 /// Returns the user's home directory or a [`AgentConfigError::PathResolution`] if
 /// the platform doesn't expose one.
 pub fn home_dir() -> Result<PathBuf, AgentConfigError> {
+    #[cfg(windows)]
+    if let Some(home) = env_path("USERPROFILE") {
+        return Ok(home);
+    }
+
+    #[cfg(not(windows))]
+    if let Some(home) = env_path("HOME") {
+        return Ok(home);
+    }
+
     dirs::home_dir().ok_or_else(|| {
         AgentConfigError::PathResolution("could not determine user home directory".into())
     })
@@ -22,9 +33,24 @@ pub fn home_dir() -> Result<PathBuf, AgentConfigError> {
 /// `~/.config/opencode` even on macOS, so callers that need OpenCode's path
 /// should prefer [`opencode_plugins_dir`] which encodes that quirk.
 pub fn config_dir() -> Result<PathBuf, AgentConfigError> {
+    if let Some(config) = env_path("XDG_CONFIG_HOME") {
+        return Ok(config);
+    }
+
+    #[cfg(windows)]
+    if let Some(config) = env_path("APPDATA") {
+        return Ok(config);
+    }
+
     dirs::config_dir().ok_or_else(|| {
         AgentConfigError::PathResolution("could not determine user config directory".into())
     })
+}
+
+fn env_path(key: &str) -> Option<PathBuf> {
+    std::env::var_os(key)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
 }
 
 /// `~/.claude` (all platforms).
