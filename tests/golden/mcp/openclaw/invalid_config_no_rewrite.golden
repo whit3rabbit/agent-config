@@ -1,0 +1,77 @@
+surface: mcp
+agent: openclaw
+scenario: invalid_config_no_rewrite
+
+install_result:
+Err(
+    Other(
+        "invalid JSON5 in [HOME]/.openclaw/openclaw.json: expected colon at line 1 column 11",
+    ),
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Drifted {
+            issues: [
+                InvalidConfig {
+                    path: "[HOME]/.openclaw/openclaw.json",
+                    reason: "invalid JSON5 in [HOME]/.openclaw/openclaw.json: expected colon at line 1 column 11",
+                },
+            ],
+        },
+        config_path: Some(
+            "[HOME]/.openclaw/openclaw.json",
+        ),
+        ledger_path: Some(
+            "[HOME]/.openclaw/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Invalid {
+                path: "[HOME]/.openclaw/openclaw.json",
+                reason: "invalid JSON5 in [HOME]/.openclaw/openclaw.json: expected colon at line 1 column 11",
+            },
+            Missing {
+                path: "[HOME]/.openclaw/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "openclaw",
+            scope: Global,
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            MalformedConfig {
+                path: "[HOME]/.openclaw/openclaw.json",
+                reason: "invalid JSON5 in [HOME]/.openclaw/openclaw.json: expected colon at line 1 column 11",
+            },
+        ],
+        suggested_actions: [
+            ManualReview,
+        ],
+    },
+)
+invalid_preserved: true
+
+ROOT tree:
+<empty>
+
+HOME tree:
+directories:
+- .openclaw
+files:
+- .openclaw/openclaw.json
+  content:
+```text
+{ invalid json
+```

@@ -1,0 +1,59 @@
+surface: hooks
+agent: cline
+scenario: directory_uninstall_prunes_only_when_safe
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [
+            "[ROOT]/.clinerules/sibling-hook.md",
+        ],
+        patched: [],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "sibling-hook",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.clinerules/sibling-hook.md",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.clinerules/hooks/.ai-hooker-hooks.json",
+        ),
+        files: [
+            Missing {
+                path: "[ROOT]/.clinerules/sibling-hook.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "cline",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "sibling-hook",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+<empty>
+
+HOME tree:
+<empty>

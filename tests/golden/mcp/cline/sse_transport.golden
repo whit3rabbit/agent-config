@@ -1,0 +1,98 @@
+surface: mcp
+agent: cline
+scenario: sse_transport
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+        ),
+        ledger_path: Some(
+            "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+            },
+            Exists {
+                path: "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "cline",
+            scope: Global,
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+<empty>
+
+HOME tree:
+directories:
+- Library
+- Library/Application Support
+- Library/Application Support/Code
+- Library/Application Support/Code/User
+- Library/Application Support/Code/User/globalStorage
+- Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev
+- Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings
+files:
+- Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json
+  content:
+```text
+{
+  "mcpServers": {
+    "golden-server": {
+      "type": "sse",
+      "url": "https://example.test/sse",
+      "headers": {
+        "X-Golden": "true"
+      }
+    }
+  }
+}
+```

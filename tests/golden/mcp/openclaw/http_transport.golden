@@ -1,0 +1,94 @@
+surface: mcp
+agent: openclaw
+scenario: http_transport
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[HOME]/.openclaw/openclaw.json",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[HOME]/.openclaw/openclaw.json",
+        ),
+        ledger_path: Some(
+            "[HOME]/.openclaw/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[HOME]/.openclaw/openclaw.json",
+            },
+            Exists {
+                path: "[HOME]/.openclaw/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "openclaw",
+            scope: Global,
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+<empty>
+
+HOME tree:
+directories:
+- .openclaw
+files:
+- .openclaw/.ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- .openclaw/openclaw.json
+  content:
+```text
+{
+  "mcp": {
+    "servers": {
+      "golden-server": {
+        "url": "https://example.test/mcp",
+        "transport": "streamable-http",
+        "headers": {
+          "Authorization": "Bearer golden-token"
+        }
+      }
+    }
+  }
+}
+```

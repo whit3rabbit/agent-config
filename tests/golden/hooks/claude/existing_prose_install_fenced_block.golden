@@ -1,0 +1,99 @@
+surface: hooks
+agent: claude
+scenario: existing_prose_install_fenced_block
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/.claude/settings.json",
+        ],
+        patched: [
+            "[ROOT]/CLAUDE.md",
+        ],
+        backed_up: [
+            "[ROOT]/CLAUDE.md.bak",
+        ],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: InstalledOwned {
+            owner: "golden-hook",
+        },
+        config_path: Some(
+            "[ROOT]/.claude/settings.json",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/.claude/settings.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "claude",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .claude
+files:
+- .claude/settings.json
+  content:
+```text
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook"
+          }
+        ],
+        "_ai_hooker_tag": "golden-hook"
+      }
+    ]
+  }
+}
+```
+- CLAUDE.md
+  content:
+```text
+Existing project guidance.
+
+<!-- BEGIN AI-HOOKER:golden-hook -->
+Use golden hook rules.
+<!-- END AI-HOOKER:golden-hook -->
+```
+- CLAUDE.md.bak
+  content:
+```text
+Existing project guidance.
+```
+
+HOME tree:
+<empty>

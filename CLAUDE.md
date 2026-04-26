@@ -44,11 +44,9 @@ docker run --rm --user "$(id -u):$(id -g)" \
   bash -c 'cargo test --locked --test concurrency'
 ```
 
-`rust:latest` passed the concurrency suite on Linux. `rust:1.74` currently
-fails before compiling because the locked dependency graph pulls
-`getrandom 0.4.2`, whose manifest uses edition 2024, which Cargo 1.74 cannot
-parse. Treat that as an MSRV/dependency compatibility issue, not a concurrency
-failure.
+The crate MSRV tracks the current release toolchain used by this repository
+(`rust-version = "1.95"`). Keep the CI MSRV job and `Cargo.toml` in sync when
+updating toolchains.
 
 ## Architecture
 

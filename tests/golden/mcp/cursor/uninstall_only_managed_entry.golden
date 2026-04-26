@@ -1,0 +1,64 @@
+surface: mcp
+agent: cursor
+scenario: uninstall_only_managed_entry
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [
+            "[ROOT]/.cursor/mcp.json",
+        ],
+        patched: [],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.cursor/mcp.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.cursor/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Missing {
+                path: "[ROOT]/.cursor/mcp.json",
+            },
+            Missing {
+                path: "[ROOT]/.cursor/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "cursor",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .cursor
+
+HOME tree:
+<empty>

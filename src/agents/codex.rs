@@ -36,7 +36,9 @@ use crate::plan::{
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec, McpTransport, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{fs_atomic, json_patch, md_block, ownership, planning, skills_dir, toml_patch};
+use crate::util::{
+    file_lock, fs_atomic, json_patch, md_block, ownership, planning, skills_dir, toml_patch,
+};
 
 /// Codex CLI.
 pub struct CodexAgent;
@@ -167,53 +169,59 @@ impl Integration for CodexAgent {
         let mut report = InstallReport::default();
 
         let p = Self::hooks_path(scope)?;
-        let mut root = json_patch::read_or_empty(&p)?;
+        file_lock::with_lock(&p, || {
+            let mut root = json_patch::read_or_empty(&p)?;
 
-        let event_key = event_to_string(&spec.event);
-        let matcher_str = matcher_to_codex(&spec.matcher);
+            let event_key = event_to_string(&spec.event);
+            let matcher_str = matcher_to_codex(&spec.matcher);
 
-        let entry = json!({
-            "matcher": matcher_str,
-            "hooks": [{ "type": "command", "command": spec.command }],
-        });
+            let entry = json!({
+                "matcher": matcher_str,
+                "hooks": [{ "type": "command", "command": spec.command }],
+            });
 
-        let changed = json_patch::upsert_tagged_array_entry(
-            &mut root,
-            &["hooks", &event_key],
-            &spec.tag,
-            entry,
-        )?;
+            let changed = json_patch::upsert_tagged_array_entry(
+                &mut root,
+                &["hooks", &event_key],
+                &spec.tag,
+                entry,
+            )?;
 
-        if changed {
-            let bytes = json_patch::to_pretty(&root);
-            let outcome = fs_atomic::write_atomic(&p, &bytes, true)?;
-            if outcome.existed {
-                report.patched.push(outcome.path.clone());
+            if changed {
+                let bytes = json_patch::to_pretty(&root);
+                let outcome = fs_atomic::write_atomic(&p, &bytes, true)?;
+                if outcome.existed {
+                    report.patched.push(outcome.path.clone());
+                } else {
+                    report.created.push(outcome.path.clone());
+                }
+                if let Some(b) = outcome.backup {
+                    report.backed_up.push(b);
+                }
             } else {
-                report.created.push(outcome.path.clone());
+                report.already_installed = true;
             }
-            if let Some(b) = outcome.backup {
-                report.backed_up.push(b);
-            }
-        } else {
-            report.already_installed = true;
-        }
+            Ok::<(), HookerError>(())
+        })?;
 
         if let Some(rules) = &spec.rules {
             let agents = Self::agents_path(scope)?;
-            let host = fs_atomic::read_to_string_or_empty(&agents)?;
-            let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
-            let outcome = fs_atomic::write_atomic(&agents, new_host.as_bytes(), true)?;
-            if outcome.existed && !outcome.no_change {
-                report.patched.push(outcome.path.clone());
-                report.already_installed = false;
-            } else if !outcome.existed {
-                report.created.push(outcome.path.clone());
-                report.already_installed = false;
-            }
-            if let Some(b) = outcome.backup {
-                report.backed_up.push(b);
-            }
+            file_lock::with_lock(&agents, || {
+                let host = fs_atomic::read_to_string_or_empty(&agents)?;
+                let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
+                let outcome = fs_atomic::write_atomic(&agents, new_host.as_bytes(), true)?;
+                if outcome.existed && !outcome.no_change {
+                    report.patched.push(outcome.path.clone());
+                    report.already_installed = false;
+                } else if !outcome.existed {
+                    report.created.push(outcome.path.clone());
+                    report.already_installed = false;
+                }
+                if let Some(b) = outcome.backup {
+                    report.backed_up.push(b);
+                }
+                Ok::<(), HookerError>(())
+            })?;
         }
 
         Ok(report)
@@ -225,40 +233,46 @@ impl Integration for CodexAgent {
 
         let p = Self::hooks_path(scope)?;
         if p.exists() {
-            let mut root = json_patch::read_or_empty(&p)?;
-            let changed =
-                json_patch::remove_tagged_array_entries_under(&mut root, &["hooks"], tag)?;
-            if changed {
-                let empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
-                if empty && fs_atomic::restore_backup(&p)? {
-                    report.restored.push(p.clone());
-                } else if empty {
-                    fs_atomic::remove_if_exists(&p)?;
-                    report.removed.push(p.clone());
-                } else {
-                    let bytes = json_patch::to_pretty(&root);
-                    fs_atomic::write_atomic(&p, &bytes, false)?;
-                    report.patched.push(p.clone());
+            file_lock::with_lock(&p, || {
+                let mut root = json_patch::read_or_empty(&p)?;
+                let changed =
+                    json_patch::remove_tagged_array_entries_under(&mut root, &["hooks"], tag)?;
+                if changed {
+                    let empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
+                    if empty && fs_atomic::restore_backup(&p)? {
+                        report.restored.push(p.clone());
+                    } else if empty {
+                        fs_atomic::remove_if_exists(&p)?;
+                        report.removed.push(p.clone());
+                    } else {
+                        let bytes = json_patch::to_pretty(&root);
+                        fs_atomic::write_atomic(&p, &bytes, false)?;
+                        report.patched.push(p.clone());
+                    }
                 }
-            }
+                Ok::<(), HookerError>(())
+            })?;
         }
 
         let agents = Self::agents_path(scope)?;
-        let host = fs_atomic::read_to_string_or_empty(&agents)?;
-        let (stripped, removed) = md_block::remove(&host, tag);
-        if removed {
-            if stripped.trim().is_empty() {
-                if fs_atomic::restore_backup(&agents)? {
-                    report.restored.push(agents.clone());
+        file_lock::with_lock(&agents, || {
+            let host = fs_atomic::read_to_string_or_empty(&agents)?;
+            let (stripped, removed) = md_block::remove(&host, tag);
+            if removed {
+                if stripped.trim().is_empty() {
+                    if fs_atomic::restore_backup(&agents)? {
+                        report.restored.push(agents.clone());
+                    } else {
+                        fs_atomic::remove_if_exists(&agents)?;
+                        report.removed.push(agents.clone());
+                    }
                 } else {
-                    fs_atomic::remove_if_exists(&agents)?;
-                    report.removed.push(agents.clone());
+                    fs_atomic::write_atomic(&agents, stripped.as_bytes(), false)?;
+                    report.patched.push(agents.clone());
                 }
-            } else {
-                fs_atomic::write_atomic(&agents, stripped.as_bytes(), false)?;
-                report.patched.push(agents.clone());
             }
-        }
+            Ok::<(), HookerError>(())
+        })?;
 
         if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
             report.not_installed = true;
@@ -436,42 +450,45 @@ impl McpSurface for CodexAgent {
         let cfg = Self::config_toml_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
 
-        let mut doc = toml_patch::read_or_empty(&cfg)?;
-        let in_config = toml_patch::contains_named_table(&doc, &["mcp_servers"], &spec.name);
-        ownership::require_owner(
-            &ledger,
-            &spec.name,
-            &spec.owner_tag,
-            "mcp server",
-            in_config,
-        )?;
+        file_lock::with_lock(&cfg, || {
+            let mut doc = toml_patch::read_or_empty(&cfg)?;
+            let in_config = toml_patch::contains_named_table(&doc, &["mcp_servers"], &spec.name);
+            ownership::require_owner(
+                &ledger,
+                &spec.name,
+                &spec.owner_tag,
+                "mcp server",
+                in_config,
+            )?;
 
-        let table = build_mcp_table(spec);
-        let changed =
-            toml_patch::upsert_named_table(&mut doc, &["mcp_servers"], &spec.name, table)?;
+            let table = build_mcp_table(spec);
+            let changed =
+                toml_patch::upsert_named_table(&mut doc, &["mcp_servers"], &spec.name, table)?;
 
-        let prior_owner = ownership::owner_of(&ledger, &spec.name)?;
-        let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
+            let prior_owner = ownership::owner_of(&ledger, &spec.name)?;
+            let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
 
-        if changed {
-            let bytes = toml_patch::to_string(&doc);
-            let outcome = fs_atomic::write_atomic(&cfg, &bytes, true)?;
-            if outcome.existed {
-                report.patched.push(outcome.path.clone());
-            } else {
-                report.created.push(outcome.path.clone());
+            if changed {
+                let bytes = toml_patch::to_string(&doc);
+                let outcome = fs_atomic::write_atomic(&cfg, &bytes, true)?;
+                if outcome.existed {
+                    report.patched.push(outcome.path.clone());
+                } else {
+                    report.created.push(outcome.path.clone());
+                }
+                if let Some(b) = outcome.backup {
+                    report.backed_up.push(b);
+                }
             }
-            if let Some(b) = outcome.backup {
-                report.backed_up.push(b);
-            }
-        }
 
-        if changed || owner_changed {
-            ownership::record_install(&ledger, &spec.name, &spec.owner_tag)?;
-        }
-        if !changed && !owner_changed {
-            report.already_installed = true;
-        }
+            if changed || owner_changed {
+                ownership::record_install(&ledger, &spec.name, &spec.owner_tag)?;
+            }
+            if !changed && !owner_changed {
+                report.already_installed = true;
+            }
+            Ok::<(), HookerError>(())
+        })?;
         Ok(report)
     }
 
@@ -488,35 +505,43 @@ impl McpSurface for CodexAgent {
         let cfg = Self::config_toml_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
 
-        let mut doc = toml_patch::read_or_empty(&cfg)?;
-        let in_config = toml_patch::contains_named_table(&doc, &["mcp_servers"], name);
-        let in_ledger = ownership::contains(&ledger, name)?;
-
-        if !in_config && !in_ledger {
+        if !cfg.exists() && !ledger.exists() {
             report.not_installed = true;
             return Ok(report);
         }
 
-        ownership::require_owner(&ledger, name, owner_tag, "mcp server", in_config)?;
+        file_lock::with_lock(&cfg, || {
+            let mut doc = toml_patch::read_or_empty(&cfg)?;
+            let in_config = toml_patch::contains_named_table(&doc, &["mcp_servers"], name);
+            let in_ledger = ownership::contains(&ledger, name)?;
 
-        if in_config {
-            let removed = toml_patch::remove_named_table(&mut doc, &["mcp_servers"], name)?;
-            debug_assert!(removed);
-
-            let now_empty = doc.as_table().is_empty();
-            if now_empty && fs_atomic::restore_backup(&cfg)? {
-                report.restored.push(cfg.clone());
-            } else if now_empty {
-                fs_atomic::remove_if_exists(&cfg)?;
-                report.removed.push(cfg.clone());
-            } else {
-                let bytes = toml_patch::to_string(&doc);
-                fs_atomic::write_atomic(&cfg, &bytes, false)?;
-                report.patched.push(cfg.clone());
+            if !in_config && !in_ledger {
+                report.not_installed = true;
+                return Ok(());
             }
-        }
 
-        ownership::record_uninstall(&ledger, name)?;
+            ownership::require_owner(&ledger, name, owner_tag, "mcp server", in_config)?;
+
+            if in_config {
+                let removed = toml_patch::remove_named_table(&mut doc, &["mcp_servers"], name)?;
+                debug_assert!(removed);
+
+                let now_empty = doc.as_table().is_empty();
+                if now_empty && fs_atomic::restore_backup(&cfg)? {
+                    report.restored.push(cfg.clone());
+                } else if now_empty {
+                    fs_atomic::remove_if_exists(&cfg)?;
+                    report.removed.push(cfg.clone());
+                } else {
+                    let bytes = toml_patch::to_string(&doc);
+                    fs_atomic::write_atomic(&cfg, &bytes, false)?;
+                    report.patched.push(cfg.clone());
+                }
+            }
+
+            ownership::record_uninstall(&ledger, name)?;
+            Ok::<(), HookerError>(())
+        })?;
 
         if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
             report.not_installed = true;

@@ -1,0 +1,56 @@
+surface: skills
+agent: hermes
+scenario: asset_path_escape_rejected
+
+install_result:
+Err(
+    Other(
+        "skill asset path must not contain `..` or root (got \"../escape.txt\")",
+    ),
+)
+status:
+Ok(
+    StatusReport {
+        target: Skill {
+            name: "golden-skill",
+        },
+        status: Absent,
+        config_path: Some(
+            "[HOME]/.hermes/skills/ai-hooker/golden-skill",
+        ),
+        ledger_path: Some(
+            "[HOME]/.hermes/skills/ai-hooker/.ai-hooker-skills.json",
+        ),
+        files: [
+            Missing {
+                path: "[HOME]/.hermes/skills/ai-hooker/golden-skill",
+            },
+            Missing {
+                path: "[HOME]/.hermes/skills/ai-hooker/golden-skill/SKILL.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Skill {
+            integration_id: "hermes",
+            scope: Global,
+            name: "golden-skill",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+<empty>
+
+HOME tree:
+<empty>

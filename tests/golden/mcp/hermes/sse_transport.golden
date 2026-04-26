@@ -1,0 +1,86 @@
+surface: mcp
+agent: hermes
+scenario: sse_transport
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[HOME]/.hermes/config.yaml",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[HOME]/.hermes/config.yaml",
+        ),
+        ledger_path: Some(
+            "[HOME]/.hermes/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[HOME]/.hermes/config.yaml",
+            },
+            Exists {
+                path: "[HOME]/.hermes/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "hermes",
+            scope: Global,
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+<empty>
+
+HOME tree:
+directories:
+- .hermes
+files:
+- .hermes/.ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- .hermes/config.yaml
+  content:
+```text
+mcp_servers:
+  golden-server:
+    url: https://example.test/sse
+    headers:
+      X-Golden: 'true'
+```

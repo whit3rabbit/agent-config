@@ -32,7 +32,7 @@ use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, McpSpec, SkillSpec};
 use crate::status::{ConfigPresence, InstallStatus, PathStatus, PlanTarget, StatusReport};
 use crate::util::{
-    fs_atomic, json_patch, mcp_json_object, ownership, planning, rules_dir, skills_dir,
+    file_lock, fs_atomic, json_patch, mcp_json_object, ownership, planning, rules_dir, skills_dir,
 };
 
 const RULES_DIR: &str = ".windsurf/rules";
@@ -253,31 +253,34 @@ impl Integration for WindsurfAgent {
         if spec.script.is_some() || spec.rules.is_none() {
             let event_key = event_to_windsurf(&spec.event);
             let p = self.hooks_path(scope)?;
-            let mut root_doc = json_patch::read_or_empty(&p)?;
-            let entry = json!({
-                "bash": spec.command,
-            });
-            let changed = json_patch::upsert_tagged_array_entry(
-                &mut root_doc,
-                &[event_key.as_str()],
-                &spec.tag,
-                entry,
-            )?;
-            if changed {
-                let bytes = json_patch::to_pretty(&root_doc);
-                let outcome = fs_atomic::write_atomic(&p, &bytes, true)?;
-                if outcome.existed {
-                    report.patched.push(outcome.path.clone());
-                } else {
-                    report.created.push(outcome.path.clone());
+            file_lock::with_lock(&p, || {
+                let mut root_doc = json_patch::read_or_empty(&p)?;
+                let entry = json!({
+                    "bash": spec.command,
+                });
+                let changed = json_patch::upsert_tagged_array_entry(
+                    &mut root_doc,
+                    &[event_key.as_str()],
+                    &spec.tag,
+                    entry,
+                )?;
+                if changed {
+                    let bytes = json_patch::to_pretty(&root_doc);
+                    let outcome = fs_atomic::write_atomic(&p, &bytes, true)?;
+                    if outcome.existed {
+                        report.patched.push(outcome.path.clone());
+                    } else {
+                        report.created.push(outcome.path.clone());
+                    }
+                    if let Some(b) = outcome.backup {
+                        report.backed_up.push(b);
+                    }
+                    report.already_installed = false;
+                } else if report.created.is_empty() && report.patched.is_empty() {
+                    report.already_installed = true;
                 }
-                if let Some(b) = outcome.backup {
-                    report.backed_up.push(b);
-                }
-                report.already_installed = false;
-            } else if report.created.is_empty() && report.patched.is_empty() {
-                report.already_installed = true;
-            }
+                Ok::<(), HookerError>(())
+            })?;
         }
 
         Ok(report)
@@ -293,23 +296,26 @@ impl Integration for WindsurfAgent {
 
         let p = self.hooks_path(scope)?;
         if p.exists() {
-            let mut doc = json_patch::read_or_empty(&p)?;
-            let changed = json_patch::remove_tagged_array_entries_under(&mut doc, &[], tag)?;
-            if changed {
-                let now_empty = doc.as_object().map(|o| o.is_empty()).unwrap_or(true);
-                if now_empty {
-                    // The file holds only tagged entries; once they're all
-                    // gone the `.bak` snapshots an intermediate multi-event
-                    // install of our own, not pre-install user content.
-                    fs_atomic::remove_if_exists(&p)?;
-                    fs_atomic::remove_backup_if_exists(&p)?;
-                    report.removed.push(p.clone());
-                } else {
-                    let bytes = json_patch::to_pretty(&doc);
-                    fs_atomic::write_atomic(&p, &bytes, false)?;
-                    report.patched.push(p.clone());
+            file_lock::with_lock(&p, || {
+                let mut doc = json_patch::read_or_empty(&p)?;
+                let changed = json_patch::remove_tagged_array_entries_under(&mut doc, &[], tag)?;
+                if changed {
+                    let now_empty = doc.as_object().map(|o| o.is_empty()).unwrap_or(true);
+                    if now_empty {
+                        // The file holds only tagged entries; once they're all
+                        // gone the `.bak` snapshots an intermediate multi-event
+                        // install of our own, not pre-install user content.
+                        fs_atomic::remove_if_exists(&p)?;
+                        fs_atomic::remove_backup_if_exists(&p)?;
+                        report.removed.push(p.clone());
+                    } else {
+                        let bytes = json_patch::to_pretty(&doc);
+                        fs_atomic::write_atomic(&p, &bytes, false)?;
+                        report.patched.push(p.clone());
+                    }
                 }
-            }
+                Ok::<(), HookerError>(())
+            })?;
         }
 
         if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {

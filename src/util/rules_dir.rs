@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use crate::error::HookerError;
 use crate::integration::{InstallReport, UninstallReport};
 use crate::plan::PlannedChange;
-use crate::util::fs_atomic;
 use crate::util::planning;
+use crate::util::{file_lock, fs_atomic};
 
 /// Compute the per-tag rule-file path inside `<root>/<rules_dir>/`.
 pub(crate) fn target_path(root: &Path, rules_dir: &str, tag: &str) -> PathBuf {
@@ -31,22 +31,25 @@ pub(crate) fn install(
     tag: &str,
     body: &str,
 ) -> Result<InstallReport, HookerError> {
-    let path = target_path(root, rules_dir, tag);
-    let body = fs_atomic::ensure_trailing_newline(body);
-    let outcome = fs_atomic::write_atomic(&path, body.as_bytes(), true)?;
+    let lock_target = lock_target(root);
+    file_lock::with_lock(&lock_target, || {
+        let path = target_path(root, rules_dir, tag);
+        let body = fs_atomic::ensure_trailing_newline(body);
+        let outcome = fs_atomic::write_atomic(&path, body.as_bytes(), true)?;
 
-    let mut report = InstallReport::default();
-    if outcome.no_change {
-        report.already_installed = true;
-    } else if outcome.existed {
-        report.patched.push(outcome.path.clone());
-    } else {
-        report.created.push(outcome.path.clone());
-    }
-    if let Some(b) = outcome.backup {
-        report.backed_up.push(b);
-    }
-    Ok(report)
+        let mut report = InstallReport::default();
+        if outcome.no_change {
+            report.already_installed = true;
+        } else if outcome.existed {
+            report.patched.push(outcome.path.clone());
+        } else {
+            report.created.push(outcome.path.clone());
+        }
+        if let Some(b) = outcome.backup {
+            report.backed_up.push(b);
+        }
+        Ok(report)
+    })
 }
 
 /// Plan writing the per-tag rule file. Idempotent on identical content.
@@ -70,34 +73,41 @@ pub(crate) fn uninstall(
     rules_dir: &str,
     tag: &str,
 ) -> Result<UninstallReport, HookerError> {
-    let path = target_path(root, rules_dir, tag);
-    let mut report = UninstallReport::default();
-    if !path.exists() {
-        report.not_installed = true;
-        return Ok(report);
-    }
-    fs_atomic::remove_if_exists(&path)?;
-    report.removed.push(path.clone());
+    let lock_target = lock_target(root);
+    file_lock::with_lock(&lock_target, || {
+        let path = target_path(root, rules_dir, tag);
+        let mut report = UninstallReport::default();
+        if !path.exists() {
+            report.not_installed = true;
+            return Ok(report);
+        }
+        fs_atomic::remove_if_exists(&path)?;
+        report.removed.push(path.clone());
 
-    let mut parent = path.parent();
-    while let Some(p) = parent {
-        if p == root {
-            break;
-        }
-        match fs::read_dir(p) {
-            Ok(mut entries) => {
-                if entries.next().is_some() {
-                    break;
-                }
+        let mut parent = path.parent();
+        while let Some(p) = parent {
+            if p == root {
+                break;
             }
-            Err(_) => break,
+            match fs::read_dir(p) {
+                Ok(mut entries) => {
+                    if entries.next().is_some() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+            if fs::remove_dir(p).is_err() {
+                break;
+            }
+            parent = p.parent();
         }
-        if fs::remove_dir(p).is_err() {
-            break;
-        }
-        parent = p.parent();
-    }
-    Ok(report)
+        Ok(report)
+    })
+}
+
+fn lock_target(root: &Path) -> PathBuf {
+    root.join(".ai-hooker-rules")
 }
 
 /// Plan removal of the per-tag rule file and any empty parent directories.

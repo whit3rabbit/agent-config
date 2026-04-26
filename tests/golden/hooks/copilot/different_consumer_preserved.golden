@@ -1,0 +1,116 @@
+surface: hooks
+agent: copilot
+scenario: different_consumer_preserved
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/.github/hooks/golden-hook-rewrite.json",
+        ],
+        patched: [
+            "[ROOT]/.github/copilot-instructions.md",
+        ],
+        backed_up: [
+            "[ROOT]/.github/copilot-instructions.md.bak",
+        ],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: InstalledOwned {
+            owner: "golden-hook",
+        },
+        config_path: Some(
+            "[ROOT]/.github/hooks/golden-hook-rewrite.json",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/.github/hooks/golden-hook-rewrite.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "copilot",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .github
+- .github/hooks
+files:
+- .github/copilot-instructions.md
+  content:
+```text
+<!-- BEGIN AI-HOOKER:sibling-hook -->
+Use sibling hook rules.
+<!-- END AI-HOOKER:sibling-hook -->
+
+<!-- BEGIN AI-HOOKER:golden-hook -->
+Use golden hook rules.
+<!-- END AI-HOOKER:golden-hook -->
+```
+- .github/copilot-instructions.md.bak
+  content:
+```text
+<!-- BEGIN AI-HOOKER:sibling-hook -->
+Use sibling hook rules.
+<!-- END AI-HOOKER:sibling-hook -->
+```
+- .github/hooks/golden-hook-rewrite.json
+  content:
+```text
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "golden hook",
+        "matcher": "Shell"
+      }
+    ]
+  }
+}
+```
+- .github/hooks/sibling-hook-rewrite.json
+  content:
+```text
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "golden hook",
+        "matcher": "Shell"
+      }
+    ]
+  }
+}
+```
+
+HOME tree:
+<empty>

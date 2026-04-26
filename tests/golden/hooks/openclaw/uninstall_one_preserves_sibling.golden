@@ -1,0 +1,75 @@
+surface: hooks
+agent: openclaw
+scenario: uninstall_one_preserves_sibling
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [],
+        patched: [
+            "[ROOT]/AGENTS.md",
+        ],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/AGENTS.md",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/AGENTS.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "openclaw",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/AGENTS.md.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+files:
+- AGENTS.md
+  content:
+```text
+<!-- BEGIN AI-HOOKER:sibling-hook -->
+Use sibling hook rules.
+<!-- END AI-HOOKER:sibling-hook -->
+```
+- AGENTS.md.bak
+  content:
+```text
+<!-- BEGIN AI-HOOKER:golden-hook -->
+Use golden hook rules.
+<!-- END AI-HOOKER:golden-hook -->
+```
+
+HOME tree:
+<empty>

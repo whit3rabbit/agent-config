@@ -1,0 +1,80 @@
+surface: mcp
+agent: windsurf
+scenario: invalid_config_no_rewrite
+
+install_result:
+Err(
+    JsonInvalid {
+        path: "[ROOT]/.windsurf/mcp_config.json",
+        source: Error("key must be a string", line: 1, column: 3),
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Drifted {
+            issues: [
+                InvalidConfig {
+                    path: "[ROOT]/.windsurf/mcp_config.json",
+                    reason: "key must be a string at line 1 column 3",
+                },
+            ],
+        },
+        config_path: Some(
+            "[ROOT]/.windsurf/mcp_config.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.windsurf/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Invalid {
+                path: "[ROOT]/.windsurf/mcp_config.json",
+                reason: "key must be a string at line 1 column 3",
+            },
+            Missing {
+                path: "[ROOT]/.windsurf/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "windsurf",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            MalformedConfig {
+                path: "[ROOT]/.windsurf/mcp_config.json",
+                reason: "key must be a string at line 1 column 3",
+            },
+        ],
+        suggested_actions: [
+            ManualReview,
+        ],
+    },
+)
+invalid_preserved: true
+
+ROOT tree:
+directories:
+- .windsurf
+files:
+- .windsurf/mcp_config.json
+  content:
+```text
+{ invalid json
+```
+
+HOME tree:
+<empty>

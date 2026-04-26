@@ -1,0 +1,84 @@
+surface: mcp
+agent: cline
+scenario: invalid_config_no_rewrite
+
+install_result:
+Err(
+    JsonInvalid {
+        path: "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+        source: Error("key must be a string", line: 1, column: 3),
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Drifted {
+            issues: [
+                InvalidConfig {
+                    path: "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+                    reason: "key must be a string at line 1 column 3",
+                },
+            ],
+        },
+        config_path: Some(
+            "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+        ),
+        ledger_path: Some(
+            "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Invalid {
+                path: "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+                reason: "key must be a string at line 1 column 3",
+            },
+            Missing {
+                path: "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "cline",
+            scope: Global,
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            MalformedConfig {
+                path: "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+                reason: "key must be a string at line 1 column 3",
+            },
+        ],
+        suggested_actions: [
+            ManualReview,
+        ],
+    },
+)
+invalid_preserved: true
+
+ROOT tree:
+<empty>
+
+HOME tree:
+directories:
+- Library
+- Library/Application Support
+- Library/Application Support/Code
+- Library/Application Support/Code/User
+- Library/Application Support/Code/User/globalStorage
+- Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev
+- Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings
+files:
+- Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json
+  content:
+```text
+{ invalid json
+```

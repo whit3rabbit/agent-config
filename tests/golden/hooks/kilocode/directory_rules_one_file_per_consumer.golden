@@ -1,0 +1,72 @@
+surface: hooks
+agent: kilocode
+scenario: directory_rules_one_file_per_consumer
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/.kilocode/rules/golden-hook.md",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: InstalledOwned {
+            owner: "golden-hook",
+        },
+        config_path: Some(
+            "[ROOT]/.kilocode/rules/golden-hook.md",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/.kilocode/rules/golden-hook.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "kilocode",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .kilocode
+- .kilocode/rules
+files:
+- .kilocode/rules/golden-hook.md
+  content:
+```text
+Use golden hook rules.
+```
+- .kilocode/rules/sibling-hook.md
+  content:
+```text
+Use sibling hook rules.
+```
+
+HOME tree:
+<empty>

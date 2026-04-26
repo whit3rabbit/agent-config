@@ -1,0 +1,97 @@
+surface: mcp
+agent: opencode
+scenario: stdio_transport_with_env
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/opencode.json",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/opencode.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/opencode.json",
+            },
+            Exists {
+                path: "[ROOT]/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "opencode",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+files:
+- .ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- opencode.json
+  content:
+```text
+{
+  "mcp": {
+    "golden-server": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@example/server"
+      ],
+      "environment": {
+        "API_TOKEN": "golden-token",
+        "CACHE_DIR": "/tmp/golden-cache"
+      }
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

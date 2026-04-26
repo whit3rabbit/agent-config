@@ -1,0 +1,87 @@
+surface: mcp
+agent: codex
+scenario: sse_transport
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/.codex/config.toml",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/.codex/config.toml",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.codex/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.codex/config.toml",
+            },
+            Exists {
+                path: "[ROOT]/.codex/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "codex",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .codex
+files:
+- .codex/.ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- .codex/config.toml
+  content:
+```text
+[mcp_servers.golden-server]
+type = "sse"
+url = "https://example.test/sse"
+headers = { X-Golden = "true" }
+```
+
+HOME tree:
+<empty>

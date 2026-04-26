@@ -1,0 +1,82 @@
+surface: mcp
+agent: antigravity
+scenario: existing_user_installed_same_name_no_ledger
+
+install_result:
+Err(
+    NotOwnedByCaller {
+        kind: "mcp server",
+        name: "golden-server",
+        expected: "golden-owner",
+        actual: None,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: PresentUnowned,
+        config_path: Some(
+            "[ROOT]/.agent/mcp_config.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.agent/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.agent/mcp_config.json",
+            },
+            Missing {
+                path: "[ROOT]/.agent/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "antigravity",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            ConfigOnly {
+                path: "[ROOT]/.agent/mcp_config.json",
+            },
+        ],
+        suggested_actions: [
+            RemoveConfigEntry,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .agent
+files:
+- .agent/mcp_config.json
+  content:
+```text
+{
+  "mcpServers": {
+    "golden-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

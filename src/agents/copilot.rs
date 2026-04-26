@@ -34,7 +34,7 @@ use crate::plan::{has_refusal, InstallPlan, PlanTarget, RefusalReason, Uninstall
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{fs_atomic, mcp_json_map, md_block, ownership, planning, skills_dir};
+use crate::util::{file_lock, fs_atomic, mcp_json_map, md_block, ownership, planning, skills_dir};
 
 /// GitHub Copilot.
 pub struct CopilotAgent;
@@ -221,19 +221,22 @@ impl Integration for CopilotAgent {
 
         if let Some(rules) = &spec.rules {
             let instr = Self::instructions_path(scope)?;
-            let host = fs_atomic::read_to_string_or_empty(&instr)?;
-            let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
-            let outcome = fs_atomic::write_atomic(&instr, new_host.as_bytes(), true)?;
-            if outcome.existed && !outcome.no_change {
-                report.patched.push(outcome.path.clone());
-                report.already_installed = false;
-            } else if !outcome.existed {
-                report.created.push(outcome.path.clone());
-                report.already_installed = false;
-            }
-            if let Some(b) = outcome.backup {
-                report.backed_up.push(b);
-            }
+            file_lock::with_lock(&instr, || {
+                let host = fs_atomic::read_to_string_or_empty(&instr)?;
+                let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
+                let outcome = fs_atomic::write_atomic(&instr, new_host.as_bytes(), true)?;
+                if outcome.existed && !outcome.no_change {
+                    report.patched.push(outcome.path.clone());
+                    report.already_installed = false;
+                } else if !outcome.existed {
+                    report.created.push(outcome.path.clone());
+                    report.already_installed = false;
+                }
+                if let Some(b) = outcome.backup {
+                    report.backed_up.push(b);
+                }
+                Ok::<(), HookerError>(())
+            })?;
         }
 
         Ok(report)
@@ -260,21 +263,24 @@ impl Integration for CopilotAgent {
         }
 
         let instr = Self::instructions_path(scope)?;
-        let host = fs_atomic::read_to_string_or_empty(&instr)?;
-        let (stripped, removed) = md_block::remove(&host, tag);
-        if removed {
-            if stripped.trim().is_empty() {
-                if fs_atomic::restore_backup(&instr)? {
-                    report.restored.push(instr.clone());
+        file_lock::with_lock(&instr, || {
+            let host = fs_atomic::read_to_string_or_empty(&instr)?;
+            let (stripped, removed) = md_block::remove(&host, tag);
+            if removed {
+                if stripped.trim().is_empty() {
+                    if fs_atomic::restore_backup(&instr)? {
+                        report.restored.push(instr.clone());
+                    } else {
+                        fs_atomic::remove_if_exists(&instr)?;
+                        report.removed.push(instr.clone());
+                    }
                 } else {
-                    fs_atomic::remove_if_exists(&instr)?;
-                    report.removed.push(instr.clone());
+                    fs_atomic::write_atomic(&instr, stripped.as_bytes(), false)?;
+                    report.patched.push(instr.clone());
                 }
-            } else {
-                fs_atomic::write_atomic(&instr, stripped.as_bytes(), false)?;
-                report.patched.push(instr.clone());
             }
-        }
+            Ok::<(), HookerError>(())
+        })?;
 
         if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
             report.not_installed = true;

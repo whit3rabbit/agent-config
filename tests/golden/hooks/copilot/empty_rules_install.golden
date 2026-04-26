@@ -1,0 +1,86 @@
+surface: hooks
+agent: copilot
+scenario: empty_rules_install
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/.github/hooks/golden-hook-rewrite.json",
+            "[ROOT]/.github/copilot-instructions.md",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: InstalledOwned {
+            owner: "golden-hook",
+        },
+        config_path: Some(
+            "[ROOT]/.github/hooks/golden-hook-rewrite.json",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/.github/hooks/golden-hook-rewrite.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "copilot",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .github
+- .github/hooks
+files:
+- .github/copilot-instructions.md
+  content:
+```text
+<!-- BEGIN AI-HOOKER:golden-hook -->
+Use golden hook rules.
+<!-- END AI-HOOKER:golden-hook -->
+```
+- .github/hooks/golden-hook-rewrite.json
+  content:
+```text
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "golden hook",
+        "matcher": "Shell"
+      }
+    ]
+  }
+}
+```
+
+HOME tree:
+<empty>

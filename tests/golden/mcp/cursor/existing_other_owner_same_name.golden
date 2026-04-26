@@ -1,0 +1,104 @@
+surface: mcp
+agent: cursor
+scenario: existing_other_owner_same_name
+
+install_result:
+Err(
+    NotOwnedByCaller {
+        kind: "mcp server",
+        name: "golden-server",
+        expected: "golden-owner",
+        actual: Some(
+            "other-owner",
+        ),
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOtherOwner {
+            owner: "other-owner",
+        },
+        config_path: Some(
+            "[ROOT]/.cursor/mcp.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.cursor/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.cursor/mcp.json",
+            },
+            Exists {
+                path: "[ROOT]/.cursor/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "cursor",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            OwnerMismatch {
+                expected: "golden-owner",
+                actual: Some(
+                    "other-owner",
+                ),
+                path: Some(
+                    "[ROOT]/.cursor/.ai-hooker-mcp.json",
+                ),
+            },
+        ],
+        suggested_actions: [
+            UninstallWithOwner,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .cursor
+files:
+- .cursor/.ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "owner": "other-owner"
+    }
+  },
+  "version": 1
+}
+```
+- .cursor/mcp.json
+  content:
+```text
+{
+  "mcpServers": {
+    "golden-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

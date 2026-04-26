@@ -1,0 +1,77 @@
+surface: hooks
+agent: cursor
+scenario: empty_rules_install
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/.cursor/hooks.json",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: InstalledOwned {
+            owner: "golden-hook",
+        },
+        config_path: Some(
+            "[ROOT]/.cursor/hooks.json",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/.cursor/hooks.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "cursor",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .cursor
+files:
+- .cursor/hooks.json
+  content:
+```text
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": "golden hook",
+        "matcher": "Shell",
+        "_ai_hooker_tag": "golden-hook"
+      }
+    ]
+  }
+}
+```
+
+HOME tree:
+<empty>

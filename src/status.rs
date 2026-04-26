@@ -13,6 +13,9 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::error::HookerError;
+use crate::util::{fs_atomic, md_block};
+
 /// What kind of install the [`StatusReport`] describes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -77,7 +80,7 @@ pub enum InstallStatus {
     },
     /// State could not be determined (e.g., a probe encountered a soft I/O
     /// failure). Reserved for non-fatal cases. Hard errors propagate as
-    /// [`HookerError`](crate::HookerError) instead.
+    /// [`HookerError`] instead.
     Unknown,
 }
 
@@ -411,6 +414,62 @@ impl StatusReport {
             files,
             warnings,
         }
+    }
+
+    /// Build a report for a prompt-rule hook stored as an AI-HOOKER fenced
+    /// markdown block inside a shared file.
+    pub(crate) fn for_markdown_block_hook(
+        tag: &str,
+        file_path: PathBuf,
+    ) -> Result<Self, HookerError> {
+        let target = PlanTarget::Hook {
+            tag: tag.to_string(),
+        };
+        let exists = file_path.exists();
+        let mut files = Vec::new();
+        let mut warnings = Vec::new();
+
+        let status = if exists {
+            let host = fs_atomic::read_to_string_or_empty(&file_path)?;
+            if md_block::malformed(&host, tag) {
+                files.push(PathStatus::Invalid {
+                    path: file_path.clone(),
+                    reason: "malformed ai-hooker markdown fence".into(),
+                });
+                InstallStatus::Drifted {
+                    issues: vec![DriftIssue::MalformedConfig {
+                        path: file_path.clone(),
+                        reason: "malformed ai-hooker markdown fence".into(),
+                    }],
+                }
+            } else {
+                files.push(PathStatus::Exists {
+                    path: file_path.clone(),
+                });
+                if md_block::contains(&host, tag) {
+                    InstallStatus::InstalledOwned {
+                        owner: tag.to_string(),
+                    }
+                } else {
+                    InstallStatus::Absent
+                }
+            }
+        } else {
+            files.push(PathStatus::Missing {
+                path: file_path.clone(),
+            });
+            check_backup(&file_path, &mut warnings);
+            InstallStatus::Absent
+        };
+
+        Ok(Self {
+            target,
+            status,
+            config_path: Some(file_path),
+            ledger_path: None,
+            files,
+            warnings,
+        })
     }
 
     /// Build a report for a skill. The skill is "present in config" when its

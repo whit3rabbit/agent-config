@@ -2,7 +2,10 @@
 //!
 //! The lock is advisory but works across threads and processes that use this
 //! crate. It is deliberately simple: create a sibling lock file with
-//! `create_new`, retry until a short timeout, and remove it on drop.
+//! `create_new`, retry until a short timeout, and remove it on drop. If a
+//! process crashes while holding the lock, the timeout error includes the lock
+//! path so a user can delete it after confirming no ai-hooker process is
+//! running.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::Write as _;

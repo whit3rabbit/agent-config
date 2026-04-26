@@ -1,0 +1,80 @@
+surface: skills
+agent: copilot
+scenario: refuse_user_installed_skill_directory
+
+install_result:
+Err(
+    NotOwnedByCaller {
+        kind: "skill",
+        name: "golden-skill",
+        expected: "golden-owner",
+        actual: None,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Skill {
+            name: "golden-skill",
+        },
+        status: PresentUnowned,
+        config_path: Some(
+            "[ROOT]/.github/skills/golden-skill",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.github/skills/.ai-hooker-skills.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.github/skills/golden-skill",
+            },
+            Exists {
+                path: "[ROOT]/.github/skills/golden-skill/SKILL.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Skill {
+            integration_id: "copilot",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-skill",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            ConfigOnly {
+                path: "[ROOT]/.github/skills/golden-skill",
+            },
+        ],
+        suggested_actions: [
+            RemoveConfigEntry,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .github
+- .github/skills
+- .github/skills/golden-skill
+files:
+- .github/skills/golden-skill/SKILL.md
+  content:
+```text
+---
+name: golden-skill
+description: Use during golden snapshot tests.
+---
+
+## Goal
+Preserve the config shape.
+```
+
+HOME tree:
+<empty>

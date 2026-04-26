@@ -1,0 +1,116 @@
+surface: skills
+agent: opencode
+scenario: skill_with_scripts_references_assets
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/.opencode/skills/golden-skill/SKILL.md",
+            "[ROOT]/.opencode/skills/golden-skill/scripts/run.sh",
+            "[ROOT]/.opencode/skills/golden-skill/references/notes.md",
+            "[ROOT]/.opencode/skills/golden-skill/assets/sample.txt",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Skill {
+            name: "golden-skill",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/.opencode/skills/golden-skill",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.opencode/skills/.ai-hooker-skills.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.opencode/skills/golden-skill",
+            },
+            Exists {
+                path: "[ROOT]/.opencode/skills/golden-skill/SKILL.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Skill {
+            integration_id: "opencode",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-skill",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .opencode
+- .opencode/skills
+- .opencode/skills/golden-skill
+- .opencode/skills/golden-skill/assets
+- .opencode/skills/golden-skill/references
+- .opencode/skills/golden-skill/scripts
+files:
+- .opencode/skills/.ai-hooker-skills.json
+  content:
+```text
+{
+  "entries": {
+    "golden-skill": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- .opencode/skills/golden-skill/SKILL.md
+  content:
+```text
+---
+name: golden-skill
+description: Use during golden snapshot tests with assets.
+---
+
+## Goal
+Preserve the full skill directory.
+```
+- .opencode/skills/golden-skill/assets/sample.txt
+  content:
+```text
+asset payload
+```
+- .opencode/skills/golden-skill/references/notes.md
+  content:
+```text
+# Notes
+Keep this reference.
+```
+- .opencode/skills/golden-skill/scripts/run.sh
+  mode: 755
+  content:
+```text
+#!/bin/sh
+echo golden
+```
+
+HOME tree:
+<empty>

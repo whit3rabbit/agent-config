@@ -35,7 +35,7 @@ use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
 use crate::status::StatusReport;
 use crate::util::{
-    fs_atomic, json_patch, mcp_json_object, md_block, ownership, planning, skills_dir,
+    file_lock, fs_atomic, json_patch, mcp_json_object, md_block, ownership, planning, skills_dir,
 };
 
 /// Gemini CLI (Google's official Gemini code agent).
@@ -171,55 +171,61 @@ impl Integration for GeminiAgent {
         let mut report = InstallReport::default();
 
         let p = Self::settings_path(scope)?;
-        let mut root = json_patch::read_or_empty(&p)?;
+        file_lock::with_lock(&p, || {
+            let mut root = json_patch::read_or_empty(&p)?;
 
-        let event_key = event_to_string(&spec.event);
-        let matcher_str = matcher_to_gemini(&spec.matcher);
+            let event_key = event_to_string(&spec.event);
+            let matcher_str = matcher_to_gemini(&spec.matcher);
 
-        let entry = json!({
-            "matcher": matcher_str,
-            "hooks": [
-                { "type": "command", "command": spec.command }
-            ],
-        });
+            let entry = json!({
+                "matcher": matcher_str,
+                "hooks": [
+                    { "type": "command", "command": spec.command }
+                ],
+            });
 
-        let changed = json_patch::upsert_tagged_array_entry(
-            &mut root,
-            &["hooks", &event_key],
-            &spec.tag,
-            entry,
-        )?;
+            let changed = json_patch::upsert_tagged_array_entry(
+                &mut root,
+                &["hooks", &event_key],
+                &spec.tag,
+                entry,
+            )?;
 
-        if changed {
-            let bytes = json_patch::to_pretty(&root);
-            let outcome = fs_atomic::write_atomic(&p, &bytes, true)?;
-            if outcome.existed {
-                report.patched.push(outcome.path.clone());
+            if changed {
+                let bytes = json_patch::to_pretty(&root);
+                let outcome = fs_atomic::write_atomic(&p, &bytes, true)?;
+                if outcome.existed {
+                    report.patched.push(outcome.path.clone());
+                } else {
+                    report.created.push(outcome.path.clone());
+                }
+                if let Some(b) = outcome.backup {
+                    report.backed_up.push(b);
+                }
             } else {
-                report.created.push(outcome.path.clone());
+                report.already_installed = true;
             }
-            if let Some(b) = outcome.backup {
-                report.backed_up.push(b);
-            }
-        } else {
-            report.already_installed = true;
-        }
+            Ok::<(), HookerError>(())
+        })?;
 
         if let Some(rules) = &spec.rules {
             let memory = Self::memory_path(scope)?;
-            let host = fs_atomic::read_to_string_or_empty(&memory)?;
-            let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
-            let outcome = fs_atomic::write_atomic(&memory, new_host.as_bytes(), true)?;
-            if outcome.existed && !outcome.no_change {
-                report.patched.push(outcome.path.clone());
-                report.already_installed = false;
-            } else if !outcome.existed {
-                report.created.push(outcome.path.clone());
-                report.already_installed = false;
-            }
-            if let Some(b) = outcome.backup {
-                report.backed_up.push(b);
-            }
+            file_lock::with_lock(&memory, || {
+                let host = fs_atomic::read_to_string_or_empty(&memory)?;
+                let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
+                let outcome = fs_atomic::write_atomic(&memory, new_host.as_bytes(), true)?;
+                if outcome.existed && !outcome.no_change {
+                    report.patched.push(outcome.path.clone());
+                    report.already_installed = false;
+                } else if !outcome.existed {
+                    report.created.push(outcome.path.clone());
+                    report.already_installed = false;
+                }
+                if let Some(b) = outcome.backup {
+                    report.backed_up.push(b);
+                }
+                Ok::<(), HookerError>(())
+            })?;
         }
 
         Ok(report)
@@ -231,40 +237,46 @@ impl Integration for GeminiAgent {
 
         let p = Self::settings_path(scope)?;
         if p.exists() {
-            let mut root = json_patch::read_or_empty(&p)?;
-            let changed =
-                json_patch::remove_tagged_array_entries_under(&mut root, &["hooks"], tag)?;
-            if changed {
-                let empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
-                if empty && fs_atomic::restore_backup(&p)? {
-                    report.restored.push(p.clone());
-                } else if empty {
-                    fs_atomic::remove_if_exists(&p)?;
-                    report.removed.push(p.clone());
-                } else {
-                    let bytes = json_patch::to_pretty(&root);
-                    fs_atomic::write_atomic(&p, &bytes, false)?;
-                    report.patched.push(p.clone());
+            file_lock::with_lock(&p, || {
+                let mut root = json_patch::read_or_empty(&p)?;
+                let changed =
+                    json_patch::remove_tagged_array_entries_under(&mut root, &["hooks"], tag)?;
+                if changed {
+                    let empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
+                    if empty && fs_atomic::restore_backup(&p)? {
+                        report.restored.push(p.clone());
+                    } else if empty {
+                        fs_atomic::remove_if_exists(&p)?;
+                        report.removed.push(p.clone());
+                    } else {
+                        let bytes = json_patch::to_pretty(&root);
+                        fs_atomic::write_atomic(&p, &bytes, false)?;
+                        report.patched.push(p.clone());
+                    }
                 }
-            }
+                Ok::<(), HookerError>(())
+            })?;
         }
 
         let memory = Self::memory_path(scope)?;
-        let host = fs_atomic::read_to_string_or_empty(&memory)?;
-        let (stripped, removed) = md_block::remove(&host, tag);
-        if removed {
-            if stripped.trim().is_empty() {
-                if fs_atomic::restore_backup(&memory)? {
-                    report.restored.push(memory.clone());
+        file_lock::with_lock(&memory, || {
+            let host = fs_atomic::read_to_string_or_empty(&memory)?;
+            let (stripped, removed) = md_block::remove(&host, tag);
+            if removed {
+                if stripped.trim().is_empty() {
+                    if fs_atomic::restore_backup(&memory)? {
+                        report.restored.push(memory.clone());
+                    } else {
+                        fs_atomic::remove_if_exists(&memory)?;
+                        report.removed.push(memory.clone());
+                    }
                 } else {
-                    fs_atomic::remove_if_exists(&memory)?;
-                    report.removed.push(memory.clone());
+                    fs_atomic::write_atomic(&memory, stripped.as_bytes(), false)?;
+                    report.patched.push(memory.clone());
                 }
-            } else {
-                fs_atomic::write_atomic(&memory, stripped.as_bytes(), false)?;
-                report.patched.push(memory.clone());
             }
-        }
+            Ok::<(), HookerError>(())
+        })?;
 
         if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
             report.not_installed = true;

@@ -1,0 +1,64 @@
+surface: mcp
+agent: gemini
+scenario: uninstall_only_managed_entry
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [
+            "[ROOT]/.gemini/settings.json",
+        ],
+        patched: [],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.gemini/settings.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.gemini/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Missing {
+                path: "[ROOT]/.gemini/settings.json",
+            },
+            Missing {
+                path: "[ROOT]/.gemini/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "gemini",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .gemini
+
+HOME tree:
+<empty>

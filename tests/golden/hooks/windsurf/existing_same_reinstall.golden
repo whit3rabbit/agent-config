@@ -1,0 +1,68 @@
+surface: hooks
+agent: windsurf
+scenario: existing_same_reinstall
+
+install_result:
+Ok(
+    InstallReport {
+        created: [],
+        patched: [],
+        backed_up: [],
+        already_installed: true,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: InstalledOwned {
+            owner: "golden-hook",
+        },
+        config_path: Some(
+            "[ROOT]/.windsurf/hooks.json",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/.windsurf/rules/golden-hook.md",
+            },
+            Missing {
+                path: "[ROOT]/.windsurf/hooks.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "windsurf",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .windsurf
+- .windsurf/rules
+files:
+- .windsurf/rules/golden-hook.md
+  content:
+```text
+Use golden hook rules.
+```
+
+HOME tree:
+<empty>

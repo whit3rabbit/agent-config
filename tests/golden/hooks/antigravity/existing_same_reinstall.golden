@@ -1,0 +1,65 @@
+surface: hooks
+agent: antigravity
+scenario: existing_same_reinstall
+
+install_result:
+Ok(
+    InstallReport {
+        created: [],
+        patched: [],
+        backed_up: [],
+        already_installed: true,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: InstalledOwned {
+            owner: "golden-hook",
+        },
+        config_path: Some(
+            "[ROOT]/.agent/rules/golden-hook.md",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/.agent/rules/golden-hook.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "antigravity",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .agent
+- .agent/rules
+files:
+- .agent/rules/golden-hook.md
+  content:
+```text
+Use golden hook rules.
+```
+
+HOME tree:
+<empty>

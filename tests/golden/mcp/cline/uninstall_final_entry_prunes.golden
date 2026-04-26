@@ -1,0 +1,66 @@
+surface: mcp
+agent: cline
+scenario: uninstall_final_entry_prunes
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [],
+        patched: [],
+        restored: [],
+        not_installed: true,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Absent,
+        config_path: Some(
+            "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+        ),
+        ledger_path: Some(
+            "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Missing {
+                path: "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+            },
+            Missing {
+                path: "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "cline",
+            scope: Global,
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+<empty>
+
+HOME tree:
+directories:
+- Library
+- Library/Application Support
+- Library/Application Support/Code
+- Library/Application Support/Code/User
+- Library/Application Support/Code/User/globalStorage
+- Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev
+- Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings

@@ -1,0 +1,66 @@
+surface: hooks
+agent: cline
+scenario: existing_same_reinstall
+
+install_result:
+Ok(
+    InstallReport {
+        created: [],
+        patched: [],
+        backed_up: [],
+        already_installed: true,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: InstalledOwned {
+            owner: "golden-hook",
+        },
+        config_path: Some(
+            "[ROOT]/.clinerules/golden-hook.md",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.clinerules/hooks/.ai-hooker-hooks.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.clinerules/golden-hook.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "cline",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .clinerules
+files:
+- .clinerules/golden-hook.md
+  content:
+```text
+Use golden hook rules.
+```
+
+HOME tree:
+<empty>

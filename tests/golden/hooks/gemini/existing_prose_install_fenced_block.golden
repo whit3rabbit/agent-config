@@ -1,0 +1,99 @@
+surface: hooks
+agent: gemini
+scenario: existing_prose_install_fenced_block
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/.gemini/settings.json",
+        ],
+        patched: [
+            "[ROOT]/GEMINI.md",
+        ],
+        backed_up: [
+            "[ROOT]/GEMINI.md.bak",
+        ],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: InstalledOwned {
+            owner: "golden-hook",
+        },
+        config_path: Some(
+            "[ROOT]/.gemini/settings.json",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/.gemini/settings.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "gemini",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .gemini
+files:
+- .gemini/settings.json
+  content:
+```text
+{
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": "run_shell_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook"
+          }
+        ],
+        "_ai_hooker_tag": "golden-hook"
+      }
+    ]
+  }
+}
+```
+- GEMINI.md
+  content:
+```text
+Existing project guidance.
+
+<!-- BEGIN AI-HOOKER:golden-hook -->
+Use golden hook rules.
+<!-- END AI-HOOKER:golden-hook -->
+```
+- GEMINI.md.bak
+  content:
+```text
+Existing project guidance.
+```
+
+HOME tree:
+<empty>

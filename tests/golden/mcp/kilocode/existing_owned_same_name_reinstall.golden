@@ -1,0 +1,91 @@
+surface: mcp
+agent: kilocode
+scenario: existing_owned_same_name_reinstall
+
+install_result:
+Ok(
+    InstallReport {
+        created: [],
+        patched: [],
+        backed_up: [],
+        already_installed: true,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/kilo.jsonc",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/kilo.jsonc",
+            },
+            Exists {
+                path: "[ROOT]/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "kilocode",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+files:
+- .ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- kilo.jsonc
+  content:
+```text
+{
+  "mcp": {
+    "golden-server": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

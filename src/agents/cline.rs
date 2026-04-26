@@ -33,7 +33,9 @@ use crate::plan::{
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, McpSpec, ScriptTemplate, SkillSpec};
 use crate::status::{InstallStatus, PathStatus, PlanTarget, StatusReport, StatusWarning};
-use crate::util::{fs_atomic, mcp_json_object, ownership, planning, rules_dir, skills_dir};
+use crate::util::{
+    file_lock, fs_atomic, mcp_json_object, ownership, planning, rules_dir, skills_dir,
+};
 
 const RULES_DIR: &str = ".clinerules";
 const HOOKS_SUBDIR: &str = "hooks";
@@ -330,47 +332,51 @@ impl Integration for ClineAgent {
         }
 
         if spec.script.is_some() || spec.rules.is_none() {
-            let body = match &spec.script {
-                Some(ScriptTemplate::Shell(s)) => {
-                    fs_atomic::ensure_trailing_newline(&prefix_shebang(s))
-                }
-                Some(ScriptTemplate::TypeScript(_)) => {
-                    return Err(HookerError::MissingSpecField {
-                        id: "cline",
-                        field: "script (Shell — TypeScript not supported)",
-                    });
-                }
-                None => default_hook_body(&spec.command),
-            };
+            let hooks_dir = self.hooks_dir(scope)?;
+            file_lock::with_lock(&hooks_dir, || {
+                let body = match &spec.script {
+                    Some(ScriptTemplate::Shell(s)) => {
+                        fs_atomic::ensure_trailing_newline(&prefix_shebang(s))
+                    }
+                    Some(ScriptTemplate::TypeScript(_)) => {
+                        return Err(HookerError::MissingSpecField {
+                            id: "cline",
+                            field: "script (Shell — TypeScript not supported)",
+                        });
+                    }
+                    None => default_hook_body(&spec.command),
+                };
 
-            let event_filename = event_to_filename(&spec.event);
-            let path = self.hook_path(scope, &spec.event)?;
-            let ledger = self.ledger_path(scope)?;
+                let event_filename = event_to_filename(&spec.event);
+                let path = hooks_dir.join(&event_filename);
+                let ledger = hooks_dir.join(".ai-hooker-hooks.json");
 
-            // Refuse to overwrite a hook owned by a different consumer.
-            ownership::require_owner(&ledger, &event_filename, &spec.tag, KIND, path.exists())?;
+                // Refuse to overwrite a hook owned by a different consumer.
+                ownership::require_owner(&ledger, &event_filename, &spec.tag, KIND, path.exists())?;
 
-            let outcome = fs_atomic::write_atomic(&path, body.as_bytes(), false)?;
-            #[cfg(unix)]
-            fs_atomic::chmod(&path, 0o755)?;
-            if !outcome.no_change {
-                if outcome.existed {
-                    report.patched.push(outcome.path.clone());
-                } else {
-                    report.created.push(outcome.path.clone());
-                }
-                ownership::record_install(&ledger, &event_filename, &spec.tag)?;
-                report.already_installed = false;
-            } else {
-                // Content unchanged but make sure ledger reflects current owner.
-                let prior = ownership::owner_of(&ledger, &event_filename)?;
-                if prior.as_deref() != Some(spec.tag.as_str()) {
+                let outcome = fs_atomic::write_atomic(&path, body.as_bytes(), false)?;
+                #[cfg(unix)]
+                fs_atomic::chmod(&path, 0o755)?;
+                if !outcome.no_change {
+                    if outcome.existed {
+                        report.patched.push(outcome.path.clone());
+                    } else {
+                        report.created.push(outcome.path.clone());
+                    }
                     ownership::record_install(&ledger, &event_filename, &spec.tag)?;
                     report.already_installed = false;
-                } else if report.created.is_empty() && report.patched.is_empty() {
-                    report.already_installed = true;
+                } else {
+                    // Content unchanged but make sure ledger reflects current owner.
+                    let prior = ownership::owner_of(&ledger, &event_filename)?;
+                    if prior.as_deref() != Some(spec.tag.as_str()) {
+                        ownership::record_install(&ledger, &event_filename, &spec.tag)?;
+                        report.already_installed = false;
+                    } else if report.created.is_empty() && report.patched.is_empty() {
+                        report.already_installed = true;
+                    }
                 }
-            }
+                Ok::<(), HookerError>(())
+            })?;
         }
         Ok(report)
     }
@@ -384,31 +390,35 @@ impl Integration for ClineAgent {
         report.merge(r);
 
         // Any hook scripts owned by this tag.
-        let ledger = self.ledger_path(scope)?;
-        if ledger.exists() {
-            let v = crate::util::json_patch::read_or_empty(&ledger)?;
-            let owned: Vec<String> = v
-                .get("entries")
-                .and_then(|e| e.as_object())
-                .map(|m| {
-                    m.iter()
-                        .filter(|(_, entry)| {
-                            entry.get("owner").and_then(|o| o.as_str()) == Some(tag)
-                        })
-                        .map(|(k, _)| k.clone())
-                        .collect()
-                })
-                .unwrap_or_default();
+        let hooks_dir = self.hooks_dir(scope)?;
+        file_lock::with_lock(&hooks_dir, || {
+            let ledger = hooks_dir.join(".ai-hooker-hooks.json");
+            if ledger.exists() {
+                let v = crate::util::json_patch::read_or_empty(&ledger)?;
+                let owned: Vec<String> = v
+                    .get("entries")
+                    .and_then(|e| e.as_object())
+                    .map(|m| {
+                        m.iter()
+                            .filter(|(_, entry)| {
+                                entry.get("owner").and_then(|o| o.as_str()) == Some(tag)
+                            })
+                            .map(|(k, _)| k.clone())
+                            .collect()
+                    })
+                    .unwrap_or_default();
 
-            for filename in owned {
-                let path = self.hooks_dir(scope)?.join(&filename);
-                if path.exists() {
-                    fs_atomic::remove_if_exists(&path)?;
-                    report.removed.push(path);
+                for filename in owned {
+                    let path = hooks_dir.join(&filename);
+                    if path.exists() {
+                        fs_atomic::remove_if_exists(&path)?;
+                        report.removed.push(path);
+                    }
+                    ownership::record_uninstall(&ledger, &filename)?;
                 }
-                ownership::record_uninstall(&ledger, &filename)?;
             }
-        }
+            Ok::<(), HookerError>(())
+        })?;
 
         // Tidy: prune empty hooks/ then .clinerules/ in case the rules path
         // already pruned them.

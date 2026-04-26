@@ -26,7 +26,9 @@ use crate::plan::{InstallPlan, PlanTarget, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{fs_atomic, json_patch, mcp_json_object, ownership, planning, skills_dir};
+use crate::util::{
+    file_lock, fs_atomic, json_patch, mcp_json_object, ownership, planning, skills_dir,
+};
 
 /// Cursor (the AI editor and CLI).
 pub struct CursorAgent;
@@ -142,44 +144,47 @@ impl Integration for CursorAgent {
         let mut report = InstallReport::default();
 
         let p = Self::hooks_path(scope)?;
-        let mut root = json_patch::read_or_empty(&p)?;
+        file_lock::with_lock(&p, || {
+            let mut root = json_patch::read_or_empty(&p)?;
 
-        // Cursor requires top-level version: 1.
-        if root.get("version").is_none() {
-            if let Some(obj) = root.as_object_mut() {
-                obj.insert("version".into(), json!(1));
+            // Cursor requires top-level version: 1.
+            if root.get("version").is_none() {
+                if let Some(obj) = root.as_object_mut() {
+                    obj.insert("version".into(), json!(1));
+                }
             }
-        }
 
-        let event_key = event_to_string(&spec.event);
-        let matcher_str = matcher_to_cursor(&spec.matcher);
+            let event_key = event_to_string(&spec.event);
+            let matcher_str = matcher_to_cursor(&spec.matcher);
 
-        let entry = json!({
-            "command": spec.command,
-            "matcher": matcher_str,
-        });
+            let entry = json!({
+                "command": spec.command,
+                "matcher": matcher_str,
+            });
 
-        let changed = json_patch::upsert_tagged_array_entry(
-            &mut root,
-            &["hooks", &event_key],
-            &spec.tag,
-            entry,
-        )?;
+            let changed = json_patch::upsert_tagged_array_entry(
+                &mut root,
+                &["hooks", &event_key],
+                &spec.tag,
+                entry,
+            )?;
 
-        if changed {
-            let bytes = json_patch::to_pretty(&root);
-            let outcome = fs_atomic::write_atomic(&p, &bytes, true)?;
-            if outcome.existed {
-                report.patched.push(outcome.path.clone());
+            if changed {
+                let bytes = json_patch::to_pretty(&root);
+                let outcome = fs_atomic::write_atomic(&p, &bytes, true)?;
+                if outcome.existed {
+                    report.patched.push(outcome.path.clone());
+                } else {
+                    report.created.push(outcome.path.clone());
+                }
+                if let Some(b) = outcome.backup {
+                    report.backed_up.push(b);
+                }
             } else {
-                report.created.push(outcome.path.clone());
+                report.already_installed = true;
             }
-            if let Some(b) = outcome.backup {
-                report.backed_up.push(b);
-            }
-        } else {
-            report.already_installed = true;
-        }
+            Ok::<(), HookerError>(())
+        })?;
 
         Ok(report)
     }
@@ -189,30 +194,37 @@ impl Integration for CursorAgent {
         let mut report = UninstallReport::default();
 
         let p = Self::hooks_path(scope)?;
-        if !p.exists() {
-            report.not_installed = true;
-            return Ok(report);
-        }
+        if p.exists() {
+            file_lock::with_lock(&p, || {
+                let mut root = json_patch::read_or_empty(&p)?;
+                let changed =
+                    json_patch::remove_tagged_array_entries_under(&mut root, &["hooks"], tag)?;
 
-        let mut root = json_patch::read_or_empty(&p)?;
-        let changed = json_patch::remove_tagged_array_entries_under(&mut root, &["hooks"], tag)?;
+                if !changed {
+                    report.not_installed = true;
+                    return Ok(());
+                }
 
-        if !changed {
-            report.not_installed = true;
-            return Ok(report);
-        }
-
-        if is_effectively_empty(&root) {
-            if fs_atomic::restore_backup(&p)? {
-                report.restored.push(p.clone());
-            } else {
-                fs_atomic::remove_if_exists(&p)?;
-                report.removed.push(p.clone());
-            }
+                if is_effectively_empty(&root) {
+                    if fs_atomic::restore_backup(&p)? {
+                        report.restored.push(p.clone());
+                    } else {
+                        fs_atomic::remove_if_exists(&p)?;
+                        report.removed.push(p.clone());
+                    }
+                } else {
+                    let bytes = json_patch::to_pretty(&root);
+                    fs_atomic::write_atomic(&p, &bytes, false)?;
+                    report.patched.push(p.clone());
+                }
+                Ok::<(), HookerError>(())
+            })?;
         } else {
-            let bytes = json_patch::to_pretty(&root);
-            fs_atomic::write_atomic(&p, &bytes, false)?;
-            report.patched.push(p.clone());
+            report.not_installed = true;
+        }
+
+        if report.removed.is_empty() && report.patched.is_empty() && report.restored.is_empty() {
+            report.not_installed = true;
         }
 
         Ok(report)

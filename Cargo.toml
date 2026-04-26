@@ -2,7 +2,7 @@
 name = "ai-hooker"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.74"
+rust-version = "1.95"
 license = "MIT OR Apache-2.0"
 description = "Install hooks/integrations into AI coding harnesses (Claude Code, Cursor, Gemini CLI, OpenCode, Codex CLI, Cline, Windsurf, ...) without learning each one's filesystem layout."
 repository = "https://github.com/whit3rabbit/ai-hooker"

@@ -1,0 +1,60 @@
+surface: mcp
+agent: hermes
+scenario: uninstall_final_entry_prunes
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [],
+        patched: [],
+        restored: [],
+        not_installed: true,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Absent,
+        config_path: Some(
+            "[HOME]/.hermes/config.yaml",
+        ),
+        ledger_path: Some(
+            "[HOME]/.hermes/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Missing {
+                path: "[HOME]/.hermes/config.yaml",
+            },
+            Missing {
+                path: "[HOME]/.hermes/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "hermes",
+            scope: Global,
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+<empty>
+
+HOME tree:
+directories:
+- .hermes

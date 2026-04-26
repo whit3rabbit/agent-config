@@ -1,0 +1,60 @@
+surface: hooks
+agent: windsurf
+scenario: uninstall_final_block_or_file
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [
+            "[ROOT]/.windsurf/rules/golden-hook.md",
+        ],
+        patched: [],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.windsurf/hooks.json",
+        ),
+        ledger_path: None,
+        files: [
+            Missing {
+                path: "[ROOT]/.windsurf/rules/golden-hook.md",
+            },
+            Missing {
+                path: "[ROOT]/.windsurf/hooks.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "windsurf",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+<empty>
+
+HOME tree:
+<empty>

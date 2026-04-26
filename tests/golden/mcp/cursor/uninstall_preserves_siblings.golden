@@ -1,0 +1,115 @@
+surface: mcp
+agent: cursor
+scenario: uninstall_preserves_siblings
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [],
+        patched: [
+            "[ROOT]/.cursor/mcp.json",
+        ],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.cursor/mcp.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.cursor/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.cursor/mcp.json",
+            },
+            Exists {
+                path: "[ROOT]/.cursor/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [
+            BackupExists {
+                path: "[ROOT]/.cursor/mcp.json.bak",
+            },
+        ],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "cursor",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/.cursor/mcp.json.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .cursor
+files:
+- .cursor/.ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "sibling-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- .cursor/mcp.json
+  content:
+```text
+{
+  "mcpServers": {
+    "sibling-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+- .cursor/mcp.json.bak
+  content:
+```text
+{
+  "mcpServers": {
+    "golden-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

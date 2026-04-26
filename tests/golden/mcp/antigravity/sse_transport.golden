@@ -1,0 +1,94 @@
+surface: mcp
+agent: antigravity
+scenario: sse_transport
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/.agent/mcp_config.json",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/.agent/mcp_config.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.agent/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.agent/mcp_config.json",
+            },
+            Exists {
+                path: "[ROOT]/.agent/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "antigravity",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .agent
+files:
+- .agent/.ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- .agent/mcp_config.json
+  content:
+```text
+{
+  "mcpServers": {
+    "golden-server": {
+      "type": "sse",
+      "url": "https://example.test/sse",
+      "headers": {
+        "X-Golden": "true"
+      }
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

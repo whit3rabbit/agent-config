@@ -1,0 +1,115 @@
+surface: mcp
+agent: opencode
+scenario: uninstall_preserves_siblings
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [],
+        patched: [
+            "[ROOT]/opencode.json",
+        ],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/opencode.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/opencode.json",
+            },
+            Exists {
+                path: "[ROOT]/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [
+            BackupExists {
+                path: "[ROOT]/opencode.json.bak",
+            },
+        ],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "opencode",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/opencode.json.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+files:
+- .ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "sibling-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- opencode.json
+  content:
+```text
+{
+  "mcp": {
+    "sibling-server": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+- opencode.json.bak
+  content:
+```text
+{
+  "mcp": {
+    "golden-server": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

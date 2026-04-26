@@ -1,0 +1,82 @@
+surface: mcp
+agent: openclaw
+scenario: existing_user_installed_same_name_no_ledger
+
+install_result:
+Err(
+    NotOwnedByCaller {
+        kind: "mcp server",
+        name: "golden-server",
+        expected: "golden-owner",
+        actual: None,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: PresentUnowned,
+        config_path: Some(
+            "[HOME]/.openclaw/openclaw.json",
+        ),
+        ledger_path: Some(
+            "[HOME]/.openclaw/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[HOME]/.openclaw/openclaw.json",
+            },
+            Missing {
+                path: "[HOME]/.openclaw/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "openclaw",
+            scope: Global,
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            ConfigOnly {
+                path: "[HOME]/.openclaw/openclaw.json",
+            },
+        ],
+        suggested_actions: [
+            RemoveConfigEntry,
+        ],
+    },
+)
+
+ROOT tree:
+<empty>
+
+HOME tree:
+directories:
+- .openclaw
+files:
+- .openclaw/openclaw.json
+  content:
+```text
+{
+  "mcp": {
+    "servers": {
+      "golden-server": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@example/server"
+        ]
+      }
+    }
+  }
+}
+```

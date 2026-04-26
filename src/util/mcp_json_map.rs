@@ -207,10 +207,7 @@ pub(crate) fn uninstall(
     servers_path: &[&str],
     format: ConfigFormat,
 ) -> Result<UninstallReport, HookerError> {
-    let root = read_or_empty(config_path, format)?;
-    let in_config = json_patch::contains_named(&root, servers_path, name);
-    let in_ledger = ownership::contains(ledger_path, name)?;
-    if !in_config && !in_ledger {
+    if !config_path.exists() && !ledger_path.exists() {
         return Ok(UninstallReport {
             not_installed: true,
             ..UninstallReport::default()

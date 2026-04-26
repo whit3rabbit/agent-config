@@ -1,0 +1,83 @@
+surface: hooks
+agent: hermes
+scenario: different_consumer_preserved
+
+install_result:
+Ok(
+    InstallReport {
+        created: [],
+        patched: [
+            "[ROOT]/.hermes.md",
+        ],
+        backed_up: [
+            "[ROOT]/.hermes.md.bak",
+        ],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: InstalledOwned {
+            owner: "golden-hook",
+        },
+        config_path: Some(
+            "[ROOT]/.hermes.md",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/.hermes.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "hermes",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/.hermes.md.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+files:
+- .hermes.md
+  content:
+```text
+<!-- BEGIN AI-HOOKER:sibling-hook -->
+Use sibling hook rules.
+<!-- END AI-HOOKER:sibling-hook -->
+
+<!-- BEGIN AI-HOOKER:golden-hook -->
+Use golden hook rules.
+<!-- END AI-HOOKER:golden-hook -->
+```
+- .hermes.md.bak
+  content:
+```text
+<!-- BEGIN AI-HOOKER:sibling-hook -->
+Use sibling hook rules.
+<!-- END AI-HOOKER:sibling-hook -->
+```
+
+HOME tree:
+<empty>

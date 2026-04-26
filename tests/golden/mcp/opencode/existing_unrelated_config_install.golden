@@ -1,0 +1,123 @@
+surface: mcp
+agent: opencode
+scenario: existing_unrelated_config_install
+
+install_result:
+Ok(
+    InstallReport {
+        created: [],
+        patched: [
+            "[ROOT]/opencode.json",
+        ],
+        backed_up: [
+            "[ROOT]/opencode.json.bak",
+        ],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/opencode.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/opencode.json",
+            },
+            Exists {
+                path: "[ROOT]/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "opencode",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/opencode.json.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+files:
+- .ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- opencode.json
+  content:
+```text
+{
+  "mcp": {
+    "sibling-server": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@example/server"
+      ]
+    },
+    "golden-server": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+- opencode.json.bak
+  content:
+```text
+{
+  "mcp": {
+    "sibling-server": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

@@ -1,0 +1,71 @@
+surface: hooks
+agent: codex
+scenario: uninstall_fenced_block_preserves_prose
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [
+            "[ROOT]/.codex/hooks.json",
+        ],
+        patched: [
+            "[ROOT]/AGENTS.md",
+        ],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.codex/hooks.json",
+        ),
+        ledger_path: None,
+        files: [
+            Missing {
+                path: "[ROOT]/.codex/hooks.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "codex",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .codex
+files:
+- AGENTS.md
+  content:
+```text
+Existing project guidance.
+```
+- AGENTS.md.bak
+  content:
+```text
+Existing project guidance.
+```
+
+HOME tree:
+<empty>

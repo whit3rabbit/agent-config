@@ -1,0 +1,86 @@
+surface: mcp
+agent: cline
+scenario: existing_user_installed_same_name_no_ledger
+
+install_result:
+Err(
+    NotOwnedByCaller {
+        kind: "mcp server",
+        name: "golden-server",
+        expected: "golden-owner",
+        actual: None,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: PresentUnowned,
+        config_path: Some(
+            "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+        ),
+        ledger_path: Some(
+            "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+            },
+            Missing {
+                path: "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "cline",
+            scope: Global,
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            ConfigOnly {
+                path: "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+            },
+        ],
+        suggested_actions: [
+            RemoveConfigEntry,
+        ],
+    },
+)
+
+ROOT tree:
+<empty>
+
+HOME tree:
+directories:
+- Library
+- Library/Application Support
+- Library/Application Support/Code
+- Library/Application Support/Code/User
+- Library/Application Support/Code/User/globalStorage
+- Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev
+- Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings
+files:
+- Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json
+  content:
+```text
+{
+  "mcpServers": {
+    "golden-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```

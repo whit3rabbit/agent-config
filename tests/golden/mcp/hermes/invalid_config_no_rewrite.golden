@@ -1,0 +1,77 @@
+surface: mcp
+agent: hermes
+scenario: invalid_config_no_rewrite
+
+install_result:
+Err(
+    Other(
+        "invalid YAML in [HOME]/.hermes/config.yaml: did not find expected ',' or ']' at line 2 column 1, while parsing a flow sequence at line 1 column 14",
+    ),
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Drifted {
+            issues: [
+                InvalidConfig {
+                    path: "[HOME]/.hermes/config.yaml",
+                    reason: "invalid YAML in [HOME]/.hermes/config.yaml: did not find expected ',' or ']' at line 2 column 1, while parsing a flow sequence at line 1 column 14",
+                },
+            ],
+        },
+        config_path: Some(
+            "[HOME]/.hermes/config.yaml",
+        ),
+        ledger_path: Some(
+            "[HOME]/.hermes/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Invalid {
+                path: "[HOME]/.hermes/config.yaml",
+                reason: "invalid YAML in [HOME]/.hermes/config.yaml: did not find expected ',' or ']' at line 2 column 1, while parsing a flow sequence at line 1 column 14",
+            },
+            Missing {
+                path: "[HOME]/.hermes/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "hermes",
+            scope: Global,
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            MalformedConfig {
+                path: "[HOME]/.hermes/config.yaml",
+                reason: "invalid YAML in [HOME]/.hermes/config.yaml: did not find expected ',' or ']' at line 2 column 1, while parsing a flow sequence at line 1 column 14",
+            },
+        ],
+        suggested_actions: [
+            ManualReview,
+        ],
+    },
+)
+invalid_preserved: true
+
+ROOT tree:
+<empty>
+
+HOME tree:
+directories:
+- .hermes
+files:
+- .hermes/config.yaml
+  content:
+```text
+mcp_servers: [unterminated
+```

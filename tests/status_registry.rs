@@ -109,6 +109,73 @@ fn hook_status_owned_after_install() {
     }
 }
 
+#[test]
+fn markdown_hook_status_absent_when_file_has_no_matching_block() {
+    let dir = tempfile::tempdir().unwrap();
+    let scope = Scope::Local(dir.path().to_path_buf());
+    std::fs::write(dir.path().join("AGENTS.md"), "# Existing user notes\n").unwrap();
+
+    let report = by_id("openclaw")
+        .unwrap()
+        .status(&scope, "smoketest")
+        .unwrap();
+
+    assert!(
+        matches!(report.status, InstallStatus::Absent),
+        "expected Absent for prose-only AGENTS.md, got {:?}",
+        report.status
+    );
+}
+
+#[test]
+fn markdown_hook_status_absent_when_file_has_other_consumer_block() {
+    let dir = tempfile::tempdir().unwrap();
+    let scope = Scope::Local(dir.path().to_path_buf());
+    std::fs::write(
+        dir.path().join("AGENTS.md"),
+        "<!-- BEGIN AI-HOOKER:other -->\nOther rules.\n<!-- END AI-HOOKER:other -->\n",
+    )
+    .unwrap();
+
+    let report = by_id("openclaw")
+        .unwrap()
+        .status(&scope, "smoketest")
+        .unwrap();
+
+    assert!(
+        matches!(report.status, InstallStatus::Absent),
+        "expected Absent for another consumer's block, got {:?}",
+        report.status
+    );
+}
+
+#[test]
+fn markdown_hook_status_drifted_on_malformed_matching_fence() {
+    let dir = tempfile::tempdir().unwrap();
+    let scope = Scope::Local(dir.path().to_path_buf());
+    std::fs::write(
+        dir.path().join("AGENTS.md"),
+        "<!-- BEGIN AI-HOOKER:smoketest -->\nmissing end\n",
+    )
+    .unwrap();
+
+    let report = by_id("openclaw")
+        .unwrap()
+        .status(&scope, "smoketest")
+        .unwrap();
+    let issues = match &report.status {
+        InstallStatus::Drifted { issues } => issues,
+        other => panic!("expected Drifted for malformed fence, got {other:?}"),
+    };
+
+    assert!(
+        issues
+            .iter()
+            .any(|issue| matches!(issue, DriftIssue::MalformedConfig { .. })),
+        "expected MalformedConfig, got {issues:?}"
+    );
+}
+
 // ----- MCP status -----
 
 #[test]

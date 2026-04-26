@@ -1,0 +1,59 @@
+surface: hooks
+agent: claude
+scenario: uninstall_final_block_or_file
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [
+            "[ROOT]/.claude/settings.json",
+            "[ROOT]/CLAUDE.md",
+        ],
+        patched: [],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.claude/settings.json",
+        ),
+        ledger_path: None,
+        files: [
+            Missing {
+                path: "[ROOT]/.claude/settings.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "claude",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .claude
+
+HOME tree:
+<empty>

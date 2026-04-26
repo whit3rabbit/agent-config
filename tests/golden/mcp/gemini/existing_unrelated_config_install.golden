@@ -1,0 +1,122 @@
+surface: mcp
+agent: gemini
+scenario: existing_unrelated_config_install
+
+install_result:
+Ok(
+    InstallReport {
+        created: [],
+        patched: [
+            "[ROOT]/.gemini/settings.json",
+        ],
+        backed_up: [
+            "[ROOT]/.gemini/settings.json.bak",
+        ],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/.gemini/settings.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.gemini/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.gemini/settings.json",
+            },
+            Exists {
+                path: "[ROOT]/.gemini/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "gemini",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/.gemini/settings.json.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .gemini
+files:
+- .gemini/.ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- .gemini/settings.json
+  content:
+```text
+{
+  "mcpServers": {
+    "sibling-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    },
+    "golden-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+- .gemini/settings.json.bak
+  content:
+```text
+{
+  "mcpServers": {
+    "sibling-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

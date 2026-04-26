@@ -1,0 +1,137 @@
+surface: hooks
+agent: gemini
+scenario: different_consumer_preserved
+
+install_result:
+Ok(
+    InstallReport {
+        created: [],
+        patched: [
+            "[ROOT]/.gemini/settings.json",
+            "[ROOT]/GEMINI.md",
+        ],
+        backed_up: [
+            "[ROOT]/.gemini/settings.json.bak",
+            "[ROOT]/GEMINI.md.bak",
+        ],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: InstalledOwned {
+            owner: "golden-hook",
+        },
+        config_path: Some(
+            "[ROOT]/.gemini/settings.json",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/.gemini/settings.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "gemini",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/.gemini/settings.json.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .gemini
+files:
+- .gemini/settings.json
+  content:
+```text
+{
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": "run_shell_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook"
+          }
+        ],
+        "_ai_hooker_tag": "sibling-hook"
+      },
+      {
+        "matcher": "run_shell_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook"
+          }
+        ],
+        "_ai_hooker_tag": "golden-hook"
+      }
+    ]
+  }
+}
+```
+- .gemini/settings.json.bak
+  content:
+```text
+{
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": "run_shell_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook"
+          }
+        ],
+        "_ai_hooker_tag": "sibling-hook"
+      }
+    ]
+  }
+}
+```
+- GEMINI.md
+  content:
+```text
+<!-- BEGIN AI-HOOKER:sibling-hook -->
+Use sibling hook rules.
+<!-- END AI-HOOKER:sibling-hook -->
+
+<!-- BEGIN AI-HOOKER:golden-hook -->
+Use golden hook rules.
+<!-- END AI-HOOKER:golden-hook -->
+```
+- GEMINI.md.bak
+  content:
+```text
+<!-- BEGIN AI-HOOKER:sibling-hook -->
+Use sibling hook rules.
+<!-- END AI-HOOKER:sibling-hook -->
+```
+
+HOME tree:
+<empty>

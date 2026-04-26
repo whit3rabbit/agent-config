@@ -1,0 +1,115 @@
+surface: mcp
+agent: kilocode
+scenario: uninstall_preserves_siblings
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [],
+        patched: [
+            "[ROOT]/kilo.jsonc",
+        ],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/kilo.jsonc",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/kilo.jsonc",
+            },
+            Exists {
+                path: "[ROOT]/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [
+            BackupExists {
+                path: "[ROOT]/kilo.jsonc.bak",
+            },
+        ],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "kilocode",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/kilo.jsonc.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+files:
+- .ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "sibling-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- kilo.jsonc
+  content:
+```text
+{
+  "mcp": {
+    "sibling-server": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+- kilo.jsonc.bak
+  content:
+```text
+{
+  "mcp": {
+    "golden-server": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

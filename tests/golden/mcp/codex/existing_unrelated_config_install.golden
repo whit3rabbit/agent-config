@@ -1,0 +1,103 @@
+surface: mcp
+agent: codex
+scenario: existing_unrelated_config_install
+
+install_result:
+Ok(
+    InstallReport {
+        created: [],
+        patched: [
+            "[ROOT]/.codex/config.toml",
+        ],
+        backed_up: [
+            "[ROOT]/.codex/config.toml.bak",
+        ],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/.codex/config.toml",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.codex/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.codex/config.toml",
+            },
+            Exists {
+                path: "[ROOT]/.codex/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "codex",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/.codex/config.toml.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .codex
+files:
+- .codex/.ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- .codex/config.toml
+  content:
+```text
+[mcp_servers.sibling-server]
+command = "npx"
+args = ["-y", "@example/server"]
+
+[mcp_servers.golden-server]
+command = "npx"
+args = ["-y", "@example/server"]
+```
+- .codex/config.toml.bak
+  content:
+```text
+[mcp_servers.sibling-server]
+command = "npx"
+args = ["-y", "@example/server"]
+```
+
+HOME tree:
+<empty>

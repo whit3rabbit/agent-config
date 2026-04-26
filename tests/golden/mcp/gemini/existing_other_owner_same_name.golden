@@ -1,0 +1,104 @@
+surface: mcp
+agent: gemini
+scenario: existing_other_owner_same_name
+
+install_result:
+Err(
+    NotOwnedByCaller {
+        kind: "mcp server",
+        name: "golden-server",
+        expected: "golden-owner",
+        actual: Some(
+            "other-owner",
+        ),
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOtherOwner {
+            owner: "other-owner",
+        },
+        config_path: Some(
+            "[ROOT]/.gemini/settings.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.gemini/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.gemini/settings.json",
+            },
+            Exists {
+                path: "[ROOT]/.gemini/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "gemini",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            OwnerMismatch {
+                expected: "golden-owner",
+                actual: Some(
+                    "other-owner",
+                ),
+                path: Some(
+                    "[ROOT]/.gemini/.ai-hooker-mcp.json",
+                ),
+            },
+        ],
+        suggested_actions: [
+            UninstallWithOwner,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .gemini
+files:
+- .gemini/.ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "owner": "other-owner"
+    }
+  },
+  "version": 1
+}
+```
+- .gemini/settings.json
+  content:
+```text
+{
+  "mcpServers": {
+    "golden-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

@@ -1,0 +1,74 @@
+surface: mcp
+agent: codex
+scenario: existing_user_installed_same_name_no_ledger
+
+install_result:
+Err(
+    NotOwnedByCaller {
+        kind: "mcp server",
+        name: "golden-server",
+        expected: "golden-owner",
+        actual: None,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: PresentUnowned,
+        config_path: Some(
+            "[ROOT]/.codex/config.toml",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.codex/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.codex/config.toml",
+            },
+            Missing {
+                path: "[ROOT]/.codex/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "codex",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            ConfigOnly {
+                path: "[ROOT]/.codex/config.toml",
+            },
+        ],
+        suggested_actions: [
+            RemoveConfigEntry,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .codex
+files:
+- .codex/config.toml
+  content:
+```text
+[mcp_servers.golden-server]
+command = "npx"
+args = ["-y", "@example/server"]
+```
+
+HOME tree:
+<empty>

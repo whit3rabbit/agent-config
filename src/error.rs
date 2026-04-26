@@ -67,7 +67,9 @@ pub enum HookerError {
     BackupExists(PathBuf),
 
     /// Could not acquire a filesystem lock before the timeout elapsed.
-    #[error("timed out waiting for lock at {path}")]
+    #[error(
+        "timed out waiting for lock at {path}; if no ai-hooker process is running, this lock may be stale and can be deleted"
+    )]
     LockTimeout {
         /// The lock file path that remained held.
         path: PathBuf,

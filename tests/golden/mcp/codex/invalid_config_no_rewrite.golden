@@ -1,0 +1,90 @@
+surface: mcp
+agent: codex
+scenario: invalid_config_no_rewrite
+
+install_result:
+Err(
+    TomlInvalid {
+        path: "[ROOT]/.codex/config.toml",
+        source: TomlError {
+            message: "invalid table header\nexpected `.`, `]`",
+            raw: Some(
+                "[mcp_servers\nbroken = true\n",
+            ),
+            keys: [],
+            span: Some(
+                12..13,
+            ),
+        },
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Drifted {
+            issues: [
+                InvalidConfig {
+                    path: "[ROOT]/.codex/config.toml",
+                    reason: "TOML parse error at line 1, column 13\n  |\n1 | [mcp_servers\n  |             ^\ninvalid table header\nexpected `.`, `]`\n",
+                },
+            ],
+        },
+        config_path: Some(
+            "[ROOT]/.codex/config.toml",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.codex/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Invalid {
+                path: "[ROOT]/.codex/config.toml",
+                reason: "TOML parse error at line 1, column 13\n  |\n1 | [mcp_servers\n  |             ^\ninvalid table header\nexpected `.`, `]`\n",
+            },
+            Missing {
+                path: "[ROOT]/.codex/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "codex",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            MalformedConfig {
+                path: "[ROOT]/.codex/config.toml",
+                reason: "TOML parse error at line 1, column 13\n  |\n1 | [mcp_servers\n  |             ^\ninvalid table header\nexpected `.`, `]`\n",
+            },
+        ],
+        suggested_actions: [
+            ManualReview,
+        ],
+    },
+)
+invalid_preserved: true
+
+ROOT tree:
+directories:
+- .codex
+files:
+- .codex/config.toml
+  content:
+```text
+[mcp_servers
+broken = true
+```
+
+HOME tree:
+<empty>

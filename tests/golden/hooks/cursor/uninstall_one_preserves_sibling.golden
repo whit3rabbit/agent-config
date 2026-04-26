@@ -1,0 +1,99 @@
+surface: hooks
+agent: cursor
+scenario: uninstall_one_preserves_sibling
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [],
+        patched: [
+            "[ROOT]/.cursor/hooks.json",
+        ],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.cursor/hooks.json",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/.cursor/hooks.json",
+            },
+        ],
+        warnings: [
+            BackupExists {
+                path: "[ROOT]/.cursor/hooks.json.bak",
+            },
+        ],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "cursor",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/.cursor/hooks.json.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .cursor
+files:
+- .cursor/hooks.json
+  content:
+```text
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": "golden hook",
+        "matcher": "Shell",
+        "_ai_hooker_tag": "sibling-hook"
+      }
+    ]
+  }
+}
+```
+- .cursor/hooks.json.bak
+  content:
+```text
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": "golden hook",
+        "matcher": "Shell",
+        "_ai_hooker_tag": "golden-hook"
+      }
+    ]
+  }
+}
+```
+
+HOME tree:
+<empty>

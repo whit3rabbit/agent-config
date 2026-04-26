@@ -20,10 +20,8 @@ use crate::paths;
 use crate::plan::{InstallPlan, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{HookSpec, McpSpec, McpTransport, SkillSpec};
-use crate::status::{
-    InstallStatus as StatusInstallStatus, PathStatus, PlanTarget as StatusPlanTarget, StatusReport,
-};
-use crate::util::{fs_atomic, md_block, ownership, skills_dir, yaml_mcp_map};
+use crate::status::StatusReport;
+use crate::util::{file_lock, fs_atomic, md_block, ownership, skills_dir, yaml_mcp_map};
 
 const SKILL_CATEGORY: &str = "ai-hooker";
 
@@ -137,29 +135,7 @@ impl Integration for HermesAgent {
     fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, HookerError> {
         HookSpec::validate_tag(tag)?;
         let path = Self::prompt_path(scope)?;
-        let host = fs_atomic::read_to_string_or_empty(&path)?;
-        let block_present = md_block::contains(&host, tag);
-        let exists = path.exists();
-        Ok(StatusReport {
-            target: StatusPlanTarget::Hook {
-                tag: tag.to_string(),
-            },
-            status: if block_present {
-                StatusInstallStatus::InstalledOwned {
-                    owner: tag.to_string(),
-                }
-            } else {
-                StatusInstallStatus::Absent
-            },
-            config_path: Some(path.clone()),
-            ledger_path: None,
-            files: vec![if exists {
-                PathStatus::Exists { path }
-            } else {
-                PathStatus::Missing { path }
-            }],
-            warnings: Vec::new(),
-        })
+        StatusReport::for_markdown_block_hook(tag, path)
     }
 
     fn plan_install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallPlan, HookerError> {
@@ -195,47 +171,52 @@ impl Integration for HermesAgent {
             field: "rules",
         })?;
         let path = Self::prompt_path(scope)?;
-        let host = fs_atomic::read_to_string_or_empty(&path)?;
-        let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
-        let outcome = fs_atomic::write_atomic(&path, new_host.as_bytes(), true)?;
-
         let mut report = InstallReport::default();
-        if outcome.no_change {
-            report.already_installed = true;
-        } else if outcome.existed {
-            report.patched.push(outcome.path.clone());
-        } else {
-            report.created.push(outcome.path.clone());
-        }
-        if let Some(b) = outcome.backup {
-            report.backed_up.push(b);
-        }
+        file_lock::with_lock(&path, || {
+            let host = fs_atomic::read_to_string_or_empty(&path)?;
+            let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
+            let outcome = fs_atomic::write_atomic(&path, new_host.as_bytes(), true)?;
+            if outcome.no_change {
+                report.already_installed = true;
+            } else if outcome.existed {
+                report.patched.push(outcome.path.clone());
+            } else {
+                report.created.push(outcome.path.clone());
+            }
+            if let Some(b) = outcome.backup {
+                report.backed_up.push(b);
+            }
+            Ok::<(), HookerError>(())
+        })?;
         Ok(report)
     }
 
     fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, HookerError> {
         HookSpec::validate_tag(tag)?;
         let path = Self::prompt_path(scope)?;
-        let host = fs_atomic::read_to_string_or_empty(&path)?;
-        let (stripped, removed) = md_block::remove(&host, tag);
-
         let mut report = UninstallReport::default();
-        if !removed {
-            report.not_installed = true;
-            return Ok(report);
-        }
+        file_lock::with_lock(&path, || {
+            let host = fs_atomic::read_to_string_or_empty(&path)?;
+            let (stripped, removed) = md_block::remove(&host, tag);
 
-        if stripped.trim().is_empty() {
-            if fs_atomic::restore_backup(&path)? {
-                report.restored.push(path.clone());
-            } else {
-                fs_atomic::remove_if_exists(&path)?;
-                report.removed.push(path.clone());
+            if !removed {
+                report.not_installed = true;
+                return Ok(());
             }
-        } else {
-            fs_atomic::write_atomic(&path, stripped.as_bytes(), false)?;
-            report.patched.push(path.clone());
-        }
+
+            if stripped.trim().is_empty() {
+                if fs_atomic::restore_backup(&path)? {
+                    report.restored.push(path.clone());
+                } else {
+                    fs_atomic::remove_if_exists(&path)?;
+                    report.removed.push(path.clone());
+                }
+            } else {
+                fs_atomic::write_atomic(&path, stripped.as_bytes(), false)?;
+                report.patched.push(path.clone());
+            }
+            Ok::<(), HookerError>(())
+        })?;
         Ok(report)
     }
 }

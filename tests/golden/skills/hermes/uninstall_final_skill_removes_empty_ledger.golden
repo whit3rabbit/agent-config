@@ -1,0 +1,64 @@
+surface: skills
+agent: hermes
+scenario: uninstall_final_skill_removes_empty_ledger
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [
+            "[HOME]/.hermes/skills/ai-hooker/golden-skill",
+        ],
+        patched: [],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Skill {
+            name: "golden-skill",
+        },
+        status: Absent,
+        config_path: Some(
+            "[HOME]/.hermes/skills/ai-hooker/golden-skill",
+        ),
+        ledger_path: Some(
+            "[HOME]/.hermes/skills/ai-hooker/.ai-hooker-skills.json",
+        ),
+        files: [
+            Missing {
+                path: "[HOME]/.hermes/skills/ai-hooker/golden-skill",
+            },
+            Missing {
+                path: "[HOME]/.hermes/skills/ai-hooker/golden-skill/SKILL.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Skill {
+            integration_id: "hermes",
+            scope: Global,
+            name: "golden-skill",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+<empty>
+
+HOME tree:
+directories:
+- .hermes
+- .hermes/skills
+- .hermes/skills/ai-hooker

@@ -1,0 +1,115 @@
+surface: mcp
+agent: windsurf
+scenario: uninstall_preserves_siblings
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [],
+        patched: [
+            "[ROOT]/.windsurf/mcp_config.json",
+        ],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.windsurf/mcp_config.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.windsurf/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.windsurf/mcp_config.json",
+            },
+            Exists {
+                path: "[ROOT]/.windsurf/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [
+            BackupExists {
+                path: "[ROOT]/.windsurf/mcp_config.json.bak",
+            },
+        ],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "windsurf",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/.windsurf/mcp_config.json.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .windsurf
+files:
+- .windsurf/.ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "sibling-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- .windsurf/mcp_config.json
+  content:
+```text
+{
+  "mcpServers": {
+    "sibling-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+- .windsurf/mcp_config.json.bak
+  content:
+```text
+{
+  "mcpServers": {
+    "golden-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>
