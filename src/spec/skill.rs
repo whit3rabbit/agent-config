@@ -6,6 +6,34 @@ use crate::error::AgentConfigError;
 
 use super::validate::{validate_identifier, IdentifierKind};
 
+// User-supplied frontmatter strings are rendered into single-line YAML at the
+// top of `SKILL.md`. Reject newlines, tabs, C0 control bytes, and DEL up
+// front so the renderer never has to choose between mangling input and
+// emitting broken YAML.
+fn validate_frontmatter_scalar(value: &str) -> Result<(), AgentConfigError> {
+    for c in value.chars() {
+        if c == '\n' || c == '\r' || c == '\t' {
+            return Err(AgentConfigError::InvalidTag {
+                tag: value.to_string(),
+                reason: "skill frontmatter must not contain newlines or tabs",
+            });
+        }
+        if (c as u32) < 0x20 && c != ' ' {
+            return Err(AgentConfigError::InvalidTag {
+                tag: value.to_string(),
+                reason: "skill frontmatter must not contain control characters",
+            });
+        }
+        if c == '\u{007F}' {
+            return Err(AgentConfigError::InvalidTag {
+                tag: value.to_string(),
+                reason: "skill frontmatter must not contain DEL (0x7F)",
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Caller-supplied description of an agent skill to install.
 ///
 /// Skills are directory-scoped: each one occupies a subdirectory under the
@@ -63,6 +91,13 @@ impl SkillSpec {
                 id: "<skill spec>",
                 field: "frontmatter.description",
             });
+        }
+        validate_frontmatter_scalar(&self.frontmatter.name)?;
+        validate_frontmatter_scalar(&self.frontmatter.description)?;
+        if let Some(tools) = &self.frontmatter.allowed_tools {
+            for t in tools {
+                validate_frontmatter_scalar(t)?;
+            }
         }
         validate_identifier(&self.owner_tag, IdentifierKind::OwnerTag)
     }
@@ -177,5 +212,71 @@ impl SkillSpecBuilder {
         };
         spec.validate()?;
         Ok(spec)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_rejects_newline_in_description() {
+        let err = SkillSpec::builder("alpha")
+            .owner("appA")
+            .description("line1\nline2")
+            .body("body")
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
+    }
+
+    #[test]
+    fn validate_rejects_tab_in_name() {
+        // The frontmatter.name defaults to the SkillSpec name; build via
+        // try_build and inject the tab through the frontmatter directly,
+        // because the builder routes the SkillSpec name through the
+        // kebab-case validator first.
+        let mut spec = SkillSpec::builder("alpha")
+            .owner("appA")
+            .description("ok")
+            .body("body")
+            .try_build()
+            .expect("base spec valid");
+        spec.frontmatter.name = "bad\tname".into();
+        let err = spec.validate().unwrap_err();
+        assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
+    }
+
+    #[test]
+    fn validate_rejects_control_char_in_allowed_tools() {
+        let err = SkillSpec::builder("alpha")
+            .owner("appA")
+            .description("ok")
+            .body("body")
+            .allowed_tools(["ed\u{0001}it"])
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
+    }
+
+    #[test]
+    fn validate_rejects_del_in_description() {
+        let err = SkillSpec::builder("alpha")
+            .owner("appA")
+            .description("evil\u{007F}")
+            .body("body")
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
+    }
+
+    #[test]
+    fn validate_accepts_normal_description_with_punctuation() {
+        SkillSpec::builder("alpha")
+            .owner("appA")
+            .description("Format Git commit messages: subject + body.")
+            .body("body")
+            .try_build()
+            .expect("valid");
     }
 }
