@@ -834,6 +834,7 @@ fn assert_golden(surface: &str, agent_id: &str, scenario: &str, actual: &str) {
             path.display()
         )
     });
+    let expected = expected.replace("\r\n", "\n");
     assert_eq!(
         expected,
         actual,
