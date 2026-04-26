@@ -917,18 +917,15 @@ struct Normalizer {
 
 impl Normalizer {
     fn new(env: &CaseEnv) -> Self {
-        let mut replacements = vec![
-            (env.project.to_string_lossy().into_owned(), "[ROOT]"),
-            (env.home.to_string_lossy().into_owned(), "[HOME]"),
-            (
-                env.xdg.to_string_lossy().into_owned(),
-                "[HOME]/Library/Application Support",
-            ),
-            (
-                env.codex_home.to_string_lossy().into_owned(),
-                "[CODEX_HOME]",
-            ),
-        ];
+        let mut replacements = Vec::new();
+        push_path_replacements(&mut replacements, &env.project, "[ROOT]");
+        push_path_replacements(&mut replacements, &env.home, "[HOME]");
+        push_path_replacements(
+            &mut replacements,
+            &env.xdg,
+            "[HOME]/Library/Application Support",
+        );
+        push_path_replacements(&mut replacements, &env.codex_home, "[CODEX_HOME]");
         replacements.sort_by_key(|(from, _)| std::cmp::Reverse(from.len()));
         Self { replacements }
     }
@@ -940,4 +937,34 @@ impl Normalizer {
         }
         out
     }
+}
+
+fn push_path_replacements(
+    replacements: &mut Vec<(String, &'static str)>,
+    path: &Path,
+    to: &'static str,
+) {
+    let raw = path.to_string_lossy().into_owned();
+    replacements.push((raw.replace('\\', "\\\\"), to));
+    replacements.push((raw.replace('\\', "/"), to));
+    replacements.push((raw, to));
+}
+
+#[test]
+fn normalizer_redacts_debug_escaped_windows_paths() {
+    let tmp = TempDir::new().unwrap();
+    let env = CaseEnv {
+        _tmp: tmp,
+        project: PathBuf::from(r"C:\Users\RUNNER~1\AppData\Local\Temp\.tmp123\project"),
+        home: PathBuf::from(r"C:\Users\RUNNER~1\AppData\Local\Temp\.tmp123\home"),
+        xdg: PathBuf::from(
+            r"C:\Users\RUNNER~1\AppData\Local\Temp\.tmp123\home\Library\Application Support",
+        ),
+        codex_home: PathBuf::from(r"C:\Users\RUNNER~1\AppData\Local\Temp\.tmp123\home\.codex"),
+    };
+
+    let normalizer = Normalizer::new(&env);
+    let input = r#""C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\.tmp123\\project\\.mcp.json""#;
+
+    assert_eq!(normalizer.normalize(input), r#""[ROOT]\\.mcp.json""#);
 }
