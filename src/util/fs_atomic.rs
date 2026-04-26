@@ -15,6 +15,40 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::error::AgentConfigError;
 
+/// Hard ceiling on bytes the library will read from any harness config or
+/// rules file. Set high enough to never trip in practice (typical configs
+/// are <100 KiB) and low enough to keep memory bounded on a malicious
+/// or runaway file.
+pub(crate) const MAX_CONFIG_BYTES: u64 = 8 * 1024 * 1024;
+
+#[allow(dead_code)]
+pub(crate) fn read_capped(path: &Path) -> Result<Vec<u8>, AgentConfigError> {
+    let meta = match std::fs::metadata(path) {
+        Ok(m) => m,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(AgentConfigError::io(path, e)),
+    };
+    if meta.len() > MAX_CONFIG_BYTES {
+        return Err(AgentConfigError::ConfigTooLarge {
+            path: path.to_path_buf(),
+            size: meta.len(),
+            limit: MAX_CONFIG_BYTES,
+        });
+    }
+    std::fs::read(path).map_err(|e| AgentConfigError::io(path, e))
+}
+
+#[allow(dead_code)]
+pub(crate) fn read_to_string_capped(path: &Path) -> Result<String, AgentConfigError> {
+    let bytes = read_capped(path)?;
+    String::from_utf8(bytes).map_err(|e| {
+        AgentConfigError::io(
+            path,
+            std::io::Error::new(std::io::ErrorKind::InvalidData, e),
+        )
+    })
+}
+
 /// Result of [`write_atomic`] / [`patch_in_place`].
 #[derive(Debug, Default, Clone)]
 pub(crate) struct WriteOutcome {
@@ -711,5 +745,42 @@ mod tests {
         let dir = tempdir().unwrap();
         let file = dir.path().join("ghost");
         reject_symlink(&file).unwrap();
+    }
+
+    #[test]
+    fn read_capped_rejects_oversized_files() {
+        let dir = tempdir().unwrap();
+        let big = dir.path().join("big.json");
+        let f = std::fs::File::create(&big).unwrap();
+        // sparse: set logical length above the cap without actually writing 8 MiB.
+        f.set_len(MAX_CONFIG_BYTES + 1).unwrap();
+        let err = read_capped(&big).unwrap_err();
+        assert!(matches!(err, AgentConfigError::ConfigTooLarge { size, limit, .. } if size > limit));
+    }
+
+    #[test]
+    fn read_capped_returns_empty_for_missing_file() {
+        let dir = tempdir().unwrap();
+        let missing = dir.path().join("nope.json");
+        let bytes = read_capped(&missing).unwrap();
+        assert!(bytes.is_empty());
+    }
+
+    #[test]
+    fn read_capped_reads_small_file() {
+        let dir = tempdir().unwrap();
+        let small = dir.path().join("small.json");
+        std::fs::write(&small, b"{}").unwrap();
+        let bytes = read_capped(&small).unwrap();
+        assert_eq!(bytes, b"{}");
+    }
+
+    #[test]
+    fn read_to_string_capped_rejects_invalid_utf8() {
+        let dir = tempdir().unwrap();
+        let bad = dir.path().join("bad.txt");
+        std::fs::write(&bad, [0xFF, 0xFE, 0xFD]).unwrap();
+        let err = read_to_string_capped(&bad).unwrap_err();
+        assert!(matches!(err, AgentConfigError::Io { .. }));
     }
 }
