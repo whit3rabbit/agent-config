@@ -128,7 +128,7 @@ pub enum DriftIssue {
         /// Parser or shape error.
         reason: String,
     },
-    /// A backup already exists and would block a future first-touch write.
+    /// A backup already exists from an earlier first-touch write.
     BackupCollision {
         /// The existing backup path.
         path: PathBuf,

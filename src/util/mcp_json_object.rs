@@ -335,6 +335,34 @@ mod tests {
     }
 
     #[test]
+    fn uninstall_final_entry_does_not_restore_stale_backup() {
+        let dir = tempdir().unwrap();
+        let (cfg, led) = paths(dir.path());
+        std::fs::write(
+            &cfg,
+            r#"{ "mcpServers": { "user-thing": { "command": "user-cmd" } } }"#,
+        )
+        .unwrap();
+
+        install(&cfg, &led, &stdio_spec("github", "myapp")).unwrap();
+
+        let mut current: Value = serde_json::from_slice(&std::fs::read(&cfg).unwrap()).unwrap();
+        current["mcpServers"]
+            .as_object_mut()
+            .unwrap()
+            .remove("user-thing");
+        std::fs::write(&cfg, crate::util::json_patch::to_pretty(&current)).unwrap();
+
+        let report = uninstall(&cfg, &led, "github", "myapp", "mcp server").unwrap();
+        assert!(report.removed.contains(&cfg));
+        assert!(!cfg.exists(), "stale backup should not be restored");
+        assert!(
+            dir.path().join("mcp.json.bak").exists(),
+            "stale backup is left for manual recovery"
+        );
+    }
+
+    #[test]
     fn is_installed_uses_ledger() {
         let dir = tempdir().unwrap();
         let (cfg, led) = paths(dir.path());

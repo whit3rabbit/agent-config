@@ -121,7 +121,8 @@ The `install` body in `agent.rs` is the canonical pattern:
    one-time `.bak` sibling on first patch (the `true` flag).
 
 Uninstall mirrors it: `remove_tagged_array_entries_under` plus
-`fs_atomic::restore_backup` if removing our entry leaves the file empty.
+`fs_atomic::restore_backup_if_matches` if removing our entry leaves the file
+empty and the backup already matches the desired post-uninstall bytes.
 
 The matcher/event translators are where the harness-specific knowledge
 lives. The full mapping table goes in `docs/agents/<id>.md`.
@@ -146,7 +147,8 @@ Use myapp prefix.
 
 `md_block::upsert(host, tag, content)` produces the new file body;
 `md_block::remove(host, tag)` strips it. If the file becomes empty after
-removal, `fs_atomic::restore_backup` is preferred over a blank file.
+removal, `fs_atomic::restore_backup_if_matches` can restore a matching backup
+without rolling back unrelated edits.
 
 If your harness has no rules/memory file, delete the `if let Some(rules)`
 block in `install`, the matching cleanup in `uninstall`, and the

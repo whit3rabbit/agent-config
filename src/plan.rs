@@ -220,6 +220,9 @@ pub enum RefusalReason {
     /// Existing config could not be parsed or had an unsupported shape.
     InvalidConfig,
     /// A required first-touch backup already exists.
+    ///
+    /// Retained for compatibility; current planners preserve existing backups
+    /// and patch without creating another one.
     BackupAlreadyExists,
     /// The integration does not support the requested scope.
     UnsupportedScope,

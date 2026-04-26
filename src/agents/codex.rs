@@ -239,13 +239,13 @@ impl Integration for CodexAgent {
                     json_patch::remove_tagged_array_entries_under(&mut root, &["hooks"], tag)?;
                 if changed {
                     let empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
-                    if empty && fs_atomic::restore_backup(&p)? {
+                    let bytes = json_patch::to_pretty(&root);
+                    if empty && fs_atomic::restore_backup_if_matches(&p, &bytes)? {
                         report.restored.push(p.clone());
                     } else if empty {
                         fs_atomic::remove_if_exists(&p)?;
                         report.removed.push(p.clone());
                     } else {
-                        let bytes = json_patch::to_pretty(&root);
                         fs_atomic::write_atomic(&p, &bytes, false)?;
                         report.patched.push(p.clone());
                     }
@@ -260,7 +260,7 @@ impl Integration for CodexAgent {
             let (stripped, removed) = md_block::remove(&host, tag);
             if removed {
                 if stripped.trim().is_empty() {
-                    if fs_atomic::restore_backup(&agents)? {
+                    if fs_atomic::restore_backup_if_matches(&agents, stripped.as_bytes())? {
                         report.restored.push(agents.clone());
                     } else {
                         fs_atomic::remove_if_exists(&agents)?;
@@ -432,7 +432,8 @@ impl McpSurface for CodexAgent {
             let removed = toml_patch::remove_named_table(&mut doc, &["mcp_servers"], name)?;
             debug_assert!(removed);
             if doc.as_table().is_empty() {
-                planning::plan_restore_backup_or_remove(&mut changes, &cfg);
+                let bytes = toml_patch::to_string(&doc);
+                planning::plan_restore_backup_or_remove(&mut changes, &cfg, &bytes)?;
             } else {
                 let bytes = toml_patch::to_string(&doc);
                 planning::plan_write_file(&mut changes, &cfg, &bytes, false)?;
@@ -527,13 +528,13 @@ impl McpSurface for CodexAgent {
                 debug_assert!(removed);
 
                 let now_empty = doc.as_table().is_empty();
-                if now_empty && fs_atomic::restore_backup(&cfg)? {
+                let bytes = toml_patch::to_string(&doc);
+                if now_empty && fs_atomic::restore_backup_if_matches(&cfg, &bytes)? {
                     report.restored.push(cfg.clone());
                 } else if now_empty {
                     fs_atomic::remove_if_exists(&cfg)?;
                     report.removed.push(cfg.clone());
                 } else {
-                    let bytes = toml_patch::to_string(&doc);
                     fs_atomic::write_atomic(&cfg, &bytes, false)?;
                     report.patched.push(cfg.clone());
                 }

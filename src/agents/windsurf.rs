@@ -640,10 +640,7 @@ mod tests {
             .install(&scope, &hook_spec("alpha", Event::PostToolUse, "b"))
             .unwrap();
         agent.uninstall(&scope, "alpha").unwrap();
-        // After uninstall, the tag must not appear in any event array. The
-        // file may be removed entirely or restored from a `.bak` snapshot
-        // taken between installs (which itself contains a partial install we
-        // also stripped); both are correct cleanup outcomes.
+        // After uninstall, the tag must not appear in any event array.
         let p = dir.path().join(".windsurf/hooks.json");
         assert!(!agent.is_installed(&scope, "alpha").unwrap());
         if p.exists() {

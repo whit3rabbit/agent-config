@@ -61,9 +61,8 @@ pub enum HookerError {
         reason: &'static str,
     },
 
-    /// A would-be backup file already exists at `<path>.bak` and we refuse to
-    /// overwrite it. The original file is left untouched.
-    #[error("backup already exists at {0}; aborting to avoid losing user data")]
+    /// A would-be backup file already exists at `<path>.bak`.
+    #[error("backup already exists at {0}")]
     BackupExists(PathBuf),
 
     /// Could not acquire a filesystem lock before the timeout elapsed.

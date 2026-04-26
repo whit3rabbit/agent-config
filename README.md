@@ -226,8 +226,8 @@ explicitly:
 - `MissingSpecField`: e.g., Gemini's script delegator requires
   `HookSpec::script`, prompt-only agents require `HookSpec::rules`.
 - `InvalidTag`: empty or contains characters outside `[A-Za-z0-9_-]`.
-- `BackupExists`: a `<path>.bak` is already present; the library refuses
-  to overwrite it. Resolve manually before retrying.
+- `BackupExists`: a first-touch `<path>.bak` could not be created safely.
+  Existing backups are normally preserved and reused.
 - `NotOwnedByCaller`: an MCP server or skill is owned by another consumer or
   was hand-installed without an ai-hooker ledger entry.
 - `Io` and `JsonInvalid` carry the offending path.

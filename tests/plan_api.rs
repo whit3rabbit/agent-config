@@ -78,6 +78,12 @@ fn has_create_file(changes: &[PlannedChange]) -> bool {
         .any(|change| matches!(change, PlannedChange::CreateFile { .. }))
 }
 
+fn has_create_backup(changes: &[PlannedChange]) -> bool {
+    changes
+        .iter()
+        .any(|change| matches!(change, PlannedChange::CreateBackup { .. }))
+}
+
 fn has_patch_file(changes: &[PlannedChange], expected: &Path) -> bool {
     changes
         .iter()
@@ -326,7 +332,7 @@ fn hand_installed_mcp_entry_is_refused_in_plan() {
 }
 
 #[test]
-fn existing_backup_collision_is_refused_in_plan() {
+fn existing_backup_allows_patch_without_new_backup_in_plan() {
     let dir = tempfile::tempdir().unwrap();
     let scope = temp_scope(&dir);
     let cfg = dir.path().join(".mcp.json");
@@ -342,10 +348,34 @@ fn existing_backup_collision_is_refused_in_plan() {
         .plan_install_mcp(&scope, &mcp_spec("github", "plan-app"))
         .unwrap();
 
-    assert!(matches!(plan.status, InstallStatus::Refused));
-    assert!(has_refusal(
+    assert!(matches!(plan.status, InstallStatus::WillChange));
+    assert!(has_patch_file(&plan.changes, &cfg));
+    assert!(!has_create_backup(&plan.changes));
+    assert!(!has_refusal(
         &plan.changes,
         RefusalReason::BackupAlreadyExists
+    ));
+}
+
+#[test]
+fn copilot_mcp_plan_matches_installed_shape() {
+    let dir = tempfile::tempdir().unwrap();
+    let scope = temp_scope(&dir);
+    let copilot = mcp_by_id("copilot").unwrap();
+    let spec = mcp_spec("github", "plan-app");
+
+    copilot.install_mcp(&scope, &spec).unwrap();
+
+    let reinstall = copilot.plan_install_mcp(&scope, &spec).unwrap();
+    assert!(matches!(reinstall.status, InstallStatus::NoOp));
+
+    let uninstall = copilot
+        .plan_uninstall_mcp(&scope, "github", "plan-app")
+        .unwrap();
+    assert!(matches!(uninstall.status, InstallStatus::WillChange));
+    assert!(has_remove_file(
+        &uninstall.changes,
+        &dir.path().join(".mcp.json")
     ));
 }
 

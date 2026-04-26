@@ -233,13 +233,13 @@ pub(crate) fn uninstall(
             debug_assert!(removed);
 
             let now_empty = root.as_object().map(Map::is_empty).unwrap_or(true);
-            if now_empty && fs_atomic::restore_backup(config_path)? {
+            let bytes = json_patch::to_pretty(&root);
+            if now_empty && fs_atomic::restore_backup_if_matches(config_path, &bytes)? {
                 report.restored.push(config_path.to_path_buf());
             } else if now_empty {
                 fs_atomic::remove_if_exists(config_path)?;
                 report.removed.push(config_path.to_path_buf());
             } else {
-                let bytes = json_patch::to_pretty(&root);
                 fs_atomic::write_atomic(config_path, &bytes, false)?;
                 report.patched.push(config_path.to_path_buf());
             }
@@ -310,7 +310,12 @@ pub(crate) fn plan_uninstall(
         debug_assert!(removed);
         let now_empty = root.as_object().map(Map::is_empty).unwrap_or(true);
         if now_empty {
-            planning::plan_restore_backup_or_remove(&mut changes, config_path);
+            let bytes = match format {
+                ConfigFormat::Json | ConfigFormat::Jsonc | ConfigFormat::Json5 => {
+                    json_patch::to_pretty(&root)
+                }
+            };
+            planning::plan_restore_backup_or_remove(&mut changes, config_path, &bytes)?;
         } else {
             let bytes = match format {
                 ConfigFormat::Json | ConfigFormat::Jsonc | ConfigFormat::Json5 => {

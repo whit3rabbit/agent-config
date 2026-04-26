@@ -242,13 +242,13 @@ impl Integration for ClaudeAgent {
                 json_patch::remove_tagged_array_entries_under(&mut root, &["hooks"], tag)?;
             if changed {
                 let is_now_empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
-                if is_now_empty && fs_atomic::restore_backup(&settings)? {
+                let bytes = json_patch::to_pretty(&root);
+                if is_now_empty && fs_atomic::restore_backup_if_matches(&settings, &bytes)? {
                     report.restored.push(settings.clone());
                 } else if is_now_empty {
                     fs_atomic::remove_if_exists(&settings)?;
                     report.removed.push(settings.clone());
                 } else {
-                    let bytes = json_patch::to_pretty(&root);
                     fs_atomic::write_atomic(&settings, &bytes, false)?;
                     report.patched.push(settings.clone());
                 }
@@ -261,7 +261,7 @@ impl Integration for ClaudeAgent {
         let (stripped, removed) = md_block::remove(&host, tag);
         if removed {
             if stripped.trim().is_empty() {
-                if fs_atomic::restore_backup(&memory)? {
+                if fs_atomic::restore_backup_if_matches(&memory, stripped.as_bytes())? {
                     report.restored.push(memory.clone());
                 } else {
                     fs_atomic::remove_if_exists(&memory)?;

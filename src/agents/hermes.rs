@@ -205,7 +205,7 @@ impl Integration for HermesAgent {
             }
 
             if stripped.trim().is_empty() {
-                if fs_atomic::restore_backup(&path)? {
+                if fs_atomic::restore_backup_if_matches(&path, stripped.as_bytes())? {
                     report.restored.push(path.clone());
                 } else {
                     fs_atomic::remove_if_exists(&path)?;

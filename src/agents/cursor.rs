@@ -206,7 +206,8 @@ impl Integration for CursorAgent {
                 }
 
                 if is_effectively_empty(&root) {
-                    if fs_atomic::restore_backup(&p)? {
+                    let bytes = json_patch::to_pretty(&root);
+                    if fs_atomic::restore_backup_if_matches(&p, &bytes)? {
                         report.restored.push(p.clone());
                     } else {
                         fs_atomic::remove_if_exists(&p)?;

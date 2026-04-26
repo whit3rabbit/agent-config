@@ -27,17 +27,12 @@ pub(crate) fn plan_write_file(
             }
             if make_backup {
                 let backup = fs_atomic::backup_path(path);
-                if backup.exists() {
-                    changes.push(PlannedChange::Refuse {
-                        path: Some(backup),
-                        reason: RefusalReason::BackupAlreadyExists,
+                if !backup.exists() {
+                    changes.push(PlannedChange::CreateBackup {
+                        backup,
+                        target: path.to_path_buf(),
                     });
-                    return Ok(());
                 }
-                changes.push(PlannedChange::CreateBackup {
-                    backup,
-                    target: path.to_path_buf(),
-                });
             }
             changes.push(PlannedChange::PatchFile {
                 path: path.to_path_buf(),
@@ -68,20 +63,28 @@ pub(crate) fn plan_remove_file(changes: &mut Vec<PlannedChange>, path: &Path) {
     }
 }
 
-/// Plan restoring `<path>.bak` to `path`, or removing `path` when no backup
-/// exists.
-pub(crate) fn plan_restore_backup_or_remove(changes: &mut Vec<PlannedChange>, path: &Path) {
+/// Plan restoring `<path>.bak` to `path` only when that backup already matches
+/// the desired post-uninstall bytes, otherwise remove `path`.
+pub(crate) fn plan_restore_backup_or_remove(
+    changes: &mut Vec<PlannedChange>,
+    path: &Path,
+    desired_content: &[u8],
+) -> Result<(), HookerError> {
     let backup = fs_atomic::backup_path(path);
     if backup.exists() {
-        changes.push(PlannedChange::RestoreBackup {
-            backup,
-            target: path.to_path_buf(),
-        });
-    } else {
-        changes.push(PlannedChange::RemoveFile {
-            path: path.to_path_buf(),
-        });
+        let backup_content = fs::read(&backup).map_err(|e| HookerError::io(&backup, e))?;
+        if backup_content == desired_content {
+            changes.push(PlannedChange::RestoreBackup {
+                backup,
+                target: path.to_path_buf(),
+            });
+            return Ok(());
+        }
     }
+    changes.push(PlannedChange::RemoveFile {
+        path: path.to_path_buf(),
+    });
+    Ok(())
 }
 
 /// Plan ownership ledger creation/update.
@@ -150,7 +153,7 @@ pub(crate) fn plan_markdown_remove(
         return Ok(());
     }
     if stripped.trim().is_empty() {
-        plan_restore_backup_or_remove(changes, path);
+        plan_restore_backup_or_remove(changes, path, stripped.as_bytes())?;
     } else {
         plan_write_file(changes, path, stripped.as_bytes(), false)?;
     }
@@ -236,7 +239,8 @@ where
 
     if is_empty_after(&root) {
         if restore_when_empty {
-            plan_restore_backup_or_remove(changes, path);
+            let bytes = json_patch::to_pretty(&root);
+            plan_restore_backup_or_remove(changes, path, &bytes)?;
         } else {
             changes.push(PlannedChange::RemoveFile {
                 path: path.to_path_buf(),

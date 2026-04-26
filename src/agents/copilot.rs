@@ -268,7 +268,7 @@ impl Integration for CopilotAgent {
             let (stripped, removed) = md_block::remove(&host, tag);
             if removed {
                 if stripped.trim().is_empty() {
-                    if fs_atomic::restore_backup(&instr)? {
+                    if fs_atomic::restore_backup_if_matches(&instr, stripped.as_bytes())? {
                         report.restored.push(instr.clone());
                     } else {
                         fs_atomic::remove_if_exists(&instr)?;
@@ -330,8 +330,8 @@ impl McpSurface for CopilotAgent {
             scope,
             spec,
             Self::mcp_path(scope),
-            &["servers"],
-            mcp_json_map::vscode_servers_value,
+            &["mcpServers"],
+            mcp_json_map::mcp_servers_value,
             mcp_json_map::ConfigFormat::Json,
         )
     }
@@ -348,7 +348,7 @@ impl McpSurface for CopilotAgent {
             name,
             owner_tag,
             Self::mcp_path(scope),
-            &["servers"],
+            &["mcpServers"],
             mcp_json_map::ConfigFormat::Json,
         )
     }

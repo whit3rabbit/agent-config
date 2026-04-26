@@ -67,10 +67,6 @@ impl ClineAgent {
         Ok(self.project_root(scope)?.join(RULES_DIR).join(HOOKS_SUBDIR))
     }
 
-    fn hook_path(&self, scope: &Scope, event: &Event) -> Result<PathBuf, HookerError> {
-        Ok(self.hooks_dir(scope)?.join(event_to_filename(event)))
-    }
-
     fn ledger_path(&self, scope: &Scope) -> Result<PathBuf, HookerError> {
         Ok(self.hooks_dir(scope)?.join(".ai-hooker-hooks.json"))
     }
@@ -228,8 +224,8 @@ impl Integration for ClineAgent {
                 }
                 None => default_hook_body(&spec.command),
             };
-            let event_filename = event_to_filename(&spec.event);
-            let path = self.hook_path(scope, &spec.event)?;
+            let event_filename = event_to_filename(&spec.event)?;
+            let path = self.hooks_dir(scope)?.join(&event_filename);
             let ledger = self.ledger_path(scope)?;
             let actual_owner = ownership::owner_of(&ledger, &event_filename)?;
             match (actual_owner.as_deref(), path.exists()) {
@@ -311,6 +307,13 @@ impl Integration for ClineAgent {
                 })
                 .unwrap_or_default();
             for filename in owned {
+                if validate_custom_event_filename(&filename).is_err() {
+                    changes.push(PlannedChange::Refuse {
+                        path: Some(ledger),
+                        reason: RefusalReason::InvalidConfig,
+                    });
+                    return Ok(UninstallPlan::from_changes(target, changes));
+                }
                 let path = self.hooks_dir(scope)?.join(&filename);
                 if path.exists() {
                     changes.push(PlannedChange::RemoveFile { path });
@@ -347,7 +350,7 @@ impl Integration for ClineAgent {
                     None => default_hook_body(&spec.command),
                 };
 
-                let event_filename = event_to_filename(&spec.event);
+                let event_filename = event_to_filename(&spec.event)?;
                 let path = hooks_dir.join(&event_filename);
                 let ledger = hooks_dir.join(".ai-hooker-hooks.json");
 
@@ -409,6 +412,7 @@ impl Integration for ClineAgent {
                     .unwrap_or_default();
 
                 for filename in owned {
+                    validate_custom_event_filename(&filename)?;
                     let path = hooks_dir.join(&filename);
                     if path.exists() {
                         fs_atomic::remove_if_exists(&path)?;
@@ -585,14 +589,33 @@ impl SkillSurface for ClineAgent {
     }
 }
 
-/// Map [`Event`] to Cline's filename convention. Cline v3.36+ recognizes
-/// these eight event types; arbitrary `Event::Custom` values pass through.
-fn event_to_filename(event: &Event) -> String {
+/// Map [`Event`] to Cline's filename convention. Custom names become
+/// file names, so they must be path-safe single components.
+fn event_to_filename(event: &Event) -> Result<String, HookerError> {
     match event {
-        Event::PreToolUse => "PreToolUse".into(),
-        Event::PostToolUse => "PostToolUse".into(),
-        Event::Custom(s) => s.clone(),
+        Event::PreToolUse => Ok("PreToolUse".into()),
+        Event::PostToolUse => Ok("PostToolUse".into()),
+        Event::Custom(s) => validate_custom_event_filename(s).map(|()| s.clone()),
     }
+}
+
+fn validate_custom_event_filename(name: &str) -> Result<(), HookerError> {
+    if name.is_empty() {
+        return Err(HookerError::InvalidTag {
+            tag: name.into(),
+            reason: "Cline custom event must not be empty",
+        });
+    }
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err(HookerError::InvalidTag {
+            tag: name.into(),
+            reason: "Cline custom event may only contain ASCII letters, digits, '_' and '-'",
+        });
+    }
+    Ok(())
 }
 
 fn prefix_shebang(s: &str) -> String {
@@ -676,6 +699,47 @@ mod tests {
         assert!(p.exists());
         let body = fs::read_to_string(&p).unwrap();
         assert!(body.contains("echo started"));
+    }
+
+    #[test]
+    fn install_hook_rejects_unsafe_custom_event_filename() {
+        let dir = tempdir().unwrap();
+        let agent = ClineAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+
+        for bad in [
+            "../TaskStart",
+            "/tmp/TaskStart",
+            "C:\\TaskStart",
+            "Task.Start",
+            "",
+        ] {
+            let spec = HookSpec::builder("alpha")
+                .command("noop")
+                .event(Event::Custom(bad.into()))
+                .build();
+            let err = agent.install(&scope, &spec).unwrap_err();
+            assert!(
+                matches!(err, HookerError::InvalidTag { .. }),
+                "expected invalid custom event for {bad:?}"
+            );
+        }
+
+        assert!(!dir.path().join(".clinerules/hooks").exists());
+    }
+
+    #[test]
+    fn plan_hook_rejects_unsafe_custom_event_filename() {
+        let dir = tempdir().unwrap();
+        let agent = ClineAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let spec = HookSpec::builder("alpha")
+            .command("noop")
+            .event(Event::Custom("../TaskStart".into()))
+            .build();
+
+        let err = agent.plan_install(&scope, &spec).unwrap_err();
+        assert!(matches!(err, HookerError::InvalidTag { .. }));
     }
 
     #[test]
@@ -795,6 +859,26 @@ mod tests {
         agent.uninstall(&scope, "appA").unwrap();
         assert!(!dir.path().join(".clinerules/hooks/PreToolUse").exists());
         assert!(dir.path().join(".clinerules/hooks/PostToolUse").exists());
+    }
+
+    #[test]
+    fn uninstall_rejects_unsafe_ledger_filename() {
+        let dir = tempdir().unwrap();
+        let agent = ClineAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let hooks_dir = dir.path().join(".clinerules/hooks");
+        fs::create_dir_all(&hooks_dir).unwrap();
+        fs::write(
+            hooks_dir.join(".ai-hooker-hooks.json"),
+            r#"{"entries":{"../escape":{"owner":"alpha"}}}"#,
+        )
+        .unwrap();
+        let escaped = dir.path().join(".clinerules/escape");
+        fs::write(&escaped, "do not remove").unwrap();
+
+        let err = agent.uninstall(&scope, "alpha").unwrap_err();
+        assert!(matches!(err, HookerError::InvalidTag { .. }));
+        assert!(escaped.exists());
     }
 
     #[test]

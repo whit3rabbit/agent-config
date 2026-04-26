@@ -243,13 +243,13 @@ impl Integration for GeminiAgent {
                     json_patch::remove_tagged_array_entries_under(&mut root, &["hooks"], tag)?;
                 if changed {
                     let empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
-                    if empty && fs_atomic::restore_backup(&p)? {
+                    let bytes = json_patch::to_pretty(&root);
+                    if empty && fs_atomic::restore_backup_if_matches(&p, &bytes)? {
                         report.restored.push(p.clone());
                     } else if empty {
                         fs_atomic::remove_if_exists(&p)?;
                         report.removed.push(p.clone());
                     } else {
-                        let bytes = json_patch::to_pretty(&root);
                         fs_atomic::write_atomic(&p, &bytes, false)?;
                         report.patched.push(p.clone());
                     }
@@ -264,7 +264,7 @@ impl Integration for GeminiAgent {
             let (stripped, removed) = md_block::remove(&host, tag);
             if removed {
                 if stripped.trim().is_empty() {
-                    if fs_atomic::restore_backup(&memory)? {
+                    if fs_atomic::restore_backup_if_matches(&memory, stripped.as_bytes())? {
                         report.restored.push(memory.clone());
                     } else {
                         fs_atomic::remove_if_exists(&memory)?;

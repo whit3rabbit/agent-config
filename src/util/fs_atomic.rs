@@ -6,8 +6,8 @@
 //! 3. Renames temp → `<path>` (POSIX atomic; on Windows uses `MOVEFILE_REPLACE_EXISTING`).
 //!
 //! If the target file already exists and a backup is requested, we copy
-//! `<path>` → `<path>.bak` *first* (refusing if `.bak` already exists, to avoid
-//! clobbering an older backup the user may rely on).
+//! `<path>` → `<path>.bak` *first*. Existing backups are treated as the
+//! first-touch snapshot and are left in place.
 
 use std::fs;
 use std::io::Write as _;
@@ -32,7 +32,7 @@ pub(crate) struct WriteOutcome {
 /// Atomically replace the contents of `path` with `content`.
 ///
 /// If the file already exists and `make_backup` is true, copy it to `<path>.bak`
-/// first (returning [`HookerError::BackupExists`] if a backup already exists).
+/// first unless that backup already exists.
 /// Creates parent directories if they don't exist. If `content` is byte-equal
 /// to the existing file, this is a no-op (no temp file, no backup).
 pub(crate) fn write_atomic(
@@ -62,8 +62,12 @@ pub(crate) fn write_atomic(
         }
     }
 
-    let backup_path = if existed && make_backup {
-        Some(create_backup(path)?)
+    let backup_path = if existed && make_backup && !backup_path(path).exists() {
+        match create_backup(path) {
+            Ok(backup) => Some(backup),
+            Err(HookerError::BackupExists(_)) => None,
+            Err(e) => return Err(e),
+        }
     } else {
         None
     };
@@ -164,10 +168,19 @@ pub(crate) fn read_to_string_or_empty(path: &Path) -> Result<String, HookerError
     }
 }
 
-/// Restore `<path>.bak` over `path`, then remove the `.bak`. No-op if no backup.
-pub(crate) fn restore_backup(path: &Path) -> Result<bool, HookerError> {
+/// Restore `<path>.bak` over `path` only when the backup already matches the
+/// desired post-uninstall bytes. No-op if no backup exists or the backup is
+/// stale for the desired state.
+pub(crate) fn restore_backup_if_matches(
+    path: &Path,
+    desired_content: &[u8],
+) -> Result<bool, HookerError> {
     let bak = backup_path(path);
     if !bak.exists() {
+        return Ok(false);
+    }
+    let backup_content = fs::read(&bak).map_err(|e| HookerError::io(&bak, e))?;
+    if backup_content != desired_content {
         return Ok(false);
     }
     fs::rename(&bak, path).map_err(|e| HookerError::io(&bak, e))?;
@@ -263,7 +276,7 @@ mod tests {
     }
 
     #[test]
-    fn refuses_to_clobber_existing_backup() {
+    fn existing_backup_is_preserved_while_target_updates() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("config.json");
         let bak = backup_path(&path);
@@ -271,10 +284,10 @@ mod tests {
         fs::write(&path, b"original").unwrap();
         fs::write(&bak, b"important-old-backup").unwrap();
 
-        let err = write_atomic(&path, b"new", true).unwrap_err();
-        assert!(matches!(err, HookerError::BackupExists(_)));
+        let out = write_atomic(&path, b"new", true).unwrap();
+        assert!(out.backup.is_none());
         assert_eq!(fs::read(&bak).unwrap(), b"important-old-backup");
-        assert_eq!(fs::read(&path).unwrap(), b"original", "original untouched");
+        assert_eq!(fs::read(&path).unwrap(), b"new");
     }
 
     #[test]
@@ -291,9 +304,21 @@ mod tests {
         let path = dir.path().join("f.txt");
         fs::write(&path, b"v1").unwrap();
         write_atomic(&path, b"v2", true).unwrap();
-        assert!(restore_backup(&path).unwrap());
+        assert!(restore_backup_if_matches(&path, b"v1").unwrap());
         assert_eq!(fs::read(&path).unwrap(), b"v1");
         assert!(!backup_path(&path).exists());
+    }
+
+    #[test]
+    fn restore_backup_skips_stale_backup() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("f.txt");
+        fs::write(&path, b"v1").unwrap();
+        write_atomic(&path, b"v2", true).unwrap();
+
+        assert!(!restore_backup_if_matches(&path, b"").unwrap());
+        assert_eq!(fs::read(&path).unwrap(), b"v2");
+        assert_eq!(fs::read(backup_path(&path)).unwrap(), b"v1");
     }
 
     #[test]
@@ -353,11 +378,8 @@ mod tests {
             move || write_atomic(&path_b, b"new-b", true),
         );
 
-        let ok_count = ra.is_ok() as usize + rb.is_ok() as usize;
-        let backup_exists_count = matches!(ra, Err(HookerError::BackupExists(_))) as usize
-            + matches!(rb, Err(HookerError::BackupExists(_))) as usize;
-        assert_eq!(ok_count, 1);
-        assert_eq!(backup_exists_count, 1);
+        ra.unwrap();
+        rb.unwrap();
         assert_eq!(fs::read(backup_path(&path)).unwrap(), b"original");
         let final_bytes = fs::read(&path).unwrap();
         assert!(final_bytes == b"new-a" || final_bytes == b"new-b");
