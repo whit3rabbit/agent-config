@@ -16,36 +16,36 @@ pub(crate) fn plan_write_file(
     content: &[u8],
     make_backup: bool,
 ) -> Result<(), AgentConfigError> {
-    match fs::read(path) {
-        Ok(current) => {
-            if current == content {
-                changes.push(PlannedChange::NoOp {
-                    path: path.to_path_buf(),
-                    reason: "already up to date".into(),
-                });
-                return Ok(());
-            }
-            if make_backup {
-                let backup = fs_atomic::backup_path(path);
-                if !backup.exists() {
-                    changes.push(PlannedChange::CreateBackup {
-                        backup,
-                        target: path.to_path_buf(),
-                    });
-                }
-            }
-            changes.push(PlannedChange::PatchFile {
-                path: path.to_path_buf(),
-            });
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            plan_parent_dirs(changes, path);
-            changes.push(PlannedChange::CreateFile {
-                path: path.to_path_buf(),
-            });
-        }
-        Err(e) => return Err(AgentConfigError::io(path, e)),
+    // Pre-stat preserves the original NotFound→CreateFile branch, while the
+    // capped read on the existing-file path bounds memory if the user's
+    // harness config is pathologically large.
+    if !path.exists() {
+        plan_parent_dirs(changes, path);
+        changes.push(PlannedChange::CreateFile {
+            path: path.to_path_buf(),
+        });
+        return Ok(());
     }
+    let current = fs_atomic::read_capped(path)?;
+    if current == content {
+        changes.push(PlannedChange::NoOp {
+            path: path.to_path_buf(),
+            reason: "already up to date".into(),
+        });
+        return Ok(());
+    }
+    if make_backup {
+        let backup = fs_atomic::backup_path(path);
+        if !backup.exists() {
+            changes.push(PlannedChange::CreateBackup {
+                backup,
+                target: path.to_path_buf(),
+            });
+        }
+    }
+    changes.push(PlannedChange::PatchFile {
+        path: path.to_path_buf(),
+    });
     Ok(())
 }
 
@@ -72,13 +72,21 @@ pub(crate) fn plan_restore_backup_or_remove(
 ) -> Result<(), AgentConfigError> {
     let backup = fs_atomic::backup_path(path);
     if backup.exists() {
-        let backup_content = fs::read(&backup).map_err(|e| AgentConfigError::io(&backup, e))?;
-        if backup_content == desired_content {
-            changes.push(PlannedChange::RestoreBackup {
-                backup,
-                target: path.to_path_buf(),
-            });
-            return Ok(());
+        // Defense in depth: a hostile process could swap a giant file in for
+        // our `.bak`. Treat oversize as non-matching (fall through to
+        // RemoveFile) to preserve the planner contract: if the backup doesn't
+        // match the desired post-uninstall bytes, plan a remove instead.
+        match fs_atomic::read_capped(&backup) {
+            Ok(content) if content == desired_content => {
+                changes.push(PlannedChange::RestoreBackup {
+                    backup,
+                    target: path.to_path_buf(),
+                });
+                return Ok(());
+            }
+            Ok(_) => {}
+            Err(AgentConfigError::ConfigTooLarge { .. }) => {}
+            Err(e) => return Err(e),
         }
     }
     changes.push(PlannedChange::RemoveFile {
@@ -316,5 +324,52 @@ fn plan_parent_dirs(changes: &mut Vec<PlannedChange>, path: &Path) {
         {
             changes.push(PlannedChange::CreateDir { path });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plan_write_file_propagates_config_too_large() {
+        use std::fs::File;
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = dir.path().join("huge.json");
+        File::create(&cfg)
+            .unwrap()
+            .set_len(crate::util::fs_atomic::MAX_CONFIG_BYTES + 1)
+            .unwrap();
+        let mut changes = Vec::new();
+        let err = plan_write_file(&mut changes, &cfg, b"x", true).unwrap_err();
+        assert!(matches!(
+            err,
+            crate::error::AgentConfigError::ConfigTooLarge { .. }
+        ));
+    }
+
+    #[test]
+    fn plan_restore_treats_oversize_backup_as_non_matching() {
+        use std::fs::File;
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = dir.path().join("settings.json");
+        let backup = crate::util::fs_atomic::backup_path(&cfg);
+        File::create(&backup)
+            .unwrap()
+            .set_len(crate::util::fs_atomic::MAX_CONFIG_BYTES + 1)
+            .unwrap();
+        let mut changes = Vec::new();
+        plan_restore_backup_or_remove(&mut changes, &cfg, b"desired").unwrap();
+        // Should plan a remove, NOT a restore.
+        assert!(
+            changes
+                .iter()
+                .any(|c| matches!(c, crate::plan::PlannedChange::RemoveFile { .. }))
+        );
+        assert!(
+            !changes
+                .iter()
+                .any(|c| matches!(c, crate::plan::PlannedChange::RestoreBackup { .. }))
+        );
     }
 }
