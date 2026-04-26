@@ -67,12 +67,12 @@ impl FileLock {
     }
 }
 
-fn is_lock_contention(lock_path: &Path, error: &std::io::Error) -> bool {
+fn is_lock_contention(_lock_path: &Path, error: &std::io::Error) -> bool {
     if error.kind() == std::io::ErrorKind::AlreadyExists {
         return true;
     }
 
-    cfg!(windows) && error.kind() == std::io::ErrorKind::PermissionDenied && lock_path.exists()
+    cfg!(windows) && error.kind() == std::io::ErrorKind::PermissionDenied
 }
 
 impl Drop for FileLock {
