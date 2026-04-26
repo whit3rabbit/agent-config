@@ -802,8 +802,8 @@ fn executable(path: &Path) -> bool {
     }
     #[cfg(not(unix))]
     {
-        let _ = path;
-        false
+        path.components().any(|c| c.as_os_str() == "scripts")
+            && path.extension().and_then(|ext| ext.to_str()) == Some("sh")
     }
 }
 
