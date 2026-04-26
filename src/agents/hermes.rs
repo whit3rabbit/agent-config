@@ -305,8 +305,8 @@ impl McpSurface for HermesAgent {
     ) -> Result<InstallReport, AgentConfigError> {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
-        scope.ensure_contained(&cfg)?;
         spec.validate_local_secret_policy(scope)?;
+        scope.ensure_contained(&cfg)?;
         Self::install_mcp_config(&cfg, spec)
     }
 
