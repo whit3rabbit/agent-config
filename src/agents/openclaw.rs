@@ -305,6 +305,7 @@ impl McpSurface for OpenClawAgent {
         spec.validate()?;
         let cfg = Self::mcp_path(scope)?;
         spec.validate_local_secret_policy(scope)?;
+        scope.ensure_contained(&cfg)?;
         Self::install_mcp_config(&cfg, spec)
     }
 
@@ -317,6 +318,7 @@ impl McpSurface for OpenClawAgent {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
         let cfg = Self::mcp_path(scope)?;
+        scope.ensure_contained(&cfg)?;
         Self::uninstall_mcp_config(&cfg, name, owner_tag)
     }
 }
