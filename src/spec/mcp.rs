@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use crate::error::HookerError;
+use fluent_uri::Uri;
 
 use super::validate::{validate_identifier, IdentifierKind};
 
@@ -19,8 +20,8 @@ use super::validate::{validate_identifier, IdentifierKind};
 #[derive(Debug, Clone)]
 pub struct McpSpec {
     /// Server name. Becomes the key in `mcpServers` (Claude/Cursor/Gemini/
-    /// Windsurf), the `servers` key (Copilot), the object-based `mcp` map
-    /// (OpenCode/Kilo), or the table name `[mcp_servers.<name>]` (Codex).
+    /// Copilot/Windsurf), the object-based `mcp` map (OpenCode/Kilo), or the
+    /// table name `[mcp_servers.<name>]` (Codex).
     /// ASCII alnum/`_`/`-`, non-empty.
     pub name: String,
 
@@ -43,6 +44,7 @@ impl McpSpec {
             owner_tag: None,
             transport: None,
             friendly_name: None,
+            builder_error: None,
         }
     }
 
@@ -50,7 +52,8 @@ impl McpSpec {
     /// set as [`HookSpec::tag`](crate::HookSpec::tag).
     pub(crate) fn validate(&self) -> Result<(), HookerError> {
         Self::validate_name(&self.name)?;
-        validate_identifier(&self.owner_tag, IdentifierKind::OwnerTag)
+        validate_identifier(&self.owner_tag, IdentifierKind::OwnerTag)?;
+        validate_transport(&self.transport)
     }
 
     /// Validate just the server name (used by uninstall, which has no spec).
@@ -98,6 +101,7 @@ pub struct McpSpecBuilder {
     owner_tag: Option<String>,
     transport: Option<McpTransport>,
     friendly_name: Option<String>,
+    builder_error: Option<String>,
 }
 
 impl McpSpecBuilder {
@@ -139,23 +143,43 @@ impl McpSpecBuilder {
         self
     }
 
-    /// Set or replace one environment variable on a stdio transport. Inserting
-    /// env on a non-stdio transport is silently a no-op (caller should set
-    /// transport first).
+    /// Set or replace one environment variable on a stdio transport.
+    ///
+    /// Calling this before configuring stdio, or after configuring a non-stdio
+    /// transport, records a builder error returned by
+    /// [`try_build`](Self::try_build).
     pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        if let Some(McpTransport::Stdio { env, .. }) = &mut self.transport {
-            env.insert(key.into(), value.into());
+        match &mut self.transport {
+            Some(McpTransport::Stdio { env, .. }) => {
+                env.insert(key.into(), value.into());
+            }
+            Some(McpTransport::Http { .. }) | Some(McpTransport::Sse { .. }) => {
+                self.record_builder_error("env() can only be used with stdio MCP transports");
+            }
+            None => {
+                self.record_builder_error("env() called before stdio transport was configured");
+            }
         }
         self
     }
 
-    /// Set or replace one header on an HTTP/SSE transport. No-op on stdio.
+    /// Set or replace one header on an HTTP/SSE transport.
+    ///
+    /// Calling this before configuring HTTP/SSE, or after configuring stdio,
+    /// records a builder error returned by [`try_build`](Self::try_build).
     pub fn header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         match &mut self.transport {
             Some(McpTransport::Http { headers, .. }) | Some(McpTransport::Sse { headers, .. }) => {
                 headers.insert(key.into(), value.into());
             }
-            _ => {}
+            Some(McpTransport::Stdio { .. }) => {
+                self.record_builder_error("header() can only be used with HTTP/SSE MCP transports");
+            }
+            None => {
+                self.record_builder_error(
+                    "header() called before HTTP/SSE transport was configured",
+                );
+            }
         }
         self
     }
@@ -170,14 +194,17 @@ impl McpSpecBuilder {
     ///
     /// # Panics
     ///
-    /// Panics if `owner` or a transport were never set. For a fallible variant
-    /// use [`McpSpecBuilder::try_build`].
+    /// Panics if required fields are missing or validation fails. For a
+    /// fallible variant use [`McpSpecBuilder::try_build`].
     pub fn build(self) -> McpSpec {
         self.try_build().expect("McpSpec missing required field")
     }
 
     /// Fallible variant of [`build`](Self::build).
     pub fn try_build(self) -> Result<McpSpec, HookerError> {
+        if let Some(error) = self.builder_error {
+            return Err(HookerError::Other(anyhow::anyhow!(error)));
+        }
         let owner_tag = self.owner_tag.ok_or(HookerError::MissingSpecField {
             id: "<mcp builder>",
             field: "owner",
@@ -195,6 +222,145 @@ impl McpSpecBuilder {
         spec.validate()?;
         Ok(spec)
     }
+
+    fn record_builder_error(&mut self, message: &'static str) {
+        if self.builder_error.is_none() {
+            self.builder_error = Some(message.to_string());
+        }
+    }
+}
+
+fn validate_transport(transport: &McpTransport) -> Result<(), HookerError> {
+    match transport {
+        McpTransport::Stdio { command, args, env } => {
+            if command.trim().is_empty() {
+                return Err(invalid_mcp_spec("stdio MCP command must not be empty"));
+            }
+            validate_no_control_chars("stdio MCP command", command)?;
+            for arg in args {
+                validate_no_control_chars("stdio MCP argument", arg)?;
+            }
+            for (name, value) in env {
+                validate_env_name(name)?;
+                validate_value("stdio MCP environment value", value)?;
+            }
+        }
+        McpTransport::Http { url, headers } => {
+            validate_remote_transport("HTTP", url, headers)?;
+        }
+        McpTransport::Sse { url, headers } => {
+            validate_remote_transport("SSE", url, headers)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_remote_transport(
+    kind: &str,
+    url: &str,
+    headers: &BTreeMap<String, String>,
+) -> Result<(), HookerError> {
+    validate_http_url(kind, url)?;
+    for (name, value) in headers {
+        validate_header_name(name)?;
+        validate_value("MCP header value", value)?;
+    }
+    Ok(())
+}
+
+fn validate_http_url(kind: &str, url: &str) -> Result<(), HookerError> {
+    if url.chars().any(char::is_control) {
+        return Err(invalid_mcp_spec(format!(
+            "{kind} MCP URL must not contain control characters"
+        )));
+    }
+
+    let parsed =
+        Uri::parse(url).map_err(|e| invalid_mcp_spec(format!("{kind} MCP URL is invalid: {e}")))?;
+    let scheme = parsed.scheme().as_str();
+    if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
+        return Err(invalid_mcp_spec(format!(
+            "{kind} MCP URL must use http or https"
+        )));
+    }
+    let Some(authority) = parsed.authority() else {
+        return Err(invalid_mcp_spec(format!(
+            "{kind} MCP URL must include a host"
+        )));
+    };
+    if authority.host().is_empty() {
+        return Err(invalid_mcp_spec(format!(
+            "{kind} MCP URL must include a host"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_env_name(name: &str) -> Result<(), HookerError> {
+    if name.is_empty() {
+        return Err(invalid_mcp_spec(
+            "MCP environment variable name must not be empty",
+        ));
+    }
+    if name.contains('=') {
+        return Err(invalid_mcp_spec(
+            "MCP environment variable name must not contain '='",
+        ));
+    }
+    validate_no_control_chars("MCP environment variable name", name)
+}
+
+fn validate_header_name(name: &str) -> Result<(), HookerError> {
+    if name.is_empty() {
+        return Err(invalid_mcp_spec("MCP header name must not be empty"));
+    }
+    if !name.chars().all(is_header_token_char) {
+        return Err(invalid_mcp_spec(
+            "MCP header name must contain only HTTP token characters",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_value(kind: &str, value: &str) -> Result<(), HookerError> {
+    validate_no_control_chars(kind, value)
+}
+
+fn validate_no_control_chars(kind: &str, value: &str) -> Result<(), HookerError> {
+    if value.chars().any(char::is_control) {
+        return Err(invalid_mcp_spec(format!(
+            "{kind} must not contain control characters"
+        )));
+    }
+    Ok(())
+}
+
+fn is_header_token_char(c: char) -> bool {
+    matches!(
+        c,
+        'A'..='Z'
+            | 'a'..='z'
+            | '0'..='9'
+            | '!'
+            | '#'
+            | '$'
+            | '%'
+            | '&'
+            | '\''
+            | '*'
+            | '+'
+            | '-'
+            | '.'
+            | '^'
+            | '_'
+            | '`'
+            | '|'
+            | '~'
+    )
+}
+
+fn invalid_mcp_spec(message: impl Into<String>) -> HookerError {
+    HookerError::Other(anyhow::anyhow!(message.into()))
 }
 
 #[cfg(test)]
@@ -243,6 +409,22 @@ mod tests {
     }
 
     #[test]
+    fn mcp_builder_http_accepts_rfc_url_forms() {
+        for url in [
+            "HTTP://example.com/mcp",
+            "https://[2001:db8::1]/mcp?x=y#frag",
+            "https://example.com/a/%7Bencoded%7D",
+        ] {
+            let spec = McpSpec::builder("remote")
+                .owner("myapp")
+                .http(url)
+                .try_build()
+                .unwrap();
+            assert!(matches!(spec.transport, McpTransport::Http { .. }));
+        }
+    }
+
+    #[test]
     fn mcp_try_build_rejects_missing_owner() {
         let err = McpSpec::builder("x")
             .stdio("cmd", Vec::<String>::new())
@@ -281,12 +463,126 @@ mod tests {
     }
 
     #[test]
-    fn mcp_env_on_non_stdio_is_noop() {
-        let spec = McpSpec::builder("x")
+    fn mcp_env_on_non_stdio_is_rejected() {
+        let err = McpSpec::builder("x")
             .owner("myapp")
             .http("https://example.com")
             .env("IGNORED", "yes")
-            .build();
-        assert!(matches!(spec.transport, McpTransport::Http { .. }));
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, HookerError::Other(_)));
+    }
+
+    #[test]
+    fn mcp_header_on_stdio_is_rejected() {
+        let err = McpSpec::builder("x")
+            .owner("myapp")
+            .stdio("cmd", Vec::<String>::new())
+            .header("Authorization", "Bearer token")
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, HookerError::Other(_)));
+    }
+
+    #[test]
+    fn mcp_env_before_transport_is_rejected() {
+        let err = McpSpec::builder("x")
+            .owner("myapp")
+            .env("FOO", "bar")
+            .stdio("cmd", Vec::<String>::new())
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, HookerError::Other(_)));
+    }
+
+    #[test]
+    fn mcp_header_before_transport_is_rejected() {
+        let err = McpSpec::builder("x")
+            .owner("myapp")
+            .header("Authorization", "Bearer token")
+            .http("https://example.com/mcp")
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, HookerError::Other(_)));
+    }
+
+    #[test]
+    fn mcp_try_build_rejects_empty_stdio_command() {
+        let err = McpSpec::builder("x")
+            .owner("myapp")
+            .stdio("  ", Vec::<String>::new())
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, HookerError::Other(_)));
+    }
+
+    #[test]
+    fn mcp_try_build_rejects_invalid_remote_urls() {
+        for bad in [
+            "",
+            "ftp://example.com/mcp",
+            "https://",
+            "http:///mcp",
+            "http:/mcp",
+            "https://exa mple.com",
+        ] {
+            let err = McpSpec::builder("x")
+                .owner("myapp")
+                .http(bad)
+                .try_build()
+                .unwrap_err();
+            assert!(
+                matches!(err, HookerError::Other(_)),
+                "expected invalid URL for {bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn mcp_try_build_rejects_invalid_env_names_and_values() {
+        for key in ["", "BAD=NAME", "BAD\nNAME"] {
+            let err = McpSpec::builder("x")
+                .owner("myapp")
+                .stdio("cmd", Vec::<String>::new())
+                .env(key, "value")
+                .try_build()
+                .unwrap_err();
+            assert!(
+                matches!(err, HookerError::Other(_)),
+                "expected invalid env key for {key:?}"
+            );
+        }
+
+        let err = McpSpec::builder("x")
+            .owner("myapp")
+            .stdio("cmd", Vec::<String>::new())
+            .env("GOOD_NAME", "line\nbreak")
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, HookerError::Other(_)));
+    }
+
+    #[test]
+    fn mcp_try_build_rejects_invalid_header_names_and_values() {
+        for key in ["", "Bad Header", "Bad:Header", "Bad\nHeader"] {
+            let err = McpSpec::builder("x")
+                .owner("myapp")
+                .http("https://example.com/mcp")
+                .header(key, "value")
+                .try_build()
+                .unwrap_err();
+            assert!(
+                matches!(err, HookerError::Other(_)),
+                "expected invalid header key for {key:?}"
+            );
+        }
+
+        let err = McpSpec::builder("x")
+            .owner("myapp")
+            .http("https://example.com/mcp")
+            .header("Authorization", "line\nbreak")
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, HookerError::Other(_)));
     }
 }

@@ -1,0 +1,90 @@
+surface: mcp
+agent: qodercli
+scenario: existing_owned_same_name_reinstall
+
+install_result:
+Ok(
+    InstallReport {
+        created: [],
+        patched: [],
+        backed_up: [],
+        already_installed: true,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/.mcp.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.mcp.json",
+            },
+            Exists {
+                path: "[ROOT]/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "qodercli",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+files:
+- .ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- .mcp.json
+  content:
+```text
+{
+  "mcpServers": {
+    "golden-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --locked
+      - run: cargo test --locked --all-targets
 
   docs:
     name: docs and package dry-run

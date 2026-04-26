@@ -380,6 +380,104 @@ fn copilot_mcp_plan_matches_installed_shape() {
 }
 
 #[test]
+fn local_mcp_plan_matches_actual_install_for_every_capable_agent() {
+    for agent in mcp_capable() {
+        if !agent.supported_mcp_scopes().contains(&ScopeKind::Local) {
+            continue;
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let scope = temp_scope(&dir);
+        let spec = mcp_spec("parity-server", "plan-app");
+
+        let initial = agent.plan_install_mcp(&scope, &spec).unwrap();
+        assert!(
+            matches!(initial.status, InstallStatus::WillChange),
+            "{} initial MCP install plan should change: {:?}",
+            agent.id(),
+            initial.changes
+        );
+
+        agent.install_mcp(&scope, &spec).unwrap();
+        let reinstall = agent.plan_install_mcp(&scope, &spec).unwrap();
+        assert!(
+            matches!(reinstall.status, InstallStatus::NoOp),
+            "{} MCP install plan should match installed state: {:?}",
+            agent.id(),
+            reinstall.changes
+        );
+
+        let uninstall = agent
+            .plan_uninstall_mcp(&scope, "parity-server", "plan-app")
+            .unwrap();
+        assert!(
+            matches!(uninstall.status, InstallStatus::WillChange),
+            "{} MCP uninstall plan should see installed state: {:?}",
+            agent.id(),
+            uninstall.changes
+        );
+
+        agent
+            .uninstall_mcp(&scope, "parity-server", "plan-app")
+            .unwrap();
+        let already_absent = agent
+            .plan_uninstall_mcp(&scope, "parity-server", "plan-app")
+            .unwrap();
+        assert!(
+            matches!(already_absent.status, InstallStatus::NoOp),
+            "{} MCP uninstall plan should match absent state: {:?}",
+            agent.id(),
+            already_absent.changes
+        );
+    }
+}
+
+#[test]
+fn mcp_plan_rejects_hostile_names_without_mutation() {
+    let claude = mcp_by_id("claude").unwrap();
+
+    for bad in ["", "../escape", "bad/name", "C:\\escape"] {
+        let dir = tempfile::tempdir().unwrap();
+        let scope = temp_scope(&dir);
+        let err = claude
+            .plan_uninstall_mcp(&scope, bad, "plan-app")
+            .unwrap_err();
+        assert!(
+            matches!(err, ai_hooker::HookerError::InvalidTag { .. }),
+            "expected invalid MCP name for {bad:?}"
+        );
+        assert_empty_dir(dir.path());
+    }
+}
+
+#[test]
+fn skill_plan_rejects_hostile_asset_paths_without_mutation() {
+    let claude = skill_by_id("claude").unwrap();
+
+    for bad in [PathBuf::from("../escape.txt"), PathBuf::from("/etc/passwd")] {
+        let dir = tempfile::tempdir().unwrap();
+        let scope = temp_scope(&dir);
+        let spec = SkillSpec::builder("path-test")
+            .owner("plan-app")
+            .description("Use during path safety tests.")
+            .body("## Goal\nStay inside the skill directory.\n")
+            .asset(SkillAsset {
+                relative_path: bad.clone(),
+                bytes: b"nope".to_vec(),
+                executable: false,
+            })
+            .build();
+
+        let err = claude.plan_install_skill(&scope, &spec).unwrap_err();
+        assert!(
+            matches!(err, ai_hooker::HookerError::Other(_)),
+            "expected unsafe asset path rejection for {bad:?}"
+        );
+        assert_empty_dir(dir.path());
+    }
+}
+
+#[test]
 fn uninstall_final_mcp_entry_reports_config_removal() {
     let dir = tempfile::tempdir().unwrap();
     let scope = temp_scope(&dir);

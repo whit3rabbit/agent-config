@@ -20,6 +20,11 @@ fn mcp_capable_includes_every_file_backed_agent() {
         "windsurf",
         "kilocode",
         "antigravity",
+        "amp",
+        "forge",
+        "junie",
+        "qodercli",
+        "qwen",
     ] {
         assert!(
             ids.contains(expected),
@@ -57,6 +62,11 @@ fn mcp_by_id_returns_each_agent() {
         "windsurf",
         "kilocode",
         "antigravity",
+        "amp",
+        "forge",
+        "junie",
+        "qodercli",
+        "qwen",
     ] {
         let agent = mcp_by_id(id).expect(id);
         assert_eq!(agent.id(), id);
@@ -90,6 +100,11 @@ fn full_mcp_round_trip_per_agent() {
         "windsurf",
         "kilocode",
         "antigravity",
+        "amp",
+        "forge",
+        "junie",
+        "qodercli",
+        "qwen",
     ] {
         let agent = mcp_by_id(id).expect(id);
 

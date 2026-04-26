@@ -1,0 +1,65 @@
+surface: skills
+agent: forge
+scenario: uninstall_final_skill_removes_empty_ledger
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [
+            "[ROOT]/.forge/skills/golden-skill",
+        ],
+        patched: [],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Skill {
+            name: "golden-skill",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.forge/skills/golden-skill",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.forge/skills/.ai-hooker-skills.json",
+        ),
+        files: [
+            Missing {
+                path: "[ROOT]/.forge/skills/golden-skill",
+            },
+            Missing {
+                path: "[ROOT]/.forge/skills/golden-skill/SKILL.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Skill {
+            integration_id: "forge",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-skill",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .forge
+- .forge/skills
+
+HOME tree:
+<empty>

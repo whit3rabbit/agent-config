@@ -1,0 +1,66 @@
+surface: hooks
+agent: qwen
+scenario: empty_rules_install
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/QWEN.md",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: InstalledOwned {
+            owner: "golden-hook",
+        },
+        config_path: Some(
+            "[ROOT]/QWEN.md",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/QWEN.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "qwen",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+files:
+- QWEN.md
+  content:
+```text
+<!-- BEGIN AI-HOOKER:golden-hook -->
+Use golden hook rules.
+<!-- END AI-HOOKER:golden-hook -->
+```
+
+HOME tree:
+<empty>

@@ -1,0 +1,94 @@
+surface: mcp
+agent: qwen
+scenario: http_transport
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/.qwen/settings.json",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/.qwen/settings.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.qwen/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.qwen/settings.json",
+            },
+            Exists {
+                path: "[ROOT]/.qwen/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "qwen",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .qwen
+files:
+- .qwen/.ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- .qwen/settings.json
+  content:
+```text
+{
+  "mcpServers": {
+    "golden-server": {
+      "type": "http",
+      "url": "https://example.test/mcp",
+      "headers": {
+        "Authorization": "Bearer golden-token"
+      }
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

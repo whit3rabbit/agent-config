@@ -339,6 +339,15 @@ mod tests {
         assert_eq!(read_to_string_or_empty(&path).unwrap(), "hello");
     }
 
+    #[cfg(not(unix))]
+    #[test]
+    fn chmod_is_noop_on_non_unix() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("missing.sh");
+        chmod(&path, 0o755).unwrap();
+        assert!(!path.exists());
+    }
+
     #[test]
     fn concurrent_writes_without_backup_leave_complete_file() {
         let dir = tempdir().unwrap();

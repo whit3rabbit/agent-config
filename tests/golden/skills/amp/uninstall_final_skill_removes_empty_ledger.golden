@@ -1,0 +1,65 @@
+surface: skills
+agent: amp
+scenario: uninstall_final_skill_removes_empty_ledger
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [
+            "[ROOT]/.amp/skills/golden-skill",
+        ],
+        patched: [],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Skill {
+            name: "golden-skill",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.amp/skills/golden-skill",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.amp/skills/.ai-hooker-skills.json",
+        ),
+        files: [
+            Missing {
+                path: "[ROOT]/.amp/skills/golden-skill",
+            },
+            Missing {
+                path: "[ROOT]/.amp/skills/golden-skill/SKILL.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Skill {
+            integration_id: "amp",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-skill",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .amp
+- .amp/skills
+
+HOME tree:
+<empty>

@@ -1,0 +1,95 @@
+surface: mcp
+agent: junie
+scenario: sse_transport
+
+install_result:
+Ok(
+    InstallReport {
+        created: [
+            "[ROOT]/.junie/mcp/mcp.json",
+        ],
+        patched: [],
+        backed_up: [],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/.junie/mcp/mcp.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.junie/mcp/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.junie/mcp/mcp.json",
+            },
+            Exists {
+                path: "[ROOT]/.junie/mcp/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "junie",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .junie
+- .junie/mcp
+files:
+- .junie/mcp/.ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- .junie/mcp/mcp.json
+  content:
+```text
+{
+  "mcpServers": {
+    "golden-server": {
+      "type": "sse",
+      "url": "https://example.test/sse",
+      "headers": {
+        "X-Golden": "true"
+      }
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

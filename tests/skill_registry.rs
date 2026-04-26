@@ -17,6 +17,9 @@ const SKILL_CAPABLE: &[&str] = &[
     "windsurf",
     "kilocode",
     "antigravity",
+    "amp",
+    "forge",
+    "qwen",
 ];
 
 const LOCAL_SKILL_CAPABLE: &[&str] = &[
@@ -31,6 +34,9 @@ const LOCAL_SKILL_CAPABLE: &[&str] = &[
     "windsurf",
     "kilocode",
     "antigravity",
+    "amp",
+    "forge",
+    "qwen",
 ];
 
 #[test]

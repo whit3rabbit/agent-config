@@ -1,0 +1,62 @@
+surface: mcp
+agent: amp
+scenario: uninstall_final_entry_prunes
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [],
+        patched: [],
+        restored: [],
+        not_installed: true,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.amp/settings.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.amp/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Missing {
+                path: "[ROOT]/.amp/settings.json",
+            },
+            Missing {
+                path: "[ROOT]/.amp/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "amp",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .amp
+
+HOME tree:
+<empty>

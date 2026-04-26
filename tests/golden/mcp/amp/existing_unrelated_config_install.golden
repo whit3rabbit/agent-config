@@ -1,0 +1,122 @@
+surface: mcp
+agent: amp
+scenario: existing_unrelated_config_install
+
+install_result:
+Ok(
+    InstallReport {
+        created: [],
+        patched: [
+            "[ROOT]/.amp/settings.json",
+        ],
+        backed_up: [
+            "[ROOT]/.amp/settings.json.bak",
+        ],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/.amp/settings.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.amp/.ai-hooker-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/.amp/settings.json",
+            },
+            Exists {
+                path: "[ROOT]/.amp/.ai-hooker-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "amp",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/.amp/settings.json.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .amp
+files:
+- .amp/.ai-hooker-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "owner": "golden-owner"
+    }
+  },
+  "version": 1
+}
+```
+- .amp/settings.json
+  content:
+```text
+{
+  "mcpServers": {
+    "sibling-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    },
+    "golden-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+- .amp/settings.json.bak
+  content:
+```text
+{
+  "mcpServers": {
+    "sibling-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

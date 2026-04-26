@@ -21,6 +21,11 @@ fn registry_exposes_every_supported_integration() {
         "windsurf",
         "kilocode",
         "antigravity",
+        "amp",
+        "forge",
+        "junie",
+        "qodercli",
+        "qwen",
     ] {
         assert!(ids.contains(expected), "missing integration: {expected}");
     }
@@ -42,6 +47,11 @@ fn by_id_returns_each_registered_integration() {
         "windsurf",
         "kilocode",
         "antigravity",
+        "amp",
+        "forge",
+        "junie",
+        "qodercli",
+        "qwen",
     ] {
         let agent = by_id(id).expect(id);
         assert_eq!(agent.id(), id);

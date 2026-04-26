@@ -32,6 +32,7 @@ anyhow = "1"
 dirs = "5"
 tempfile = "3"
 yaml_serde = "0.10"
+fluent-uri = "0.4"
 
 [dev-dependencies]
 pretty_assertions = "1"
