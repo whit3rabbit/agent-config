@@ -55,7 +55,7 @@ impl FileLock {
                         _file: file,
                     });
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                Err(e) if is_lock_contention(&lock_path, &e) => {
                     if started.elapsed() >= LOCK_TIMEOUT {
                         return Err(AgentConfigError::LockTimeout { path: lock_path });
                     }
@@ -65,6 +65,14 @@ impl FileLock {
             }
         }
     }
+}
+
+fn is_lock_contention(lock_path: &Path, error: &std::io::Error) -> bool {
+    if error.kind() == std::io::ErrorKind::AlreadyExists {
+        return true;
+    }
+
+    cfg!(windows) && error.kind() == std::io::ErrorKind::PermissionDenied && lock_path.exists()
 }
 
 impl Drop for FileLock {
