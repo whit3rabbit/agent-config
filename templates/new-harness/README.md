@@ -125,9 +125,9 @@ omit it.
 The `install` body in `agent.rs` is the canonical pattern:
 
 1. `scope.ensure_contained(&path)?` — symlink/path-traversal defense. For
-   `Scope::Local`, refuses to mutate any path whose parent canonicalizes
-   outside the project root. No-op for `Scope::Global`. Always call this
-   BEFORE locking the file or touching it.
+   `Scope::Local`, refuses to mutate any path whose existing components
+   include a symlink or canonicalize outside the project root. No-op for
+   `Scope::Global`. Always call this BEFORE locking the file or touching it.
 2. `file_lock::with_lock(&path, || { ... })` — acquires a cross-process
    file lock for the closure body and drops it on exit. Inside the closure:
 3. `json_patch::read_or_empty(&path)` to load (returns empty `Value` if
@@ -430,8 +430,9 @@ tests live in `tests/`.
   matches the desired post-uninstall state. Stale backups stay on disk.
 - Atomic writes only. Never call `std::fs::write` on a path the user owns.
 - **`scope.ensure_contained(&path)?` before every mutation.** `Scope::Local`
-  refuses paths whose parent canonicalizes outside the project root;
-  `Scope::Global` is a no-op. Skipping this opens a symlink-traversal hole.
+  refuses paths whose existing components include a symlink or canonicalize
+  outside the project root; `Scope::Global` is a no-op. Skipping this opens a
+  symlink-traversal hole.
 - Cross-process file locks (`file_lock::with_lock(&path, || { ... })`)
   wrap every install/uninstall block that touches a shared file. Drop the
   guard (return from the closure) before locking a different file.
@@ -447,7 +448,8 @@ tests live in `tests/`.
 - Plan types: `src/plan.rs` (InstallPlan / UninstallPlan / PlannedChange)
 - Status types: `src/status.rs` (StatusReport / InstallStatus / DriftIssue)
 - Scope and containment check: `src/scope.rs`
-  (`Scope::ensure_contained`, no-op for Global, canonicalizes for Local)
+  (`Scope::ensure_contained`, no-op for Global, symlink-aware canonicalization
+  for Local)
 - Path helpers: `src/paths.rs`
 - File locks: `src/util/file_lock.rs` (`with_lock` closure pattern)
 - Atomic writes / backup restore: `src/util/fs_atomic.rs`

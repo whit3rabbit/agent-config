@@ -11,7 +11,7 @@
 
 use std::fs;
 use std::io::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::error::HookerError;
 
@@ -208,34 +208,131 @@ pub(crate) fn ensure_trailing_newline(s: &str) -> String {
     }
 }
 
-/// Verify that `path` (when canonicalized) stays within `root`.
+/// Verify that `path` cannot escape `root`.
 ///
-/// Both `path.parent()` and `root` are canonicalized via `fs::canonicalize`.
-/// If the canonical parent does not start with the canonical root, returns
-/// [`HookerError::PathResolution`]. If the parent directory does not yet exist,
-/// returns `Ok(())` (new-file writes under a project root are safe because
-/// `write_atomic` creates the parent).
+/// This canonicalizes `root`, then walks the existing components between the
+/// local root and `path`, rejecting symlink components before following them.
+/// Missing tail components are allowed, but the deepest existing ancestor must
+/// still canonicalize under `root`. Existing symlink targets are rejected too,
+/// since backup/write paths would otherwise follow the link.
 pub(crate) fn ensure_contained(path: &Path, root: &Path) -> Result<(), HookerError> {
-    let parent = match path.parent() {
-        Some(p) if !p.as_os_str().is_empty() => p,
-        _ => return Ok(()),
-    };
-    if !parent.exists() {
-        return Ok(());
-    }
-    let canonical_parent = fs::canonicalize(parent).map_err(|e| HookerError::io(parent, e))?;
     let canonical_root = fs::canonicalize(root).map_err(|e| HookerError::io(root, e))?;
-    if !canonical_parent.starts_with(&canonical_root) {
+    let root_abs = lexical_absolute(root)?;
+    let path_abs = lexical_absolute(path)?;
+
+    let deepest_existing = if let Ok(relative) = path_abs.strip_prefix(&root_abs) {
+        deepest_existing_descendant(&root_abs, relative)?
+    } else if let Ok(relative) = path_abs.strip_prefix(&canonical_root) {
+        deepest_existing_descendant(&canonical_root, relative)?
+    } else {
+        deepest_existing_ancestor(&path_abs)?
+    };
+
+    let canonical_existing =
+        fs::canonicalize(&deepest_existing).map_err(|e| HookerError::io(&deepest_existing, e))?;
+    if !canonical_existing.starts_with(&canonical_root) {
         return Err(HookerError::PathResolution(format!(
             "resolved path {} escapes project root {}",
-            canonical_parent.display(),
+            canonical_existing.display(),
             canonical_root.display()
         )));
     }
     Ok(())
 }
 
-/// Reject the write target if it is a symlink.
+fn lexical_absolute(path: &Path) -> Result<PathBuf, HookerError> {
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        let cwd = std::env::current_dir().map_err(|e| HookerError::io(Path::new("."), e))?;
+        Ok(cwd.join(path))
+    }
+}
+
+fn validate_relative_components(relative: &Path) -> Result<(), HookerError> {
+    for component in relative.components() {
+        match component {
+            Component::Normal(_) | Component::CurDir => {}
+            Component::ParentDir => {
+                return Err(HookerError::PathResolution(format!(
+                    "path {} escapes project root via parent directory component",
+                    relative.display()
+                )));
+            }
+            Component::Prefix(_) | Component::RootDir => {
+                return Err(HookerError::PathResolution(format!(
+                    "expected relative path beneath project root, got {}",
+                    relative.display()
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn deepest_existing_descendant(root: &Path, relative: &Path) -> Result<PathBuf, HookerError> {
+    validate_relative_components(relative)?;
+
+    let mut current = root.to_path_buf();
+    let mut deepest = current.clone();
+    let components: Vec<Component<'_>> = relative.components().collect();
+
+    for (index, component) in components.iter().enumerate() {
+        match component {
+            Component::Normal(part) => current.push(part),
+            Component::CurDir => continue,
+            Component::ParentDir | Component::Prefix(_) | Component::RootDir => unreachable!(),
+        }
+
+        match fs::symlink_metadata(&current) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                return Err(HookerError::PathResolution(format!(
+                    "refusing to access path through symlink at {}",
+                    current.display()
+                )));
+            }
+            Ok(meta) => {
+                if index + 1 < components.len() && !meta.is_dir() {
+                    return Err(HookerError::PathResolution(format!(
+                        "path component {} is not a directory",
+                        current.display()
+                    )));
+                }
+                deepest = current.clone();
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => break,
+            Err(e) => return Err(HookerError::io(&current, e)),
+        }
+    }
+
+    Ok(deepest)
+}
+
+fn deepest_existing_ancestor(path: &Path) -> Result<PathBuf, HookerError> {
+    let mut current = path.to_path_buf();
+    loop {
+        match fs::symlink_metadata(&current) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                return Err(HookerError::PathResolution(format!(
+                    "refusing to access path through symlink at {}",
+                    current.display()
+                )));
+            }
+            Ok(_) => return Ok(current),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                if !current.pop() {
+                    return Err(HookerError::PathResolution(format!(
+                        "could not find existing ancestor for {}",
+                        path.display()
+                    )));
+                }
+            }
+            Err(e) => return Err(HookerError::io(&current, e)),
+        }
+    }
+}
+
+/// Reject the path if it is a symlink.
 ///
 /// Uses `fs::symlink_metadata` to detect symlinks without following them.
 /// Returns [`HookerError::PathResolution`] if `path` is a symlink.
@@ -472,7 +569,7 @@ mod tests {
         let root = dir.path().join("inside");
         fs::create_dir_all(&root).unwrap();
         let err = ensure_contained(&file, &root).unwrap_err();
-        assert!(matches!(err, HookerError::PathResolution(ref msg) if msg.contains("escapes")));
+        assert!(matches!(err, HookerError::PathResolution(_)));
     }
 
     #[test]
@@ -497,7 +594,64 @@ mod tests {
         symlink(&escape, &link).unwrap();
         let target = link.join("config.json");
         let err = ensure_contained(&target, &project).unwrap_err();
-        assert!(matches!(err, HookerError::PathResolution(ref msg) if msg.contains("escapes")));
+        assert!(matches!(err, HookerError::PathResolution(ref msg) if msg.contains("symlink")));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn ensure_contained_rejects_symlink_escape_with_missing_deeper_parent() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let project = dir.path().join("project");
+        let escape = dir.path().join("escape");
+        fs::create_dir_all(&project).unwrap();
+        fs::create_dir_all(&escape).unwrap();
+        let link = project.join(".opencode");
+        symlink(&escape, &link).unwrap();
+
+        let target = link.join("plugins").join("hook.ts");
+        assert!(!target.parent().unwrap().exists());
+        let err = ensure_contained(&target, &project).unwrap_err();
+        assert!(matches!(err, HookerError::PathResolution(ref msg) if msg.contains("symlink")));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn ensure_contained_rejects_symlink_target() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let project = dir.path().join("project");
+        let escape = dir.path().join("escape");
+        fs::create_dir_all(&project).unwrap();
+        fs::create_dir_all(&escape).unwrap();
+        let outside_file = escape.join("config.json");
+        fs::write(&outside_file, b"outside").unwrap();
+        let link = project.join("config.json");
+        symlink(&outside_file, &link).unwrap();
+
+        let err = ensure_contained(&link, &project).unwrap_err();
+        assert!(matches!(err, HookerError::PathResolution(ref msg) if msg.contains("symlink")));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn write_atomic_contained_rejects_symlinked_missing_parent() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let project = dir.path().join("project");
+        let escape = dir.path().join("escape");
+        fs::create_dir_all(&project).unwrap();
+        fs::create_dir_all(&escape).unwrap();
+        let link = project.join(".opencode");
+        symlink(&escape, &link).unwrap();
+
+        let target = link.join("plugins").join("hook.ts");
+        let err = write_atomic_contained(&target, b"export {}", true, &project).unwrap_err();
+        assert!(matches!(err, HookerError::PathResolution(ref msg) if msg.contains("symlink")));
+        assert!(!escape.join("plugins").exists());
     }
 
     #[test]

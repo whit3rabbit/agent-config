@@ -79,10 +79,14 @@ drift.
 
 ## Symlink Defense
 
-For `Scope::Local` writes, the library canonicalizes the target path's parent
-directory and verifies it remains within the project root. This prevents:
+For `Scope::Local` writes, the library canonicalizes the project root, walks
+the existing components between that root and the target path, rejects symlink
+components before following them, and verifies the deepest existing component
+remains within the project root. Missing tail components are allowed only after
+the existing ancestor chain passes those checks. This prevents:
 
 - Symlinks inside the project directory from escaping to external paths.
+- Existing symlink targets from being used as backup or write targets.
 - Path traversal via `../` segments in resolved paths.
 
 If the canonicalized path escapes the project root, the operation fails with

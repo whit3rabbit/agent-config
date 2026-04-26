@@ -320,7 +320,7 @@ previews, and dry-run non-mutation.
 ## Conventions
 
 - Public errors: `thiserror`-typed (`HookerError`). Internal helpers may use `anyhow`. Never panic on user input.
-- Every mutating method (`install`, `uninstall`, `install_mcp`, `install_skill`, etc.) must call `scope.ensure_contained(&path)?` before touching disk. No-op for `Scope::Global`; canonicalizes for `Scope::Local`. Skipping it opens a symlink-traversal hole. See `docs/SECURITY.md`.
+- Every mutating method (`install`, `uninstall`, `install_mcp`, `install_skill`, etc.) must call `scope.ensure_contained(&path)?` before touching disk. No-op for `Scope::Global`; for `Scope::Local`, rejects symlink components and canonicalized escapes. Skipping it opens a symlink-traversal hole. See `docs/SECURITY.md`.
 - Cross-process file locks use `file_lock::with_lock(&path, || { ... Ok::<(), HookerError>(()) })?;` (closure pattern). Drop the closure before locking a different file.
 - Atomic writes only (`util::fs_atomic::write_atomic`); never `std::fs::write` directly on a path the user owns.
 - First-touch backups (`<path>.bak`) for any file we modify but did not create. Refuses to clobber an existing `.bak`.

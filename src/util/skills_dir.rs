@@ -68,8 +68,14 @@ pub(crate) fn install(skills_root: &Path, spec: &SkillSpec) -> Result<InstallRep
         let led = ledger_path(skills_root);
 
         ownership::require_owner(&led, &spec.name, &spec.owner_tag, KIND, dir.exists())?;
+        fs::create_dir_all(skills_root).map_err(|e| HookerError::io(skills_root, e))?;
 
         let skill_md_path = dir.join(SKILL_MD);
+        fs_atomic::ensure_contained(&skill_md_path, skills_root)?;
+        for asset in &spec.assets {
+            fs_atomic::ensure_contained(&dir.join(&asset.relative_path), skills_root)?;
+        }
+
         let skill_md = render_skill_md(&spec.frontmatter, &spec.body);
         let outcome = fs_atomic::write_atomic(&skill_md_path, skill_md.as_bytes(), false)?;
         record_outcome(&mut report, outcome);
@@ -194,6 +200,7 @@ pub(crate) fn uninstall(
         ownership::require_owner(&led, name, owner_tag, KIND, on_disk)?;
 
         if on_disk {
+            fs_atomic::ensure_contained(&dir, skills_root)?;
             fs::remove_dir_all(&dir).map_err(|e| HookerError::io(&dir, e))?;
             report.removed.push(dir);
         }
@@ -439,6 +446,55 @@ mod tests {
             let mode = fs::metadata(&script).unwrap().permissions().mode() & 0o777;
             assert_eq!(mode, 0o755);
         }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn install_asset_rejects_symlinked_parent() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        install(dir.path(), &basic_spec("alpha", "myapp")).unwrap();
+        let manifest = dir.path().join("alpha/SKILL.md");
+        let original_manifest = fs::read(&manifest).unwrap();
+        let scripts = dir.path().join("alpha/scripts");
+        symlink(outside.path(), &scripts).unwrap();
+
+        let spec = SkillSpec::builder("alpha")
+            .owner("myapp")
+            .description("desc")
+            .body("body")
+            .asset(SkillAsset {
+                relative_path: PathBuf::from("scripts/run.sh"),
+                bytes: b"#!/bin/sh\necho hi\n".to_vec(),
+                executable: true,
+            })
+            .build();
+        let err = install(dir.path(), &spec).unwrap_err();
+
+        assert!(matches!(err, HookerError::PathResolution(_)));
+        assert_eq!(fs::read(&manifest).unwrap(), original_manifest);
+        assert!(!outside.path().join("run.sh").exists());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn uninstall_rejects_symlinked_skill_dir() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let led = ledger_path(dir.path());
+        fs::create_dir_all(dir.path()).unwrap();
+        ownership::record_install(&led, "alpha", "myapp", None).unwrap();
+        symlink(outside.path(), dir.path().join("alpha")).unwrap();
+
+        let err = uninstall(dir.path(), "alpha", "myapp").unwrap_err();
+
+        assert!(matches!(err, HookerError::PathResolution(_)));
+        assert!(dir.path().join("alpha").exists());
+        assert!(outside.path().exists());
     }
 
     #[test]

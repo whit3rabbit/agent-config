@@ -820,3 +820,58 @@ fn local_skill_install_rejects_symlinked_skill_parent_escape() {
     assert!(matches!(err, ai_hooker::HookerError::PathResolution(_)));
     assert!(!outside.join("skills").exists());
 }
+
+#[test]
+#[cfg(unix)]
+fn local_hook_install_rejects_symlinked_ancestor_when_deeper_parent_is_missing() {
+    use std::os::unix::fs::symlink;
+
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().join("project");
+    let outside = dir.path().join("outside");
+    fs::create_dir_all(&project).unwrap();
+    fs::create_dir_all(&outside).unwrap();
+    symlink(&outside, project.join(".opencode")).unwrap();
+
+    let scope = Scope::Local(project);
+    let err = ai_hooker::by_id("opencode")
+        .unwrap()
+        .install(&scope, &bare_hook_spec("symlink-escape"))
+        .unwrap_err();
+
+    assert!(matches!(err, ai_hooker::HookerError::PathResolution(_)));
+    assert!(!outside.join("plugins").exists());
+}
+
+#[test]
+#[cfg(unix)]
+fn local_hook_install_rejects_symlinked_backup_target() {
+    use std::os::unix::fs::symlink;
+
+    let dir = tempfile::tempdir().unwrap();
+    let project = dir.path().join("project");
+    let outside = dir.path().join("outside");
+    fs::create_dir_all(project.join(".opencode").join("plugins")).unwrap();
+    fs::create_dir_all(&outside).unwrap();
+    let outside_file = outside.join("hook.ts");
+    fs::write(&outside_file, b"outside").unwrap();
+    let link = project
+        .join(".opencode")
+        .join("plugins")
+        .join("symlink-escape.ts");
+    symlink(&outside_file, &link).unwrap();
+
+    let scope = Scope::Local(project.clone());
+    let err = ai_hooker::by_id("opencode")
+        .unwrap()
+        .install(&scope, &bare_hook_spec("symlink-escape"))
+        .unwrap_err();
+
+    assert!(matches!(err, ai_hooker::HookerError::PathResolution(_)));
+    assert_eq!(fs::read(&outside_file).unwrap(), b"outside");
+    assert!(!project
+        .join(".opencode")
+        .join("plugins")
+        .join("symlink-escape.ts.bak")
+        .exists());
+}

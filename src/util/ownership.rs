@@ -76,6 +76,7 @@ pub(crate) fn record_install(
     owner: &str,
     content_hash: Option<&str>,
 ) -> Result<(), HookerError> {
+    fs_atomic::reject_symlink(ledger_path)?;
     file_lock::with_lock(ledger_path, || {
         let mut root = json_patch::read_or_empty(ledger_path)?;
         let entries = ensure_shape(&mut root);
@@ -99,6 +100,7 @@ pub(crate) fn record_uninstall(
     ledger_path: &Path,
     name: &str,
 ) -> Result<Option<String>, HookerError> {
+    fs_atomic::reject_symlink(ledger_path)?;
     file_lock::with_lock(ledger_path, || {
         let mut root = json_patch::read_or_empty(ledger_path)?;
         let prev_owner = {
@@ -125,6 +127,7 @@ pub(crate) fn record_uninstall(
 
 /// Look up the owner of `name` without mutating the ledger.
 pub(crate) fn owner_of(ledger_path: &Path, name: &str) -> Result<Option<String>, HookerError> {
+    fs_atomic::reject_symlink(ledger_path)?;
     let root = json_patch::read_or_empty(ledger_path)?;
     Ok(root
         .get(ENTRIES_KEY)
@@ -168,6 +171,7 @@ pub(crate) struct LedgerEntry {
 /// validation must report malformed ledgers as drift and must never rewrite
 /// them as a side effect of checking state.
 pub(crate) fn read_strict(ledger_path: &Path) -> Result<StrictLedgerRead, HookerError> {
+    fs_atomic::reject_symlink(ledger_path)?;
     let bytes = match fs::read(ledger_path) {
         Ok(bytes) => bytes,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -240,6 +244,7 @@ pub(crate) fn content_hash_of(
     ledger_path: &Path,
     name: &str,
 ) -> Result<Option<String>, HookerError> {
+    fs_atomic::reject_symlink(ledger_path)?;
     let root = json_patch::read_or_empty(ledger_path)?;
     Ok(root
         .get(ENTRIES_KEY)
@@ -493,6 +498,41 @@ mod tests {
         assert!(!contains(&path, "x").unwrap());
         record_install(&path, "x", "myapp", None).unwrap();
         assert!(contains(&path, "x").unwrap());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn record_install_rejects_symlinked_ledger() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let outside_ledger = outside.path().join(".ai-hooker-mcp.json");
+        std::fs::write(&outside_ledger, b"{}").unwrap();
+        let path = ledger_path(dir.path());
+        symlink(&outside_ledger, &path).unwrap();
+
+        let err = record_install(&path, "github", "myapp", None).unwrap_err();
+
+        assert!(matches!(err, HookerError::PathResolution(_)));
+        assert_eq!(std::fs::read(&outside_ledger).unwrap(), b"{}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn owner_of_rejects_symlinked_ledger() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let outside_ledger = outside.path().join(".ai-hooker-mcp.json");
+        std::fs::write(&outside_ledger, b"{}").unwrap();
+        let path = ledger_path(dir.path());
+        symlink(&outside_ledger, &path).unwrap();
+
+        let err = owner_of(&path, "github").unwrap_err();
+
+        assert!(matches!(err, HookerError::PathResolution(_)));
     }
 
     #[test]

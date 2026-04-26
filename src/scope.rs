@@ -37,12 +37,13 @@ impl Scope {
     ///
     /// For [`Scope::Global`], this is a no-op (global writes go to the user's
     /// home/config directories, which are not project-scoped). For
-    /// [`Scope::Local`], canonicalizes both the resolved path's parent and
-    /// the project root, then checks the parent starts with the root.
+    /// [`Scope::Local`], rejects symlink components under the project root,
+    /// canonicalizes the deepest existing path component, then checks it stays
+    /// within the canonical project root.
     ///
     /// Returns [`crate::HookerError::PathResolution`] if the path escapes the root.
-    /// Returns `Ok(())` if the parent directory does not yet exist (a new
-    /// file being created under the project root is safe).
+    /// Missing tail components are allowed when every existing ancestor stays
+    /// inside the root and is not a symlink.
     pub fn ensure_contained(&self, path: &Path) -> Result<(), crate::error::HookerError> {
         match self {
             Scope::Global => Ok(()),
