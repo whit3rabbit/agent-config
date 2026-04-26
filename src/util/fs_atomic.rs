@@ -392,6 +392,20 @@ mod tests {
         )
     }
 
+    fn write_succeeded_or_windows_replace_race(
+        result: Result<WriteOutcome, AgentConfigError>,
+    ) -> bool {
+        match result {
+            Ok(_) => true,
+            Err(AgentConfigError::Io { source, .. })
+                if cfg!(windows) && source.kind() == std::io::ErrorKind::PermissionDenied =>
+            {
+                false
+            }
+            Err(e) => panic!("unexpected write_atomic error: {e:?}"),
+        }
+    }
+
     #[test]
     fn writes_new_file_no_backup() {
         let dir = tempdir().unwrap();
@@ -516,8 +530,15 @@ mod tests {
             move || write_atomic(&path_b, &b, false),
         );
 
-        ra.unwrap();
-        rb.unwrap();
+        // Windows can reject one simultaneous replace with AccessDenied. Shared
+        // integration paths serialize writes with file locks; this lower-level
+        // helper only needs to leave a complete final file when raced directly.
+        let a_succeeded = write_succeeded_or_windows_replace_race(ra);
+        let b_succeeded = write_succeeded_or_windows_replace_race(rb);
+        assert!(
+            a_succeeded || b_succeeded,
+            "at least one concurrent writer should succeed"
+        );
         let final_bytes = fs::read(&path).unwrap();
         assert!(
             final_bytes == expect_a || final_bytes == expect_b,
@@ -539,8 +560,12 @@ mod tests {
             move || write_atomic(&path_b, b"new-b", true),
         );
 
-        ra.unwrap();
-        rb.unwrap();
+        let a_succeeded = write_succeeded_or_windows_replace_race(ra);
+        let b_succeeded = write_succeeded_or_windows_replace_race(rb);
+        assert!(
+            a_succeeded || b_succeeded,
+            "at least one concurrent writer should succeed"
+        );
         assert_eq!(fs::read(backup_path(&path)).unwrap(), b"original");
         let final_bytes = fs::read(&path).unwrap();
         assert!(final_bytes == b"new-a" || final_bytes == b"new-b");
