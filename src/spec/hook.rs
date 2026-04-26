@@ -156,6 +156,24 @@ impl HookSpecBuilder {
             field: "command",
         })?;
         command.validate()?;
+        match &self.matcher {
+            Matcher::All | Matcher::Bash => {}
+            Matcher::Exact(s) | Matcher::Regex(s) => validate_hook_string(s, "matcher")?,
+            Matcher::AnyOf(list) => {
+                if list.is_empty() {
+                    return Err(AgentConfigError::InvalidTag {
+                        tag: String::new(),
+                        reason: "matcher AnyOf must contain at least one entry",
+                    });
+                }
+                for s in list {
+                    validate_hook_string(s, "matcher")?;
+                }
+            }
+        }
+        if let Event::Custom(name) = &self.event {
+            validate_hook_string(name, "event")?;
+        }
         Ok(HookSpec {
             tag: self.tag,
             command,
@@ -255,6 +273,32 @@ fn validate_no_nul(value: &str) -> Result<(), AgentConfigError> {
         return Err(AgentConfigError::InvalidCommand {
             reason: "command values must not contain NUL bytes",
         });
+    }
+    Ok(())
+}
+
+fn validate_hook_string(value: &str, field: &'static str) -> Result<(), AgentConfigError> {
+    if value.is_empty() {
+        return Err(AgentConfigError::InvalidTag {
+            tag: value.to_string(),
+            reason: match field {
+                "matcher" => "matcher value must not be empty",
+                "event" => "custom event name must not be empty",
+                _ => "hook spec value must not be empty",
+            },
+        });
+    }
+    for c in value.chars() {
+        if (c as u32) < 0x20 || c == '\u{007F}' {
+            return Err(AgentConfigError::InvalidTag {
+                tag: value.to_string(),
+                reason: match field {
+                    "matcher" => "matcher value must not contain control characters",
+                    "event" => "custom event name must not contain control characters",
+                    _ => "hook spec value must not contain control characters",
+                },
+            });
+        }
     }
     Ok(())
 }
@@ -486,5 +530,75 @@ mod tests {
             empty_shell,
             AgentConfigError::InvalidCommand { .. }
         ));
+    }
+
+    #[test]
+    fn try_build_rejects_empty_exact_matcher() {
+        let err = HookSpec::builder("ok")
+            .command_program("x", [] as [&str; 0])
+            .matcher(Matcher::Exact(String::new()))
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
+    }
+
+    #[test]
+    fn try_build_rejects_empty_anyof_matcher() {
+        let err = HookSpec::builder("ok")
+            .command_program("x", [] as [&str; 0])
+            .matcher(Matcher::AnyOf(Vec::new()))
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
+    }
+
+    #[test]
+    fn try_build_rejects_empty_string_in_anyof() {
+        let err = HookSpec::builder("ok")
+            .command_program("x", [] as [&str; 0])
+            .matcher(Matcher::AnyOf(vec!["Edit".into(), String::new()]))
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
+    }
+
+    #[test]
+    fn try_build_rejects_control_char_in_regex() {
+        let err = HookSpec::builder("ok")
+            .command_program("x", [] as [&str; 0])
+            .matcher(Matcher::Regex("foo\u{0007}".into()))
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
+    }
+
+    #[test]
+    fn try_build_rejects_empty_custom_event() {
+        let err = HookSpec::builder("ok")
+            .command_program("x", [] as [&str; 0])
+            .event(Event::Custom(String::new()))
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
+    }
+
+    #[test]
+    fn try_build_rejects_control_char_in_custom_event() {
+        let err = HookSpec::builder("ok")
+            .command_program("x", [] as [&str; 0])
+            .event(Event::Custom("before\nShell".into()))
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
+    }
+
+    #[test]
+    fn try_build_accepts_valid_custom_event_and_matcher() {
+        HookSpec::builder("ok")
+            .command_program("x", [] as [&str; 0])
+            .event(Event::Custom("beforeShellExecution".into()))
+            .matcher(Matcher::AnyOf(vec!["Edit".into(), "Read".into()]))
+            .try_build()
+            .expect("valid");
     }
 }

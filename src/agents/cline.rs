@@ -764,13 +764,10 @@ mod tests {
         let agent = ClineAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
 
-        for bad in [
-            "../TaskStart",
-            "/tmp/TaskStart",
-            "C:\\TaskStart",
-            "Task.Start",
-            "",
-        ] {
+        // The empty-string case is now caught by HookSpecBuilder::try_build
+        // before the agent is reached; spec-level coverage lives in
+        // src/spec/hook.rs::tests::try_build_rejects_empty_custom_event.
+        for bad in ["../TaskStart", "/tmp/TaskStart", "C:\\TaskStart", "Task.Start"] {
             let spec = HookSpec::builder("alpha")
                 .command_program("noop", [] as [&str; 0])
                 .event(Event::Custom(bad.into()))
