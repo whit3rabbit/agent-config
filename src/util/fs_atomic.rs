@@ -21,7 +21,6 @@ use crate::error::AgentConfigError;
 /// or runaway file.
 pub(crate) const MAX_CONFIG_BYTES: u64 = 8 * 1024 * 1024;
 
-#[allow(dead_code)]
 pub(crate) fn read_capped(path: &Path) -> Result<Vec<u8>, AgentConfigError> {
     let meta = match std::fs::metadata(path) {
         Ok(m) => m,
@@ -38,7 +37,6 @@ pub(crate) fn read_capped(path: &Path) -> Result<Vec<u8>, AgentConfigError> {
     std::fs::read(path).map_err(|e| AgentConfigError::io(path, e))
 }
 
-#[allow(dead_code)]
 pub(crate) fn read_to_string_capped(path: &Path) -> Result<String, AgentConfigError> {
     let bytes = read_capped(path)?;
     String::from_utf8(bytes).map_err(|e| {
@@ -195,13 +193,12 @@ pub(super) fn remove_if_exists(path: &Path) -> Result<bool, AgentConfigError> {
 }
 
 /// Read `path` as UTF-8, returning an empty string if the file does not exist.
-/// Avoids the TOCTOU `exists()` + `read_to_string` two-syscall pattern.
+/// Routes through [`read_to_string_capped`] so an oversized config surfaces
+/// [`AgentConfigError::ConfigTooLarge`] instead of consuming unbounded memory.
+/// `read_to_string_capped` already returns an empty buffer for missing paths,
+/// preserving the original "or_empty" semantics.
 pub(crate) fn read_to_string_or_empty(path: &Path) -> Result<String, AgentConfigError> {
-    match fs::read_to_string(path) {
-        Ok(s) => Ok(s),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
-        Err(e) => Err(AgentConfigError::io(path, e)),
-    }
+    read_to_string_capped(path)
 }
 
 /// Restore `<path>.bak` over `path` only when the backup already matches the

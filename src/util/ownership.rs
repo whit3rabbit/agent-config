@@ -16,7 +16,6 @@
 //! the config file on disk, we refuse with [`AgentConfigError::ConfigDrifted`].
 
 use std::collections::BTreeMap;
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
@@ -56,11 +55,13 @@ pub(crate) fn content_hash(data: &[u8]) -> String {
 /// Read the file at `path` and return its SHA-256 hex digest.
 /// Returns `None` if the file does not exist.
 pub(crate) fn file_content_hash(path: &Path) -> Result<Option<String>, AgentConfigError> {
-    match fs::read(path) {
-        Ok(data) => Ok(Some(content_hash(&data))),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(AgentConfigError::io(path, e)),
+    // Pre-stat so a missing file remains `None` (not `Some(hash(""))`) — the
+    // bounded reader returns `Vec::new()` for both missing and empty files.
+    if !path.exists() {
+        return Ok(None);
     }
+    let bytes = fs_atomic::read_capped(path)?;
+    Ok(Some(content_hash(&bytes)))
 }
 
 /// Record an install. Creates the ledger file if missing.
@@ -172,13 +173,12 @@ pub(crate) struct LedgerEntry {
 /// them as a side effect of checking state.
 pub(crate) fn read_strict(ledger_path: &Path) -> Result<StrictLedgerRead, AgentConfigError> {
     fs_atomic::reject_symlink(ledger_path)?;
-    let bytes = match fs::read(ledger_path) {
-        Ok(bytes) => bytes,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(StrictLedgerRead::Missing);
-        }
-        Err(e) => return Err(AgentConfigError::io(ledger_path, e)),
-    };
+    // Pre-stat so we can distinguish a missing ledger from a 0-byte ledger;
+    // the bounded reader collapses both to `Vec::new()`.
+    if !ledger_path.exists() {
+        return Ok(StrictLedgerRead::Missing);
+    }
+    let bytes = fs_atomic::read_capped(ledger_path)?;
     if bytes.is_empty() || bytes.iter().all(|b| b.is_ascii_whitespace()) {
         return Ok(StrictLedgerRead::Malformed {
             reason: "ledger file is empty".into(),
