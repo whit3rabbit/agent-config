@@ -133,7 +133,10 @@ fn every_local_mcp_install_rejects_symlinked_subdir() {
     let mut outcomes = Vec::new();
     for integration in registry::mcp_capable() {
         let id = integration.id();
-        if !integration.supported_mcp_scopes().contains(&ScopeKind::Local) {
+        if !integration
+            .supported_mcp_scopes()
+            .contains(&ScopeKind::Local)
+        {
             outcomes.push(Outcome {
                 id,
                 kind: "skipped",
@@ -193,10 +196,7 @@ fn every_local_mcp_install_rejects_symlinked_subdir() {
             outcomes.push(Outcome {
                 id,
                 kind: "failed",
-                detail: format!(
-                    "wrote into outside dir despite returning {:?}",
-                    result
-                ),
+                detail: format!("wrote into outside dir despite returning {:?}", result),
             });
             continue;
         }
@@ -235,7 +235,10 @@ fn every_local_mcp_uninstall_rejects_symlinked_subdir() {
     let mut outcomes = Vec::new();
     for integration in registry::mcp_capable() {
         let id = integration.id();
-        if !integration.supported_mcp_scopes().contains(&ScopeKind::Local) {
+        if !integration
+            .supported_mcp_scopes()
+            .contains(&ScopeKind::Local)
+        {
             outcomes.push(Outcome {
                 id,
                 kind: "skipped",
@@ -292,10 +295,7 @@ fn every_local_mcp_uninstall_rejects_symlinked_subdir() {
             outcomes.push(Outcome {
                 id,
                 kind: "failed",
-                detail: format!(
-                    "wrote into outside dir despite returning {:?}",
-                    result
-                ),
+                detail: format!("wrote into outside dir despite returning {:?}", result),
             });
             continue;
         }
@@ -328,7 +328,10 @@ fn every_local_skill_install_rejects_symlinked_subdir() {
     let mut outcomes = Vec::new();
     for integration in registry::skill_capable() {
         let id = integration.id();
-        if !integration.supported_skill_scopes().contains(&ScopeKind::Local) {
+        if !integration
+            .supported_skill_scopes()
+            .contains(&ScopeKind::Local)
+        {
             outcomes.push(Outcome {
                 id,
                 kind: "skipped",
@@ -383,10 +386,7 @@ fn every_local_skill_install_rejects_symlinked_subdir() {
             outcomes.push(Outcome {
                 id,
                 kind: "failed",
-                detail: format!(
-                    "wrote into outside dir despite returning {:?}",
-                    result
-                ),
+                detail: format!("wrote into outside dir despite returning {:?}", result),
             });
             continue;
         }
