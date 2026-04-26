@@ -56,8 +56,18 @@ fn dummy_skill() -> SkillSpec {
 /// `None` when `target` sits directly under `root` (no subdir to trap),
 /// when `target` is not under `root`, or when the first component is not a
 /// normal name (`./`, `../`, `/`).
+///
+/// On macOS, `tempfile::tempdir()` lives under `/var/folders/...` which is a
+/// symlink to `/private/var/folders/...`. If an agent's planner canonicalizes
+/// the root before returning the target, `target.strip_prefix(root)` returns
+/// `None` and the agent is silently skipped (defeating the regression). Try
+/// stripping the canonical root as a fallback.
 fn first_subdir_under(root: &Path, target: &Path) -> Option<PathBuf> {
-    let rel = target.strip_prefix(root).ok()?;
+    let canonical_root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let rel = target
+        .strip_prefix(root)
+        .or_else(|_| target.strip_prefix(&canonical_root))
+        .ok()?;
     let first = rel.components().next()?;
     if rel.components().count() < 2 {
         // Target is a direct child of root (e.g. `<root>/.mcp.json`); there
@@ -174,6 +184,22 @@ fn every_local_mcp_install_rejects_symlinked_subdir() {
         symlink(outside.path(), &first_dir).unwrap();
 
         let result = integration.install_mcp(&scope, &dummy_mcp());
+        // Containment must run before any write. Even if a future regression
+        // weakens the error type, no bytes should land in `outside`. We
+        // record this as a failed outcome rather than asserting so the
+        // aggregator still reports every offender in one run.
+        let outside_empty = fs::read_dir(outside.path()).unwrap().next().is_none();
+        if !outside_empty {
+            outcomes.push(Outcome {
+                id,
+                kind: "failed",
+                detail: format!(
+                    "wrote into outside dir despite returning {:?}",
+                    result
+                ),
+            });
+            continue;
+        }
         if matches!(result, Err(AgentConfigError::PathResolution(_))) {
             outcomes.push(Outcome {
                 id,
@@ -198,6 +224,12 @@ fn every_local_mcp_install_rejects_symlinked_subdir() {
     assert_no_failures("install_mcp", &outcomes);
 }
 
+// NOTE: This test runs against a fresh project with no existing config and
+// no ledger entry, so a correctly-implemented `uninstall_mcp` rejects the
+// symlinked subdir via `ensure_contained` *before* any disk read. Buggy
+// agents that skip `ensure_contained` reach a no-op early-return path
+// (nothing to remove) and return `Ok(_)`. Either way, observing
+// `Err(PathResolution(_))` proves containment ran ahead of state probing.
 #[test]
 fn every_local_mcp_uninstall_rejects_symlinked_subdir() {
     let mut outcomes = Vec::new();
@@ -253,6 +285,20 @@ fn every_local_mcp_uninstall_rejects_symlinked_subdir() {
         symlink(outside.path(), &first_dir).unwrap();
 
         let result = integration.uninstall_mcp(&scope, "symlink_test_server", "symlink-test");
+        // Containment must run before any disk read or write. Even on the
+        // no-op early-return path, no bytes should land in `outside`.
+        let outside_empty = fs::read_dir(outside.path()).unwrap().next().is_none();
+        if !outside_empty {
+            outcomes.push(Outcome {
+                id,
+                kind: "failed",
+                detail: format!(
+                    "wrote into outside dir despite returning {:?}",
+                    result
+                ),
+            });
+            continue;
+        }
         if matches!(result, Err(AgentConfigError::PathResolution(_))) {
             outcomes.push(Outcome {
                 id,
@@ -330,6 +376,20 @@ fn every_local_skill_install_rejects_symlinked_subdir() {
         symlink(outside.path(), &first_dir).unwrap();
 
         let result = integration.install_skill(&scope, &dummy_skill());
+        // Containment must run before any write. Even if a future regression
+        // weakens the error type, no bytes should land in `outside`.
+        let outside_empty = fs::read_dir(outside.path()).unwrap().next().is_none();
+        if !outside_empty {
+            outcomes.push(Outcome {
+                id,
+                kind: "failed",
+                detail: format!(
+                    "wrote into outside dir despite returning {:?}",
+                    result
+                ),
+            });
+            continue;
+        }
         if matches!(result, Err(AgentConfigError::PathResolution(_))) {
             outcomes.push(Outcome {
                 id,
