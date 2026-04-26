@@ -14,23 +14,28 @@ use std::path::PathBuf;
 
 use crate::agents::planning as agent_planning;
 use crate::error::AgentConfigError;
-use crate::integration::{InstallReport, Integration, McpSurface, UninstallReport};
+use crate::integration::{
+    InstallReport, InstructionSurface, Integration, McpSurface, UninstallReport,
+};
 use crate::paths;
-use crate::plan::{InstallPlan, UninstallPlan};
+use crate::plan::{InstallPlan, PlanTarget, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{HookSpec, McpSpec};
-use crate::status::StatusReport;
-use crate::util::{mcp_json_object, ownership, rules_dir};
+use crate::spec::{HookSpec, InstructionSpec, McpSpec};
+use crate::status::{ConfigPresence, StatusReport};
+use crate::util::{instructions_dir, mcp_json_object, ownership, rules_dir};
 
 const RULES_DIR: &str = ".roo/rules";
 
 /// Roo Code integration.
-pub struct RooAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RooAgent {
+    _private: (),
+}
 
 impl RooAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn require_local<'a>(&self, scope: &'a Scope) -> Result<&'a Path, AgentConfigError> {
@@ -48,12 +53,6 @@ impl RooAgent {
             Scope::Global => paths::roo_mcp_global_file()?,
             Scope::Local(p) => p.join(".roo").join("mcp.json"),
         })
-    }
-}
-
-impl Default for RooAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -207,6 +206,115 @@ impl McpSurface for RooAgent {
     }
 }
 
+impl InstructionSurface for RooAgent {
+    fn id(&self) -> &'static str {
+        "roo"
+    }
+
+    fn supported_instruction_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Local]
+    }
+
+    fn instruction_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, AgentConfigError> {
+        InstructionSpec::validate_name(name)?;
+        let root = self.require_local(scope)?;
+        let config_dir = root.join(".roo");
+        let instruction_dir = root.join(".roo/rules");
+        let (instr_path, led) =
+            instructions_dir::paths_for_status(&config_dir, &instruction_dir, name);
+        let presence = if instr_path.exists() {
+            ConfigPresence::Single
+        } else {
+            ConfigPresence::Absent
+        };
+        let recorded = ownership::owner_of(&led, name)?;
+        Ok(StatusReport::for_instruction(
+            name,
+            instr_path,
+            led,
+            presence,
+            expected_owner,
+            recorded,
+        ))
+    }
+
+    fn plan_install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
+        let root = self.require_local(scope)?;
+        let config_dir = root.join(".roo");
+        let instruction_dir = root.join(".roo/rules");
+        let target = PlanTarget::Instruction {
+            integration_id: InstructionSurface::id(self),
+            scope: scope.clone(),
+            name: spec.name.clone(),
+            owner: spec.owner_tag.clone(),
+        };
+        let changes =
+            instructions_dir::plan_install(&config_dir, spec, None, Some(&instruction_dir), None)?;
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, AgentConfigError> {
+        InstructionSpec::validate_name(name)?;
+        let root = self.require_local(scope)?;
+        let config_dir = root.join(".roo");
+        let instruction_dir = root.join(".roo/rules");
+        let target = PlanTarget::Instruction {
+            integration_id: InstructionSurface::id(self),
+            scope: scope.clone(),
+            name: name.to_string(),
+            owner: owner_tag.to_string(),
+        };
+        let changes = instructions_dir::plan_uninstall(
+            &config_dir,
+            name,
+            owner_tag,
+            None,
+            Some(&instruction_dir),
+        )?;
+        Ok(UninstallPlan::from_changes(target, changes))
+    }
+
+    fn install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
+        let root = self.require_local(scope)?;
+        let config_dir = root.join(".roo");
+        let instruction_dir = root.join(".roo/rules");
+        let instr_path = instruction_dir.join(format!("{}.md", spec.name));
+        scope.ensure_contained(&instr_path)?;
+        instructions_dir::install(&config_dir, spec, None, Some(&instruction_dir), None)
+    }
+
+    fn uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, AgentConfigError> {
+        InstructionSpec::validate_name(name)?;
+        let root = self.require_local(scope)?;
+        let config_dir = root.join(".roo");
+        let instruction_dir = root.join(".roo/rules");
+        instructions_dir::uninstall(&config_dir, name, owner_tag, None, Some(&instruction_dir))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -274,5 +382,54 @@ mod tests {
             .unwrap();
         let err = agent.uninstall_mcp(&scope, "github", "appB").unwrap_err();
         assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
+    }
+}
+
+#[cfg(test)]
+mod instruction_tests {
+    use super::*;
+    use crate::integration::InstructionSurface;
+    use crate::spec::InstructionPlacement;
+    use tempfile::tempdir;
+
+    fn instruction_spec(name: &str, owner: &str) -> InstructionSpec {
+        InstructionSpec::builder(name)
+            .owner(owner)
+            .placement(InstructionPlacement::StandaloneFile)
+            .body("# Test instruction\n")
+            .build()
+    }
+
+    #[test]
+    fn instruction_writes_to_rules_dir() {
+        let dir = tempdir().unwrap();
+        let agent = RooAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        agent
+            .install_instruction(&scope, &instruction_spec("test-rule", "myapp"))
+            .unwrap();
+        assert!(dir.path().join(".roo/rules/test-rule.md").exists());
+    }
+
+    #[test]
+    fn instruction_uninstall_removes_file() {
+        let dir = tempdir().unwrap();
+        let agent = RooAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        agent
+            .install_instruction(&scope, &instruction_spec("test-rule", "myapp"))
+            .unwrap();
+        agent
+            .uninstall_instruction(&scope, "test-rule", "myapp")
+            .unwrap();
+        assert!(!dir.path().join(".roo/rules/test-rule.md").exists());
+    }
+
+    #[test]
+    fn instruction_rejects_global_scope() {
+        let agent = RooAgent::new();
+        let spec = instruction_spec("test-rule", "myapp");
+        let result = agent.plan_install_instruction(&Scope::Global, &spec);
+        assert!(result.is_err());
     }
 }

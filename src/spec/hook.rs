@@ -6,7 +6,8 @@ use super::validate::{validate_identifier, IdentifierKind};
 
 /// Everything an [`Integration`](crate::Integration) needs to install a hook.
 ///
-/// Build via [`HookSpec::builder`].
+/// Build via [`HookSpec::builder`]. For fallible construction see
+/// [`HookSpecBuilder::try_build`].
 #[derive(Debug, Clone)]
 pub struct HookSpec {
     /// Unique identifier for *the consumer of this library*. Used to namespace
@@ -138,17 +139,23 @@ impl HookSpecBuilder {
         self
     }
 
-    /// Finalize the spec.
+    /// Finalize the spec, panicking on missing or invalid fields.
+    ///
+    /// Convenience wrapper around [`try_build()`](Self::try_build) for tests
+    /// and examples. Production code should prefer [`try_build()`](Self::try_build)
+    /// to propagate errors instead of panicking.
     ///
     /// # Panics
     ///
-    /// Panics if `command` was never set. For a fallible variant use
-    /// [`HookSpecBuilder::try_build`].
+    /// Panics if `command` was never set.
     pub fn build(self) -> HookSpec {
         self.try_build().expect("HookSpec missing `command`")
     }
 
-    /// Fallible variant of [`build`](Self::build).
+    /// Finalize the spec, returning [`Result`] on missing or invalid fields.
+    ///
+    /// This is the recommended way to build a spec in production code.
+    /// See [crate-level documentation](crate#production-usage) for a full example.
     pub fn try_build(self) -> Result<HookSpec, AgentConfigError> {
         HookSpec::validate_tag(&self.tag)?;
         let command = self.command.ok_or(AgentConfigError::MissingSpecField {

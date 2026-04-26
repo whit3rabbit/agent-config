@@ -570,10 +570,11 @@ fn issue_rank(issue: &DriftIssue) -> u8 {
         DriftIssue::UnexpectedDirectoryShape { .. } => 6,
         DriftIssue::SkillMissingSkillMd { .. } | DriftIssue::SkillIncomplete { .. } => 7,
         DriftIssue::SkillAssetEscapesRoot { .. } => 8,
-        DriftIssue::BackupCollision { .. } => 9,
-        DriftIssue::MissingBackup { .. } => 10,
-        DriftIssue::StaleBackup { .. } => 11,
-        DriftIssue::UnsupportedButPresent { .. } => 12,
+        DriftIssue::InstructionContentDrift { .. } => 9,
+        DriftIssue::BackupCollision { .. } => 10,
+        DriftIssue::MissingBackup { .. } => 11,
+        DriftIssue::StaleBackup { .. } => 12,
+        DriftIssue::UnsupportedButPresent { .. } => 13,
     }
 }
 
@@ -589,6 +590,7 @@ fn issue_path(issue: &DriftIssue) -> String {
         | DriftIssue::UnexpectedDirectoryShape { path, .. }
         | DriftIssue::SkillAssetEscapesRoot { path, .. }
         | DriftIssue::UnsupportedButPresent { path }
+        | DriftIssue::InstructionContentDrift { path }
         | DriftIssue::InvalidConfig { path, .. } => path.display().to_string(),
         DriftIssue::OwnerMismatch { path, .. } => path
             .as_ref()
@@ -628,7 +630,8 @@ fn suggested_actions_for(issues: &[DriftIssue]) -> Vec<SuggestedAction> {
             | DriftIssue::UnsupportedButPresent { .. }
             | DriftIssue::InvalidConfig { .. }
             | DriftIssue::SkillIncomplete { .. }
-            | DriftIssue::MultipleEntries { .. } => {
+            | DriftIssue::MultipleEntries { .. }
+            | DriftIssue::InstructionContentDrift { .. } => {
                 push_action(&mut actions, SuggestedAction::ManualReview);
             }
         }

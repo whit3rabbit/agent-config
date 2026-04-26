@@ -115,6 +115,17 @@ pub enum PlanTarget {
         /// Expected owner tag.
         owner: String,
     },
+    /// Instruction target for one integration, scope, instruction name, and owner.
+    Instruction {
+        /// Stable integration id.
+        integration_id: &'static str,
+        /// Target scope.
+        scope: Scope,
+        /// Instruction name.
+        name: String,
+        /// Expected owner tag.
+        owner: String,
+    },
 }
 
 /// High-level status for a dry-run install or uninstall plan.

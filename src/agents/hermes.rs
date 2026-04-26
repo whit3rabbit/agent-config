@@ -26,12 +26,15 @@ use crate::util::{file_lock, fs_atomic, md_block, ownership, safe_fs, skills_dir
 const SKILL_CATEGORY: &str = "agent-config";
 
 /// Hermes Agent file-backed installer.
-pub struct HermesAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct HermesAgent {
+    _private: (),
+}
 
 impl HermesAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn require_local(scope: &Scope) -> Result<&Path, AgentConfigError> {
@@ -110,12 +113,6 @@ impl HermesAgent {
             "mcp server",
             &["mcp_servers"],
         )
-    }
-}
-
-impl Default for HermesAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

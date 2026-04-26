@@ -362,7 +362,7 @@ refused.
 In `src/agents/mod.rs`:
 
 ```rust
-pub mod myagent;
+pub(crate) mod myagent;
 pub use myagent::MyagentAgent;
 ```
 

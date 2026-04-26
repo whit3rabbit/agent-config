@@ -31,12 +31,15 @@ use crate::util::{
 };
 
 /// Cursor (the AI editor and CLI).
-pub struct CursorAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CursorAgent {
+    _private: (),
+}
 
 impl CursorAgent {
     /// Construct an instance. The struct is stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn hooks_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
@@ -58,12 +61,6 @@ impl CursorAgent {
             Scope::Global => paths::cursor_home()?.join("skills"),
             Scope::Local(p) => p.join(".cursor").join("skills"),
         })
-    }
-}
-
-impl Default for CursorAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

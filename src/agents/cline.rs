@@ -24,17 +24,20 @@ use std::path::PathBuf;
 
 use crate::agents::planning as agent_planning;
 use crate::error::AgentConfigError;
-use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
+use crate::integration::{
+    InstallReport, InstructionSurface, Integration, McpSurface, SkillSurface, UninstallReport,
+};
 use crate::paths;
 use crate::plan::{
     has_refusal, InstallPlan, PlanTarget as DryPlanTarget, PlannedChange, RefusalReason,
     UninstallPlan,
 };
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{Event, HookSpec, McpSpec, ScriptTemplate, SkillSpec};
+use crate::spec::{Event, HookSpec, InstructionSpec, McpSpec, ScriptTemplate, SkillSpec};
 use crate::status::{InstallStatus, PathStatus, PlanTarget, StatusReport, StatusWarning};
 use crate::util::{
-    file_lock, fs_atomic, mcp_json_object, ownership, planning, rules_dir, safe_fs, skills_dir,
+    file_lock, fs_atomic, instructions_dir, mcp_json_object, ownership, planning, rules_dir,
+    safe_fs, skills_dir,
 };
 
 const RULES_DIR: &str = ".clinerules";
@@ -42,12 +45,15 @@ const HOOKS_SUBDIR: &str = "hooks";
 const KIND: &str = "cline hook";
 
 /// Cline integration.
-pub struct ClineAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ClineAgent {
+    _private: (),
+}
 
 impl ClineAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn project_root<'a>(&self, scope: &'a Scope) -> Result<&'a std::path::Path, AgentConfigError> {
@@ -86,12 +92,6 @@ impl ClineAgent {
             Scope::Global => paths::home_dir()?.join(".cline").join("skills"),
             Scope::Local(p) => p.join(".cline").join("skills"),
         })
-    }
-}
-
-impl Default for ClineAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -620,6 +620,127 @@ impl SkillSurface for ClineAgent {
     }
 }
 
+impl InstructionSurface for ClineAgent {
+    fn id(&self) -> &'static str {
+        "cline"
+    }
+
+    fn supported_instruction_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Local]
+    }
+
+    fn instruction_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, AgentConfigError> {
+        InstructionSpec::validate_name(name)?;
+        let root = self.project_root(scope)?;
+        let rules_dir = root.join(RULES_DIR);
+        let (instr_path, led) = instructions_dir::paths_for_status(&rules_dir, &rules_dir, name);
+        let exists = instr_path.exists();
+        let presence = if exists {
+            crate::status::ConfigPresence::Single
+        } else {
+            crate::status::ConfigPresence::Absent
+        };
+        let recorded = ownership::owner_of(&led, name)?;
+        Ok(StatusReport::for_instruction(
+            name,
+            instr_path,
+            led,
+            presence,
+            expected_owner,
+            recorded,
+        ))
+    }
+
+    fn plan_install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
+        spec.validate()?;
+        let target = crate::plan::PlanTarget::Instruction {
+            integration_id: InstructionSurface::id(self),
+            scope: scope.clone(),
+            name: spec.name.clone(),
+            owner: spec.owner_tag.clone(),
+        };
+        let root = match self.project_root(scope) {
+            Ok(root) => root,
+            Err(AgentConfigError::UnsupportedScope { .. }) => {
+                return Ok(InstallPlan::refused(
+                    target,
+                    None,
+                    RefusalReason::UnsupportedScope,
+                ));
+            }
+            Err(e) => return Err(e),
+        };
+        let rules_dir = root.join(RULES_DIR);
+        let changes =
+            instructions_dir::plan_install(&rules_dir, spec, None, Some(&rules_dir), None)?;
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, AgentConfigError> {
+        InstructionSpec::validate_name(name)?;
+        let target = crate::plan::PlanTarget::Instruction {
+            integration_id: InstructionSurface::id(self),
+            scope: scope.clone(),
+            name: name.to_string(),
+            owner: owner_tag.to_string(),
+        };
+        let root = match self.project_root(scope) {
+            Ok(root) => root,
+            Err(AgentConfigError::UnsupportedScope { .. }) => {
+                return Ok(UninstallPlan::refused(
+                    target,
+                    None,
+                    RefusalReason::UnsupportedScope,
+                ));
+            }
+            Err(e) => return Err(e),
+        };
+        let rules_dir = root.join(RULES_DIR);
+        let changes =
+            instructions_dir::plan_uninstall(&rules_dir, name, owner_tag, None, Some(&rules_dir))?;
+        Ok(UninstallPlan::from_changes(target, changes))
+    }
+
+    fn install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
+        spec.validate()?;
+        let root = self.project_root(scope)?;
+        let rules_dir = root.join(RULES_DIR);
+        scope.ensure_contained(&rules_dir.join(&spec.name))?;
+        instructions_dir::install(&rules_dir, spec, None, Some(&rules_dir), None)
+    }
+
+    fn uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, AgentConfigError> {
+        InstructionSpec::validate_name(name)?;
+        let root = self.project_root(scope)?;
+        let rules_dir = root.join(RULES_DIR);
+        scope.ensure_contained(&rules_dir)?;
+        instructions_dir::uninstall(&rules_dir, name, owner_tag, None, Some(&rules_dir))
+    }
+}
+
 /// Map [`Event`] to Cline's filename convention. Custom names become
 /// file names, so they must be path-safe single components.
 fn event_to_filename(event: &Event) -> Result<String, AgentConfigError> {
@@ -991,5 +1112,56 @@ mod tests {
                 ..
             }
         ));
+    }
+}
+
+#[cfg(test)]
+mod instruction_tests {
+    use super::*;
+    use crate::integration::InstructionSurface;
+    use crate::spec::InstructionPlacement;
+    use tempfile::tempdir;
+
+    fn instruction_spec(name: &str, owner: &str) -> InstructionSpec {
+        InstructionSpec::builder(name)
+            .owner(owner)
+            .placement(InstructionPlacement::StandaloneFile)
+            .body("# Test instruction\n")
+            .build()
+    }
+
+    #[test]
+    fn instruction_writes_to_rules_dir() {
+        let dir = tempdir().unwrap();
+        let agent = ClineAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        agent
+            .install_instruction(&scope, &instruction_spec("test-rule", "myapp"))
+            .unwrap();
+        assert!(dir.path().join(".clinerules/test-rule.md").exists());
+    }
+
+    #[test]
+    fn instruction_uninstall_removes_file() {
+        let dir = tempdir().unwrap();
+        let agent = ClineAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        agent
+            .install_instruction(&scope, &instruction_spec("test-rule", "myapp"))
+            .unwrap();
+        agent
+            .uninstall_instruction(&scope, "test-rule", "myapp")
+            .unwrap();
+        assert!(!dir.path().join(".clinerules/test-rule.md").exists());
+    }
+
+    #[test]
+    fn instruction_rejects_global_scope() {
+        let agent = ClineAgent::new();
+        let spec = instruction_spec("test-rule", "myapp");
+        let plan = agent
+            .plan_install_instruction(&Scope::Global, &spec)
+            .unwrap();
+        assert!(matches!(plan.status, crate::plan::PlanStatus::Refused));
     }
 }

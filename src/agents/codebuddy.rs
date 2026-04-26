@@ -32,12 +32,15 @@ use crate::util::{
 use crate::agents::planning as agent_planning;
 
 /// Tencent CodeBuddy CLI installer.
-pub struct CodeBuddyAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CodeBuddyAgent {
+    _private: (),
+}
 
 impl CodeBuddyAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn codebuddy_home_from_home(home: &Path) -> PathBuf {
@@ -65,12 +68,6 @@ impl CodeBuddyAgent {
             Scope::Global => Self::codebuddy_home_from_home(&paths::home_dir()?).join("skills"),
             Scope::Local(p) => p.join(".codebuddy").join("skills"),
         })
-    }
-}
-
-impl Default for CodeBuddyAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

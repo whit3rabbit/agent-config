@@ -39,12 +39,15 @@ use crate::util::{
 };
 
 /// GitHub Copilot.
-pub struct CopilotAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CopilotAgent {
+    _private: (),
+}
 
 impl CopilotAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn hooks_file(scope: &Scope, tag: &str) -> Result<PathBuf, AgentConfigError> {
@@ -85,12 +88,6 @@ impl CopilotAgent {
             Scope::Global => paths::home_dir()?.join(".copilot").join("skills"),
             Scope::Local(root) => root.join(".github").join("skills"),
         })
-    }
-}
-
-impl Default for CopilotAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

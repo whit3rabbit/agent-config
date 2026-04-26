@@ -28,12 +28,15 @@ use crate::status::StatusReport;
 use crate::util::{file_lock, fs_atomic, mcp_json_map, md_block, ownership, safe_fs, skills_dir};
 
 /// OpenClaw file-backed installer.
-pub struct OpenClawAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OpenClawAgent {
+    _private: (),
+}
 
 impl OpenClawAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn require_local(scope: &Scope) -> Result<&Path, AgentConfigError> {
@@ -109,12 +112,6 @@ impl OpenClawAgent {
             &["mcp", "servers"],
             mcp_json_map::ConfigFormat::Json5,
         )
-    }
-}
-
-impl Default for OpenClawAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

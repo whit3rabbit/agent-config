@@ -23,12 +23,15 @@ use crate::status::StatusReport;
 use crate::util::{fs_atomic, mcp_json_map, ownership, planning, safe_fs, skills_dir};
 
 /// OpenCode plugin installer.
-pub struct OpenCodeAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OpenCodeAgent {
+    _private: (),
+}
 
 impl OpenCodeAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn plugin_path(scope: &Scope, tag: &str) -> Result<PathBuf, AgentConfigError> {
@@ -59,12 +62,6 @@ impl OpenCodeAgent {
                 .join("skills"),
             Scope::Local(p) => p.join(".opencode").join("skills"),
         })
-    }
-}
-
-impl Default for OpenCodeAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

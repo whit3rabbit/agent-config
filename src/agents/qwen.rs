@@ -30,12 +30,15 @@ use crate::util::{
 };
 
 /// Qwen Code installer.
-pub struct QwenAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct QwenAgent {
+    _private: (),
+}
 
 impl QwenAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn qwen_home_from_home(home: &Path) -> PathBuf {
@@ -65,12 +68,6 @@ impl QwenAgent {
             Scope::Global => Self::qwen_home_from_home(&paths::home_dir()?).join("skills"),
             Scope::Local(p) => p.join(".qwen").join("skills"),
         })
-    }
-}
-
-impl Default for QwenAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

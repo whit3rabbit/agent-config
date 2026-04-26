@@ -24,12 +24,15 @@ use crate::status::StatusReport;
 use crate::util::{file_lock, fs_atomic, mcp_json_object, md_block, ownership, safe_fs};
 
 /// JetBrains Junie installer.
-pub struct JunieAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct JunieAgent {
+    _private: (),
+}
 
 impl JunieAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn require_local(scope: &Scope) -> Result<&Path, AgentConfigError> {
@@ -54,12 +57,6 @@ impl JunieAgent {
                 .join("mcp.json"),
             Scope::Local(p) => p.join(".junie").join("mcp").join("mcp.json"),
         })
-    }
-}
-
-impl Default for JunieAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

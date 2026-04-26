@@ -32,12 +32,15 @@ use crate::status::StatusReport;
 use crate::util::{file_lock, json_patch, mcp_json_object, ownership, planning, safe_fs};
 
 /// Tabnine CLI installer.
-pub struct TabnineAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TabnineAgent {
+    _private: (),
+}
 
 impl TabnineAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn settings_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
@@ -52,12 +55,6 @@ impl TabnineAgent {
 
     fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Self::settings_path(scope)
-    }
-}
-
-impl Default for TabnineAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

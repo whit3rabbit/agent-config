@@ -107,7 +107,7 @@ fn main() -> agent_config::Result<()> {
         .command_program("myapp", ["hook", "claude"])  // what the harness runs
         .matcher(Matcher::Bash)                        // filter to shell calls
         .event(Event::PreToolUse)                      // before each tool call
-        .build();
+        .try_build()?;
 
     let claude = by_id("claude").expect("claude is registered");
     let report = claude.install(&Scope::Global, &spec)?;
@@ -118,6 +118,10 @@ fn main() -> agent_config::Result<()> {
     Ok(())
 }
 ```
+
+> **Tip:** Prefer `.try_build()?` over `.build()` in production code.
+> The `build()` method panics on invalid specs, which is fine for tests
+> but not for a running application.
 
 `Scope::Global` writes under the user's harness config dir
 (`~/.claude/`, `~/.cursor/`, etc.). `Scope::Local(PathBuf)` writes inside
@@ -176,7 +180,7 @@ fn main() -> agent_config::Result<()> {
         .owner("myapp")
         .stdio("npx", ["-y", "@modelcontextprotocol/server-github"])
         .env_from_host("GITHUB_TOKEN")
-        .build();
+        .try_build()?;
 
     let codex = mcp_by_id("codex").expect("codex supports MCP");
     codex.install_mcp(&Scope::Global, &spec)?;
@@ -220,7 +224,7 @@ fn main() -> agent_config::Result<()> {
         .owner("myapp")
         .description("Use when my app needs custom repository context.")
         .body("# My Skill\n\nFollow the local project conventions.")
-        .build();
+        .try_build()?;
 
     let claude = skill_by_id("claude").expect("claude supports skills");
     claude.install_skill(&Scope::Global, &spec)?;

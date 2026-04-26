@@ -12,7 +12,8 @@ use super::validate::{validate_identifier, IdentifierKind};
 /// harness's `skills/` root, with a required `SKILL.md` and any number of
 /// supporting files in `scripts/`, `references/`, and `assets/`.
 ///
-/// Build via [`SkillSpec::builder`].
+/// Build via [`SkillSpec::builder`]. For fallible construction see
+/// [`SkillSpecBuilder::try_build`].
 #[derive(Debug, Clone)]
 pub struct SkillSpec {
     /// Skill directory name. Becomes the folder under the harness's
@@ -153,7 +154,11 @@ impl SkillSpecBuilder {
         self
     }
 
-    /// Finalize the spec.
+    /// Finalize the spec, panicking on missing or invalid fields.
+    ///
+    /// Convenience wrapper around [`try_build()`](Self::try_build) for tests
+    /// and examples. Production code should prefer [`try_build()`](Self::try_build)
+    /// to propagate errors instead of panicking.
     ///
     /// # Panics
     ///
@@ -162,7 +167,10 @@ impl SkillSpecBuilder {
         self.try_build().expect("SkillSpec missing required field")
     }
 
-    /// Fallible variant of [`build`](Self::build).
+    /// Finalize the spec, returning [`Result`] on missing or invalid fields.
+    ///
+    /// This is the recommended way to build a spec in production code.
+    /// See [crate-level documentation](crate#production-usage) for a full example.
     pub fn try_build(self) -> Result<SkillSpec, AgentConfigError> {
         let owner_tag = self.owner_tag.ok_or(AgentConfigError::MissingSpecField {
             id: "<skill builder>",

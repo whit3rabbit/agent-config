@@ -35,6 +35,11 @@ pub enum PlanTarget {
         /// The skill name the report was queried for.
         name: String,
     },
+    /// An instruction identified by name.
+    Instruction {
+        /// The instruction name the report was queried for.
+        name: String,
+    },
 }
 
 /// High-level installation state.
@@ -178,6 +183,12 @@ pub enum DriftIssue {
         dir: PathBuf,
         /// The expected manifest path.
         missing: PathBuf,
+    },
+    /// An instruction file exists but the content hash does not match the
+    /// ledger record.
+    InstructionContentDrift {
+        /// The instruction file path.
+        path: PathBuf,
     },
     /// The harness config exists but cannot be parsed (malformed JSON, JSONC,
     /// JSON5, TOML, or YAML).
@@ -537,6 +548,30 @@ impl StatusReport {
         report
     }
 
+    /// Build a report for an instruction. The instruction is "present in
+    /// config" when its file exists on disk.
+    pub(crate) fn for_instruction(
+        name: &str,
+        instruction_path: PathBuf,
+        ledger_path: PathBuf,
+        presence: ConfigPresence,
+        expected_owner: &str,
+        recorded_owner: Option<String>,
+    ) -> Self {
+        let target = PlanTarget::Instruction {
+            name: name.to_string(),
+        };
+        Self::assemble(
+            target,
+            Some(instruction_path),
+            Some(ledger_path),
+            presence,
+            expected_owner,
+            recorded_owner,
+            Vec::new(),
+        )
+    }
+
     /// Common assembly for ledger-backed surfaces (MCP, skills).
     /// `extra_drift` is folded into a `Drifted` status when non-empty,
     /// otherwise the ledger/config combination determines the variant.
@@ -592,7 +627,9 @@ impl StatusReport {
             (ConfigPresence::Duplicate { count }, _) => {
                 let target_name = match &target {
                     PlanTarget::Hook { tag } => tag.clone(),
-                    PlanTarget::Mcp { name } | PlanTarget::Skill { name } => name.clone(),
+                    PlanTarget::Mcp { name }
+                    | PlanTarget::Skill { name }
+                    | PlanTarget::Instruction { name } => name.clone(),
                 };
                 let mut issues = std::mem::take(&mut extra_drift);
                 issues.push(DriftIssue::MultipleEntries {

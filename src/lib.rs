@@ -5,6 +5,31 @@
 //! [`SkillSpec`]. The library handles atomic writes, backups, ownership ledgers,
 //! and idempotent edits.
 //!
+//! # Production usage
+//!
+//! In production code, prefer [`try_build()`](HookSpecBuilder::try_build) over
+//! the panicking [`build()`](HookSpecBuilder::build) so that invalid specs
+//! propagate as [`Result`] errors instead of panics:
+//!
+//! ```no_run
+//! use agent_config::{by_id, HookSpec, Matcher, Event, Scope};
+//!
+//! fn install_my_hook() -> agent_config::Result<()> {
+//!     let spec = HookSpec::builder("myapp")
+//!         .command_program("myapp", ["hook", "claude"])
+//!         .matcher(Matcher::Bash)
+//!         .event(Event::PreToolUse)
+//!         .try_build()?;
+//!
+//!     let claude = by_id("claude").expect("claude integration registered");
+//!     claude.install(&Scope::Global, &spec)?;
+//!     Ok(())
+//! }
+//! ```
+//!
+//! [`build()`](HookSpecBuilder::build) is also available as a convenience for
+//! tests and examples where a panic on misconfiguration is acceptable.
+//!
 //! # Quick start
 //!
 //! ```no_run
@@ -72,6 +97,32 @@
 //! - First-touch `.bak` backups of any pre-existing file we modify.
 //! - Idempotent installs: repeating `install` with the same `tag` yields the same state.
 //! - Reversible: `uninstall` removes only the tagged content.
+//!
+//! # Concrete agent types
+//!
+//! When the target harness is known at compile time, construct the agent
+//! directly for type-safe, discoverable usage:
+//!
+//! ```no_run
+//! use agent_config::{ClaudeAgent, Integration, HookSpec, Matcher, Event, Scope};
+//!
+//! fn main() -> agent_config::Result<()> {
+//!     let claude = ClaudeAgent::new();
+//!     let spec = HookSpec::builder("myapp")
+//!         .command_program("myapp", ["hook", "claude"])
+//!         .matcher(Matcher::Bash)
+//!         .event(Event::PreToolUse)
+//!         .try_build()?;
+//!
+//!     claude.install(&Scope::Global, &spec)?;
+//!     Ok(())
+//! }
+//! ```
+//!
+//! The registry API (`by_id`, `mcp_by_id`, `skill_by_id`) remains the
+//! recommended path for CLIs and tools that accept integration IDs from user
+//! input at runtime. Concrete types are stable convenience handles for
+//! compile-time usage.
 
 #![warn(missing_docs)]
 #![forbid(unsafe_code)]
@@ -92,23 +143,34 @@ mod util;
 
 pub use error::AgentConfigError;
 pub use integration::{
-    InstallReport, Integration, McpSurface, MigrationReport, SkillSurface, UninstallReport,
+    InstallReport, InstructionSurface, Integration, McpSurface, MigrationReport, SkillSurface,
+    UninstallReport,
 };
 pub use plan::{
     InstallPlan, PlanStatus, PlanTarget, PlanWarning, PlannedChange, RefusalReason, UninstallPlan,
 };
-pub use registry::{all, by_id, mcp_by_id, mcp_capable, skill_by_id, skill_capable};
+pub use registry::{
+    all, by_id, instruction_by_id, instruction_capable, mcp_by_id, mcp_capable, skill_by_id,
+    skill_capable,
+};
 pub use scope::{Scope, ScopeKind};
 pub use spec::{
-    Event, HookCommand, HookSpec, HookSpecBuilder, Matcher, McpSpec, McpSpecBuilder, McpTransport,
-    RulesBlock, ScriptTemplate, SecretPolicy, SkillAsset, SkillFrontmatter, SkillSpec,
-    SkillSpecBuilder,
+    Event, HookCommand, HookSpec, HookSpecBuilder, InstructionPlacement, InstructionSpec,
+    InstructionSpecBuilder, Matcher, McpSpec, McpSpecBuilder, McpTransport, RulesBlock,
+    ScriptTemplate, SecretPolicy, SkillAsset, SkillFrontmatter, SkillSpec, SkillSpecBuilder,
 };
 pub use status::{
     DriftIssue, InstallStatus, PathStatus, PlanTarget as StatusPlanTarget, StatusReport,
     StatusWarning,
 };
 pub use validation::{SuggestedAction, ValidationReport};
+
+pub use agents::{
+    AmpAgent, AntigravityAgent, ClaudeAgent, ClineAgent, CodeBuddyAgent, CodexAgent, CopilotAgent,
+    CursorAgent, ForgeAgent, GeminiAgent, HermesAgent, IFlowAgent, JunieAgent, KiloCodeAgent,
+    OpenClawAgent, OpenCodeAgent, QoderCliAgent, QwenAgent, RooAgent, TabnineAgent, TraeAgent,
+    WindsurfAgent,
+};
 
 /// Result alias used throughout the crate's public API.
 pub type Result<T> = std::result::Result<T, AgentConfigError>;

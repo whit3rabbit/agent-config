@@ -13,23 +13,28 @@ use std::path::PathBuf;
 
 use crate::agents::planning as agent_planning;
 use crate::error::AgentConfigError;
-use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
+use crate::integration::{
+    InstallReport, InstructionSurface, Integration, McpSurface, SkillSurface, UninstallReport,
+};
 use crate::paths;
-use crate::plan::{InstallPlan, UninstallPlan};
+use crate::plan::{InstallPlan, PlanTarget, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{HookSpec, McpSpec, SkillSpec};
-use crate::status::StatusReport;
-use crate::util::{mcp_json_map, ownership, rules_dir, skills_dir};
+use crate::spec::{HookSpec, InstructionSpec, McpSpec, SkillSpec};
+use crate::status::{ConfigPresence, StatusReport};
+use crate::util::{instructions_dir, mcp_json_map, ownership, rules_dir, skills_dir};
 
 const RULES_DIR: &str = ".kilocode/rules";
 
 /// Kilo Code integration.
-pub struct KiloCodeAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct KiloCodeAgent {
+    _private: (),
+}
 
 impl KiloCodeAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn require_local<'a>(&self, scope: &'a Scope) -> Result<&'a Path, AgentConfigError> {
@@ -63,12 +68,6 @@ impl KiloCodeAgent {
             Scope::Global => paths::home_dir()?.join(".kilo").join("skills"),
             Scope::Local(p) => p.join(".kilo").join("skills"),
         })
-    }
-}
-
-impl Default for KiloCodeAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -321,9 +320,124 @@ impl SkillSurface for KiloCodeAgent {
     }
 }
 
+impl InstructionSurface for KiloCodeAgent {
+    fn id(&self) -> &'static str {
+        "kilocode"
+    }
+
+    fn supported_instruction_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Local]
+    }
+
+    fn instruction_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, AgentConfigError> {
+        InstructionSpec::validate_name(name)?;
+        let root = self.require_local(scope)?;
+        let config_dir = root.join(".kilocode");
+        let instruction_dir = root.join(".kilocode/rules");
+        let (instr_path, led) =
+            instructions_dir::paths_for_status(&config_dir, &instruction_dir, name);
+        let presence = if instr_path.exists() {
+            ConfigPresence::Single
+        } else {
+            ConfigPresence::Absent
+        };
+        let recorded = ownership::owner_of(&led, name)?;
+        Ok(StatusReport::for_instruction(
+            name,
+            instr_path,
+            led,
+            presence,
+            expected_owner,
+            recorded,
+        ))
+    }
+
+    fn plan_install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
+        spec.validate()?;
+        let target = PlanTarget::Instruction {
+            integration_id: InstructionSurface::id(self),
+            scope: scope.clone(),
+            name: spec.name.clone(),
+            owner: spec.owner_tag.clone(),
+        };
+        let root = self.require_local(scope)?;
+        let config_dir = root.join(".kilocode");
+        let instruction_dir = root.join(".kilocode/rules");
+        let changes =
+            instructions_dir::plan_install(&config_dir, spec, None, Some(&instruction_dir), None)?;
+        Ok(InstallPlan::from_changes(target, changes))
+    }
+
+    fn plan_uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, AgentConfigError> {
+        InstructionSpec::validate_name(name)?;
+        HookSpec::validate_tag(owner_tag)?;
+        let target = PlanTarget::Instruction {
+            integration_id: InstructionSurface::id(self),
+            scope: scope.clone(),
+            name: name.to_string(),
+            owner: owner_tag.to_string(),
+        };
+        let root = self.require_local(scope)?;
+        let config_dir = root.join(".kilocode");
+        let instruction_dir = root.join(".kilocode/rules");
+        let changes = instructions_dir::plan_uninstall(
+            &config_dir,
+            name,
+            owner_tag,
+            None,
+            Some(&instruction_dir),
+        )?;
+        Ok(UninstallPlan::from_changes(target, changes))
+    }
+
+    fn install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
+        spec.validate()?;
+        let root = self.require_local(scope)?;
+        let config_dir = root.join(".kilocode");
+        let instruction_dir = root.join(".kilocode/rules");
+        let instr_path = instruction_dir.join(format!("{}.md", spec.name));
+        scope.ensure_contained(&instr_path)?;
+        instructions_dir::install(&config_dir, spec, None, Some(&instruction_dir), None)
+    }
+
+    fn uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, AgentConfigError> {
+        InstructionSpec::validate_name(name)?;
+        HookSpec::validate_tag(owner_tag)?;
+        let root = self.require_local(scope)?;
+        let config_dir = root.join(".kilocode");
+        let instruction_dir = root.join(".kilocode/rules");
+        scope.ensure_contained(&instruction_dir.join(format!("{name}.md")))?;
+        instructions_dir::uninstall(&config_dir, name, owner_tag, None, Some(&instruction_dir))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::spec::InstructionPlacement;
     use serde_json::{json, Value};
     use tempfile::tempdir;
 
@@ -426,5 +540,49 @@ mod tests {
             .unwrap();
         let err = agent.uninstall_mcp(&scope, "github", "appB").unwrap_err();
         assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
+    }
+
+    fn instruction_spec(name: &str, owner: &str, body: &str) -> InstructionSpec {
+        InstructionSpec::builder(name)
+            .owner(owner)
+            .placement(InstructionPlacement::StandaloneFile)
+            .body(body)
+            .build()
+    }
+
+    #[test]
+    fn instruction_writes_to_rules_dir() {
+        let dir = tempdir().unwrap();
+        let agent = KiloCodeAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        agent
+            .install_instruction(&scope, &instruction_spec("RTK", "myapp", "# Use RTK\n"))
+            .unwrap();
+        let instr = dir.path().join(".kilocode/rules/RTK.md");
+        assert!(instr.exists());
+        assert!(std::fs::read_to_string(&instr)
+            .unwrap()
+            .contains("# Use RTK"));
+    }
+
+    #[test]
+    fn instruction_uninstall_removes_file() {
+        let dir = tempdir().unwrap();
+        let agent = KiloCodeAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        agent
+            .install_instruction(&scope, &instruction_spec("RTK", "myapp", "# Use RTK\n"))
+            .unwrap();
+        agent.uninstall_instruction(&scope, "RTK", "myapp").unwrap();
+        assert!(!dir.path().join(".kilocode/rules/RTK.md").exists());
+    }
+
+    #[test]
+    fn instruction_rejects_global_scope() {
+        let agent = KiloCodeAgent::new();
+        let err = agent
+            .install_instruction(&Scope::Global, &instruction_spec("RTK", "myapp", "body\n"))
+            .unwrap_err();
+        assert!(matches!(err, AgentConfigError::UnsupportedScope { .. }));
     }
 }

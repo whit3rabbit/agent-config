@@ -27,12 +27,15 @@ use crate::util::{
 };
 
 /// <Display Name> harness.
-pub struct MyagentAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MyagentAgent {
+    _private: (),
+}
 
 impl MyagentAgent {
     /// Construct an instance. The struct is stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     /// Hooks config file.
@@ -66,12 +69,6 @@ impl MyagentAgent {
             Scope::Global => paths::home_dir()?.join(".myagent").join("skills"),
             Scope::Local(p) => p.join(".myagent").join("skills"),
         })
-    }
-}
-
-impl Default for MyagentAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

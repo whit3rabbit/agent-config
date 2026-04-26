@@ -22,12 +22,15 @@ use crate::status::StatusReport;
 use crate::util::{file_lock, fs_atomic, mcp_json_object, md_block, ownership, safe_fs};
 
 /// Qoder CLI installer.
-pub struct QoderCliAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct QoderCliAgent {
+    _private: (),
+}
 
 impl QoderCliAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn qoder_home_from_home(home: &Path) -> PathBuf {
@@ -46,12 +49,6 @@ impl QoderCliAgent {
             Scope::Global => paths::home_dir()?.join(".qoder.json"),
             Scope::Local(p) => p.join(".mcp.json"),
         })
-    }
-}
-
-impl Default for QoderCliAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

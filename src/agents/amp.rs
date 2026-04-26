@@ -25,12 +25,15 @@ use crate::util::{
 };
 
 /// Amp CLI installer.
-pub struct AmpAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AmpAgent {
+    _private: (),
+}
 
 impl AmpAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn amp_home_from_home(home: &Path) -> PathBuf {
@@ -56,12 +59,6 @@ impl AmpAgent {
             Scope::Global => Self::amp_home_from_home(&paths::home_dir()?).join("skills"),
             Scope::Local(p) => p.join(".amp").join("skills"),
         })
-    }
-}
-
-impl Default for AmpAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

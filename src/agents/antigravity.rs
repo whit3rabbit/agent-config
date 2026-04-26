@@ -31,12 +31,15 @@ use crate::util::{mcp_json_object, ownership, rules_dir, skills_dir};
 const RULES_DIR: &str = ".agent/rules";
 
 /// Google Antigravity integration.
-pub struct AntigravityAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AntigravityAgent {
+    _private: (),
+}
 
 impl AntigravityAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn project_root<'a>(&self, scope: &'a Scope) -> Result<&'a std::path::Path, AgentConfigError> {
@@ -64,12 +67,6 @@ impl AntigravityAgent {
             Scope::Global => paths::antigravity_mcp_global_file()?,
             Scope::Local(p) => p.join(".agent").join("mcp_config.json"),
         })
-    }
-}
-
-impl Default for AntigravityAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

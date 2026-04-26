@@ -26,12 +26,15 @@ use crate::util::{
 };
 
 /// Forge CLI installer.
-pub struct ForgeAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ForgeAgent {
+    _private: (),
+}
 
 impl ForgeAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn forge_home_from_home(home: &Path) -> PathBuf {
@@ -57,12 +60,6 @@ impl ForgeAgent {
             Scope::Global => Self::forge_home_from_home(&paths::home_dir()?).join("skills"),
             Scope::Local(p) => p.join(".forge").join("skills"),
         })
-    }
-}
-
-impl Default for ForgeAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

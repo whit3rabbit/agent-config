@@ -7,7 +7,7 @@
 //! surface, [`skill_capable`] / [`skill_by_id`]. Only the agents whose
 //! upstream harness exposes that surface appear in those lists.
 
-use crate::integration::{Integration, McpSurface, SkillSurface};
+use crate::integration::{InstructionSurface, Integration, McpSurface, SkillSurface};
 
 /// Returns a fresh `Box` per integration. The list is the source of truth for
 /// what `agent-config` supports today; adding a harness means adding one line
@@ -129,4 +129,25 @@ pub fn skill_capable() -> Vec<Box<dyn SkillSurface>> {
 /// agent does not implement [`SkillSurface`].
 pub fn skill_by_id(id: &str) -> Option<Box<dyn SkillSurface>> {
     skill_capable().into_iter().find(|i| i.id() == id)
+}
+
+/// Returns a fresh `Box` per [`InstructionSurface`]-capable agent. Adding a
+/// new instruction integration means adding one line here.
+///
+/// Currently: Claude, Cline, Roo, Kilo Code, Windsurf.
+pub fn instruction_capable() -> Vec<Box<dyn InstructionSurface>> {
+    use crate::agents::{ClaudeAgent, ClineAgent, KiloCodeAgent, RooAgent, WindsurfAgent};
+    vec![
+        Box::new(ClaudeAgent::new()),
+        Box::new(ClineAgent::new()),
+        Box::new(RooAgent::new()),
+        Box::new(KiloCodeAgent::new()),
+        Box::new(WindsurfAgent::new()),
+    ]
+}
+
+/// Returns the instruction-capable integration with this id, or `None` if the
+/// agent does not implement [`InstructionSurface`].
+pub fn instruction_by_id(id: &str) -> Option<Box<dyn InstructionSurface>> {
+    instruction_capable().into_iter().find(|i| i.id() == id)
 }

@@ -17,7 +17,8 @@ use super::validate::{validate_identifier, IdentifierKind};
 /// server owned by a different consumer (or by a hand-edit) returns
 /// [`AgentConfigError::NotOwnedByCaller`].
 ///
-/// Build via [`McpSpec::builder`].
+/// Build via [`McpSpec::builder`]. For fallible construction see
+/// [`McpSpecBuilder::try_build`].
 #[derive(Debug, Clone)]
 pub struct McpSpec {
     /// Server name. Becomes the key in `mcpServers` (Claude/Cursor/Gemini/
@@ -289,17 +290,23 @@ impl McpSpecBuilder {
         self
     }
 
-    /// Finalize the spec.
+    /// Finalize the spec, panicking on missing or invalid fields.
+    ///
+    /// Convenience wrapper around [`try_build()`](Self::try_build) for tests
+    /// and examples. Production code should prefer [`try_build()`](Self::try_build)
+    /// to propagate errors instead of panicking.
     ///
     /// # Panics
     ///
-    /// Panics if required fields are missing or validation fails. For a
-    /// fallible variant use [`McpSpecBuilder::try_build`].
+    /// Panics if required fields are missing or validation fails.
     pub fn build(self) -> McpSpec {
         self.try_build().expect("McpSpec missing required field")
     }
 
-    /// Fallible variant of [`build`](Self::build).
+    /// Finalize the spec, returning [`Result`] on missing or invalid fields.
+    ///
+    /// This is the recommended way to build a spec in production code.
+    /// See [crate-level documentation](crate#production-usage) for a full example.
     pub fn try_build(self) -> Result<McpSpec, AgentConfigError> {
         if let Some(error) = self.builder_error {
             return Err(AgentConfigError::Other(anyhow::anyhow!(error)));

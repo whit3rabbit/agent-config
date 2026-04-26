@@ -42,12 +42,15 @@ use crate::util::{
 };
 
 /// Codex CLI.
-pub struct CodexAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CodexAgent {
+    _private: (),
+}
 
 impl CodexAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn hooks_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
@@ -78,12 +81,6 @@ impl CodexAgent {
             Scope::Global => paths::home_dir()?.join(".agents").join("skills"),
             Scope::Local(p) => p.join(".agents").join("skills"),
         })
-    }
-}
-
-impl Default for CodexAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

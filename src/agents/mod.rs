@@ -4,31 +4,31 @@
 //! implement [`Integration`](crate::Integration), and register it in
 //! [`crate::registry::all`].
 
-pub mod amp;
-pub mod antigravity;
-pub mod claude;
-pub mod cline;
-pub mod codebuddy;
-pub mod codex;
-pub mod copilot;
-pub mod cursor;
-pub mod forge;
-pub mod gemini;
-pub mod hermes;
-pub mod iflow;
-pub mod junie;
-pub mod kilocode;
-pub mod openclaw;
-pub mod opencode;
+pub(crate) mod amp;
+pub(crate) mod antigravity;
+pub(crate) mod claude;
+pub(crate) mod cline;
+pub(crate) mod codebuddy;
+pub(crate) mod codex;
+pub(crate) mod copilot;
+pub(crate) mod cursor;
+pub(crate) mod forge;
+pub(crate) mod gemini;
+pub(crate) mod hermes;
+pub(crate) mod iflow;
+pub(crate) mod junie;
+pub(crate) mod kilocode;
+pub(crate) mod openclaw;
+pub(crate) mod opencode;
 mod planning;
 #[allow(dead_code)]
 mod prompt;
-pub mod qodercli;
-pub mod qwen;
-pub mod roo;
-pub mod tabnine;
-pub mod trae;
-pub mod windsurf;
+pub(crate) mod qodercli;
+pub(crate) mod qwen;
+pub(crate) mod roo;
+pub(crate) mod tabnine;
+pub(crate) mod trae;
+pub(crate) mod windsurf;
 
 pub use amp::AmpAgent;
 pub use antigravity::AntigravityAgent;

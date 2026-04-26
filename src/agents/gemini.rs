@@ -40,12 +40,15 @@ use crate::util::{
 };
 
 /// Gemini CLI (Google's official Gemini code agent).
-pub struct GeminiAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GeminiAgent {
+    _private: (),
+}
 
 impl GeminiAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn settings_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
@@ -73,12 +76,6 @@ impl GeminiAgent {
             Scope::Global => paths::gemini_home()?.join("skills"),
             Scope::Local(p) => p.join(".gemini").join("skills"),
         })
-    }
-}
-
-impl Default for GeminiAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

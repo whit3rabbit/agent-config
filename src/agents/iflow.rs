@@ -43,12 +43,15 @@ use crate::util::{file_lock, json_patch, mcp_json_object, ownership, planning, s
 use crate::agents::planning as agent_planning;
 
 /// iFlow CLI installer.
-pub struct IFlowAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct IFlowAgent {
+    _private: (),
+}
 
 impl IFlowAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn iflow_home_from_home(home: &Path) -> PathBuf {
@@ -64,12 +67,6 @@ impl IFlowAgent {
 
     fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Self::settings_path(scope)
-    }
-}
-
-impl Default for IFlowAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

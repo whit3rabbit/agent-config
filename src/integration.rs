@@ -5,6 +5,7 @@
 //! - [`Integration`]: the hooks surface.
 //! - [`McpSurface`]: MCP server registration.
 //! - [`SkillSurface`]: skill installation.
+//! - [`InstructionSurface`]: standalone instruction files.
 //!
 //! Each surface is its own trait so callers cannot accidentally call
 //! `install_mcp` on a harness that does not support MCP, the type system
@@ -16,7 +17,7 @@ use std::path::PathBuf;
 use crate::error::AgentConfigError;
 use crate::plan::{InstallPlan, PlanTarget, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{HookSpec, McpSpec, SkillSpec};
+use crate::spec::{HookSpec, InstructionSpec, McpSpec, SkillSpec};
 use crate::status::{InstallStatus, StatusReport};
 use crate::validation::ValidationReport;
 
@@ -357,6 +358,133 @@ pub trait SkillSurface: Send + Sync {
     /// Returns [`AgentConfigError::NotOwnedByCaller`] on owner mismatch or when
     /// the skill exists on disk but is missing from the ledger.
     fn uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, AgentConfigError>;
+}
+
+/// One AI harness's standalone-instruction installer.
+///
+/// Instructions are named markdown files that provide persistent context to
+/// the agent. Unlike hook rules (which are tied to a single hook spec),
+/// instructions are independent documents that are loaded by the agent on
+/// every session start.
+///
+/// Implemented by harnesses that support standalone instruction files or
+/// managed include references in their memory/rules files. Use
+/// [`crate::registry::instruction_capable`] to enumerate agents that
+/// implement this trait.
+///
+/// All operations must be idempotent: installing the same [`InstructionSpec`]
+/// twice reaches and preserves a single on-disk state. Uninstalls refuse to
+/// remove entries owned by another consumer (recorded in a sidecar ledger).
+pub trait InstructionSurface: Send + Sync {
+    /// Stable, kebab-case identifier matching [`Integration::id`] for the
+    /// same agent.
+    fn id(&self) -> &'static str;
+
+    /// Which scopes this instruction installer accepts.
+    fn supported_instruction_scopes(&self) -> &'static [ScopeKind];
+
+    /// Returns true if an instruction named `name` is currently recorded
+    /// under any owner in this scope's ownership ledger.
+    fn is_instruction_installed(
+        &self,
+        scope: &Scope,
+        name: &str,
+    ) -> Result<bool, AgentConfigError> {
+        Ok(matches!(
+            self.instruction_status(scope, name, self.id())?.status,
+            InstallStatus::InstalledOwned { .. } | InstallStatus::InstalledOtherOwner { .. }
+        ))
+    }
+
+    /// Detailed installation state for the instruction identified by `name`,
+    /// scored against `expected_owner`.
+    fn instruction_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, AgentConfigError>;
+
+    /// Validate instruction state without mutating user files.
+    fn validate_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+    ) -> Result<ValidationReport, AgentConfigError> {
+        self.validate_instruction_for_owner(scope, name, None)
+    }
+
+    /// Validate instruction state against a caller-supplied expected owner.
+    fn validate_instruction_for_owner(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: Option<&str>,
+    ) -> Result<ValidationReport, AgentConfigError> {
+        InstructionSpec::validate_name(name)?;
+        if let Some(owner) = expected_owner {
+            HookSpec::validate_tag(owner)?;
+        }
+        let status = match self.instruction_status(scope, name, expected_owner.unwrap_or("")) {
+            Ok(status) => status,
+            Err(AgentConfigError::JsonInvalid { path, source }) => {
+                let target = PlanTarget::Instruction {
+                    integration_id: self.id(),
+                    scope: scope.clone(),
+                    name: name.to_string(),
+                    owner: expected_owner.unwrap_or_default().to_string(),
+                };
+                return Ok(crate::validation::malformed_ledger_report(
+                    target,
+                    path,
+                    source.to_string(),
+                ));
+            }
+            Err(e) => return Err(e),
+        };
+        let target = PlanTarget::Instruction {
+            integration_id: self.id(),
+            scope: scope.clone(),
+            name: name.to_string(),
+            owner: expected_owner
+                .map(str::to_owned)
+                .or_else(|| owner_from_status(&status))
+                .unwrap_or_default(),
+        };
+        crate::validation::ledger_backed_report_from_status(target, name, expected_owner, status)
+    }
+
+    /// Plan an instruction install without mutating user files.
+    fn plan_install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallPlan, AgentConfigError>;
+
+    /// Plan an instruction uninstall without mutating user files.
+    fn plan_uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, AgentConfigError>;
+
+    /// Install (or update) the instruction. Repeated calls with the same
+    /// name and identical content are a no-op after the first.
+    fn install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallReport, AgentConfigError>;
+
+    /// Uninstall the instruction identified by `name`, owned by `owner_tag`.
+    /// Returns [`AgentConfigError::NotOwnedByCaller`] on owner mismatch.
+    fn uninstall_instruction(
         &self,
         scope: &Scope,
         name: &str,

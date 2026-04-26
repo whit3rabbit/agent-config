@@ -5,6 +5,7 @@
 
 pub(crate) mod file_lock;
 pub(crate) mod fs_atomic;
+pub(crate) mod instructions_dir;
 pub(crate) mod json5_patch;
 pub(crate) mod json_patch;
 #[allow(dead_code)]

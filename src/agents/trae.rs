@@ -22,12 +22,15 @@ use crate::status::StatusReport;
 use crate::util::{file_lock, fs_atomic, md_block, ownership, safe_fs, skills_dir};
 
 /// Trae agent installer.
-pub struct TraeAgent;
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TraeAgent {
+    _private: (),
+}
 
 impl TraeAgent {
     /// Construct an instance. Stateless.
     pub const fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 
     fn require_local(scope: &Scope) -> Result<&Path, AgentConfigError> {
@@ -51,12 +54,6 @@ impl TraeAgent {
             Scope::Global => paths::home_dir()?.join(".trae").join("skills"),
             Scope::Local(p) => p.join(".trae").join("skills"),
         })
-    }
-}
-
-impl Default for TraeAgent {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
