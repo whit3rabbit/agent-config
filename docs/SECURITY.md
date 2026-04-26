@@ -53,9 +53,14 @@ The library records ownership in sidecar JSON ledger files:
 ### Content hashes (v2 ledgers)
 
 Starting with ledger schema version 2, every install also records a SHA-256
-content hash of the config file after the install. This enables future drift
-detection: if the config file is modified between install and uninstall, the
-hash mismatch can be detected.
+content hash of the owned content. Uninstall refuses to remove an entry
+whose recorded hash no longer matches the current on-disk content,
+returning `AgentConfigError::ConfigDrifted`.
+
+MCP entries (`mcp_json_map` and `yaml_mcp_map`) record the canonical hash of
+the *owned entry* only, so a sibling consumer's installs into the same
+shared config do not trip drift. Skills (`skills_dir`) own their own
+`SKILL.md` 1:1, so whole-file hashing is sufficient and is what's used.
 
 ### Ownership enforcement
 
