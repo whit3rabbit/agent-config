@@ -16,17 +16,13 @@ pub(crate) fn plan_write_file(
     content: &[u8],
     make_backup: bool,
 ) -> Result<(), AgentConfigError> {
-    // Pre-stat preserves the original NotFound→CreateFile branch, while the
-    // capped read on the existing-file path bounds memory if the user's
-    // harness config is pathologically large.
-    if !path.exists() {
+    let Some(current) = fs_atomic::read_capped(path)? else {
         plan_parent_dirs(changes, path);
         changes.push(PlannedChange::CreateFile {
             path: path.to_path_buf(),
         });
         return Ok(());
-    }
-    let current = fs_atomic::read_capped(path)?;
+    };
     if current == content {
         changes.push(PlannedChange::NoOp {
             path: path.to_path_buf(),
@@ -71,23 +67,21 @@ pub(crate) fn plan_restore_backup_or_remove(
     desired_content: &[u8],
 ) -> Result<(), AgentConfigError> {
     let backup = fs_atomic::backup_path(path);
-    if backup.exists() {
-        // Defense in depth: a hostile process could swap a giant file in for
-        // our `.bak`. Treat oversize as non-matching (fall through to
-        // RemoveFile) to preserve the planner contract: if the backup doesn't
-        // match the desired post-uninstall bytes, plan a remove instead.
-        match fs_atomic::read_capped(&backup) {
-            Ok(content) if content == desired_content => {
-                changes.push(PlannedChange::RestoreBackup {
-                    backup,
-                    target: path.to_path_buf(),
-                });
-                return Ok(());
-            }
-            Ok(_) => {}
-            Err(AgentConfigError::ConfigTooLarge { .. }) => {}
-            Err(e) => return Err(e),
-        }
+    // Defense in depth: a hostile process could swap a giant file in for our
+    // `.bak`. ConfigTooLarge counts as "doesn't match", same as a stale or
+    // missing backup, so we plan a RemoveFile rather than abort the uninstall.
+    let backup_matches = match fs_atomic::read_capped(&backup) {
+        Ok(Some(content)) => content == desired_content,
+        Ok(None) => false,
+        Err(AgentConfigError::ConfigTooLarge { .. }) => false,
+        Err(e) => return Err(e),
+    };
+    if backup_matches {
+        changes.push(PlannedChange::RestoreBackup {
+            backup,
+            target: path.to_path_buf(),
+        });
+        return Ok(());
     }
     changes.push(PlannedChange::RemoveFile {
         path: path.to_path_buf(),
@@ -361,15 +355,11 @@ mod tests {
         let mut changes = Vec::new();
         plan_restore_backup_or_remove(&mut changes, &cfg, b"desired").unwrap();
         // Should plan a remove, NOT a restore.
-        assert!(
-            changes
-                .iter()
-                .any(|c| matches!(c, crate::plan::PlannedChange::RemoveFile { .. }))
-        );
-        assert!(
-            !changes
-                .iter()
-                .any(|c| matches!(c, crate::plan::PlannedChange::RestoreBackup { .. }))
-        );
+        assert!(changes
+            .iter()
+            .any(|c| matches!(c, crate::plan::PlannedChange::RemoveFile { .. })));
+        assert!(!changes
+            .iter()
+            .any(|c| matches!(c, crate::plan::PlannedChange::RestoreBackup { .. })));
     }
 }

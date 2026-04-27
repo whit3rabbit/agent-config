@@ -19,12 +19,6 @@ use crate::util::fs_atomic;
 /// should surface this rather than overwriting potentially-precious user
 /// config.
 pub(crate) fn read_or_empty(path: &Path) -> Result<DocumentMut, AgentConfigError> {
-    // Pre-stat preserves the original NotFound→empty-doc semantic, while the
-    // capped read on the existing-file path bounds memory if Codex's
-    // config.toml is pathologically large or corrupt.
-    if !path.exists() {
-        return Ok(DocumentMut::new());
-    }
     let text = fs_atomic::read_to_string_capped(path)?;
     if text.trim().is_empty() {
         return Ok(DocumentMut::new());

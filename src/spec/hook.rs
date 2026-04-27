@@ -158,7 +158,9 @@ impl HookSpecBuilder {
         command.validate()?;
         match &self.matcher {
             Matcher::All | Matcher::Bash => {}
-            Matcher::Exact(s) | Matcher::Regex(s) => validate_hook_string(s, "matcher")?,
+            Matcher::Exact(s) | Matcher::Regex(s) => {
+                validate_hook_string(s, HookStringKind::Matcher)?;
+            }
             Matcher::AnyOf(list) => {
                 if list.is_empty() {
                     return Err(AgentConfigError::InvalidTag {
@@ -167,12 +169,12 @@ impl HookSpecBuilder {
                     });
                 }
                 for s in list {
-                    validate_hook_string(s, "matcher")?;
+                    validate_hook_string(s, HookStringKind::Matcher)?;
                 }
             }
         }
         if let Event::Custom(name) = &self.event {
-            validate_hook_string(name, "event")?;
+            validate_hook_string(name, HookStringKind::CustomEvent)?;
         }
         Ok(HookSpec {
             tag: self.tag,
@@ -277,28 +279,40 @@ fn validate_no_nul(value: &str) -> Result<(), AgentConfigError> {
     Ok(())
 }
 
-fn validate_hook_string(value: &str, field: &'static str) -> Result<(), AgentConfigError> {
+#[derive(Copy, Clone)]
+enum HookStringKind {
+    Matcher,
+    CustomEvent,
+}
+
+impl HookStringKind {
+    fn empty_reason(self) -> &'static str {
+        match self {
+            Self::Matcher => "matcher value must not be empty",
+            Self::CustomEvent => "custom event name must not be empty",
+        }
+    }
+
+    fn control_reason(self) -> &'static str {
+        match self {
+            Self::Matcher => "matcher value must not contain control characters",
+            Self::CustomEvent => "custom event name must not contain control characters",
+        }
+    }
+}
+
+fn validate_hook_string(value: &str, kind: HookStringKind) -> Result<(), AgentConfigError> {
     if value.is_empty() {
         return Err(AgentConfigError::InvalidTag {
             tag: value.to_string(),
-            reason: match field {
-                "matcher" => "matcher value must not be empty",
-                "event" => "custom event name must not be empty",
-                _ => "hook spec value must not be empty",
-            },
+            reason: kind.empty_reason(),
         });
     }
-    for c in value.chars() {
-        if (c as u32) < 0x20 || c == '\u{007F}' {
-            return Err(AgentConfigError::InvalidTag {
-                tag: value.to_string(),
-                reason: match field {
-                    "matcher" => "matcher value must not contain control characters",
-                    "event" => "custom event name must not contain control characters",
-                    _ => "hook spec value must not contain control characters",
-                },
-            });
-        }
+    if value.chars().any(|c| (c as u32) < 0x20 || c == '\u{007F}') {
+        return Err(AgentConfigError::InvalidTag {
+            tag: value.to_string(),
+            reason: kind.control_reason(),
+        });
     }
     Ok(())
 }

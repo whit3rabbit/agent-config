@@ -18,27 +18,6 @@ use crate::util::{file_lock, fs_atomic, json_patch, ownership, planning};
 /// Builder for one YAML server entry under the chosen object key.
 pub(crate) type ServerBuilder = fn(&McpSpec) -> Value;
 
-/// Canonical SHA-256 hash of an owned entry's value. Mirrors the helper in
-/// `mcp_json_map`: hashes the compact `serde_json::to_vec` form of the
-/// `serde_json::Value` so install-side and uninstall-side hashes agree even
-/// when the surrounding YAML file gets reformatted by a sibling install.
-/// Cross-helper consistency matters because both helpers feed the same
-/// `ownership::check_entry_drift` routine.
-fn hash_entry(value: &Value) -> String {
-    let canonical = serde_json::to_vec(value).expect("Value serializes to JSON");
-    ownership::content_hash(&canonical)
-}
-
-/// Walk `root.<path...>` and return the named entry under that object.
-/// Mirrors `mcp_json_map::lookup_named`.
-fn lookup_named<'a>(root: &'a Value, path: &[&str], name: &str) -> Option<&'a Value> {
-    let mut cur = root;
-    for key in path {
-        cur = cur.get(*key)?;
-    }
-    cur.get(name)
-}
-
 /// Returns true if `name` exists in the MCP ownership ledger.
 pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, AgentConfigError> {
     ownership::contains(ledger_path, name)
@@ -92,12 +71,7 @@ pub(crate) fn install(
         )?;
 
         let value = build_server(spec);
-        // Hash the canonical (compact) JSON serialization of the *owned
-        // entry* so sibling installs to the same file do not invalidate
-        // this entry's recorded hash. Must match the uninstall-side hash
-        // (see `check_entry_drift` below); both go through `serde_json::to_vec`
-        // for cross-helper consistency with `mcp_json_map`.
-        let current_entry_hash = hash_entry(&value);
+        let current_entry_hash = ownership::hash_entry_value(&value);
         let changed =
             json_patch::upsert_named_object_entry(&mut root, servers_path, &spec.name, value)?;
 
@@ -230,12 +204,7 @@ pub(crate) fn uninstall(
         ownership::require_owner(ledger_path, name, owner_tag, kind, in_config)?;
 
         if in_config {
-            // Per-entry drift: extract the current entry value, hash it
-            // canonically, and compare to the hash recorded at install
-            // time. If a user (or another consumer's bug) edited our
-            // entry, refuse to remove it instead of clobbering their
-            // change. Mirrors `mcp_json_map::uninstall`.
-            let current_value = lookup_named(&root, servers_path, name)
+            let current_value = json_patch::lookup_named(&root, servers_path, name)
                 .expect("contains_named was true; entry must exist");
             let current_bytes =
                 serde_json::to_vec(current_value).expect("Value serializes to JSON");
@@ -468,15 +437,8 @@ mod tests {
         )
         .unwrap();
 
-        let report = uninstall(
-            &cfg,
-            &led,
-            "alpha",
-            "app-a",
-            "mcp server",
-            &["mcp_servers"],
-        )
-        .unwrap();
+        let report =
+            uninstall(&cfg, &led, "alpha", "app-a", "mcp server", &["mcp_servers"]).unwrap();
 
         assert_eq!(report.patched, vec![cfg.clone()]);
         let v: Value = yaml_serde::from_str(&std::fs::read_to_string(&cfg).unwrap()).unwrap();
@@ -511,15 +473,8 @@ mod tests {
         let edited = original.replace("npx", "uvx");
         std::fs::write(&cfg, &edited).unwrap();
 
-        let err = uninstall(
-            &cfg,
-            &led,
-            "alpha",
-            "app-a",
-            "mcp server",
-            &["mcp_servers"],
-        )
-        .unwrap_err();
+        let err =
+            uninstall(&cfg, &led, "alpha", "app-a", "mcp server", &["mcp_servers"]).unwrap_err();
 
         assert!(matches!(err, AgentConfigError::ConfigDrifted { .. }));
         // File must be unchanged and ledger must still own the entry.

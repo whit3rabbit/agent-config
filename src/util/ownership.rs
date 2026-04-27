@@ -52,16 +52,21 @@ pub(crate) fn content_hash(data: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// Canonical SHA-256 hash of an owned MCP entry's `serde_json::Value`. Uses
+/// compact `serde_json::to_vec` (with `preserve_order` enabled at the crate
+/// level) so install-side and uninstall-side hashes agree even when the
+/// surrounding file is reformatted by a sibling install. Shared by every
+/// helper that records per-entry hashes — keeping one definition keeps
+/// `check_entry_drift` consistent across JSON, JSONC, JSON5, and YAML.
+pub(crate) fn hash_entry_value(value: &Value) -> String {
+    let canonical = serde_json::to_vec(value).expect("Value serializes to JSON");
+    content_hash(&canonical)
+}
+
 /// Read the file at `path` and return its SHA-256 hex digest.
 /// Returns `None` if the file does not exist.
 pub(crate) fn file_content_hash(path: &Path) -> Result<Option<String>, AgentConfigError> {
-    // Pre-stat so a missing file remains `None` (not `Some(hash(""))`) — the
-    // bounded reader returns `Vec::new()` for both missing and empty files.
-    if !path.exists() {
-        return Ok(None);
-    }
-    let bytes = fs_atomic::read_capped(path)?;
-    Ok(Some(content_hash(&bytes)))
+    Ok(fs_atomic::read_capped(path)?.map(|bytes| content_hash(&bytes)))
 }
 
 /// Record an install. Creates the ledger file if missing.
@@ -173,12 +178,9 @@ pub(crate) struct LedgerEntry {
 /// them as a side effect of checking state.
 pub(crate) fn read_strict(ledger_path: &Path) -> Result<StrictLedgerRead, AgentConfigError> {
     fs_atomic::reject_symlink(ledger_path)?;
-    // Pre-stat so we can distinguish a missing ledger from a 0-byte ledger;
-    // the bounded reader collapses both to `Vec::new()`.
-    if !ledger_path.exists() {
+    let Some(bytes) = fs_atomic::read_capped(ledger_path)? else {
         return Ok(StrictLedgerRead::Missing);
-    }
-    let bytes = fs_atomic::read_capped(ledger_path)?;
+    };
     if bytes.is_empty() || bytes.iter().all(|b| b.is_ascii_whitespace()) {
         return Ok(StrictLedgerRead::Malformed {
             reason: "ledger file is empty".into(),
@@ -268,8 +270,6 @@ pub(crate) fn content_hash_of(
 /// Whole-file drift check used for skills (1:1 file per entry). MCP and
 /// other multi-entry surfaces use [`check_entry_drift`] instead so a sibling
 /// install does not invalidate earlier entries' hashes.
-// Wired into `skills_dir::uninstall` in a follow-up commit (Task B4).
-#[allow(dead_code)]
 pub(crate) fn check_drift(
     ledger_path: &Path,
     name: &str,

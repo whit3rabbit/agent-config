@@ -18,10 +18,7 @@ pub(crate) const TAG_KEY: &str = "_agent_config_tag";
 /// caller should surface this rather than overwriting potentially-precious
 /// user config.
 pub(crate) fn read_or_empty(path: &Path) -> Result<Value, AgentConfigError> {
-    // `read_capped` returns an empty Vec for missing files, which collapses
-    // into the same "empty object" branch below as a 0-byte file. Oversized
-    // configs surface `ConfigTooLarge` instead of being parsed.
-    let bytes = fs_atomic::read_capped(path)?;
+    let bytes = fs_atomic::read_capped_or_empty(path)?;
     if bytes.is_empty() || bytes.iter().all(|b| b.is_ascii_whitespace()) {
         return Ok(Value::Object(Map::new()));
     }

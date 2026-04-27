@@ -11,9 +11,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use agent_config::{
-    mcp_by_id, skill_by_id, AgentConfigError, McpSpec, Scope, SkillSpec,
-};
+use agent_config::{mcp_by_id, skill_by_id, AgentConfigError, McpSpec, Scope, SkillSpec};
 
 fn local_scope(dir: &tempfile::TempDir) -> Scope {
     Scope::Local(dir.path().to_path_buf())
@@ -85,7 +83,10 @@ fn public_api_mcp_uninstall_refuses_when_entry_drifted() {
 
     // The drifted edit is still present.
     let v = read_mcp_json(&cfg);
-    assert_eq!(v["mcpServers"]["alpha"]["command"], serde_json::json!("uvx"));
+    assert_eq!(
+        v["mcpServers"]["alpha"]["command"],
+        serde_json::json!("uvx")
+    );
 }
 
 #[test]
