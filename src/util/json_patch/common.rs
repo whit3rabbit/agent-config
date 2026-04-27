@@ -1,12 +1,12 @@
 //! Shared primitives for the per-shape patch helpers: I/O, path traversal,
 //! pruning, and the `_agent_config_tag` marker constant.
 
-use std::fs;
 use std::path::Path;
 
 use serde_json::{Map, Value};
 
 use crate::error::AgentConfigError;
+use crate::util::fs_atomic;
 
 /// The marker key embedded in every object we insert. Lets us locate and
 /// uninstall our own entries without touching user-authored ones.
@@ -18,13 +18,7 @@ pub(crate) const TAG_KEY: &str = "_agent_config_tag";
 /// caller should surface this rather than overwriting potentially-precious
 /// user config.
 pub(crate) fn read_or_empty(path: &Path) -> Result<Value, AgentConfigError> {
-    let bytes = match fs::read(path) {
-        Ok(b) => b,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(Value::Object(Map::new()));
-        }
-        Err(e) => return Err(AgentConfigError::io(path, e)),
-    };
+    let bytes = fs_atomic::read_capped_or_empty(path)?;
     if bytes.is_empty() || bytes.iter().all(|b| b.is_ascii_whitespace()) {
         return Ok(Value::Object(Map::new()));
     }

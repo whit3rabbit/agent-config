@@ -71,13 +71,14 @@ pub(crate) fn install(
         )?;
 
         let value = build_server(spec);
+        let current_entry_hash = ownership::hash_entry_value(&value);
         let changed =
             json_patch::upsert_named_object_entry(&mut root, servers_path, &spec.name, value)?;
 
         let prior_owner = ownership::owner_of(ledger_path, &spec.name)?;
         let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
 
-        let written_bytes: Option<Vec<u8>> = if changed {
+        if changed {
             let bytes = to_yaml_bytes(&root)?;
             let outcome = fs_atomic::write_atomic(config_path, &bytes, true)?;
             if outcome.existed {
@@ -88,17 +89,15 @@ pub(crate) fn install(
             if let Some(b) = outcome.backup {
                 report.backed_up.push(b);
             }
-            Some(bytes)
-        } else {
-            None
-        };
+        }
 
         if changed || owner_changed {
-            let hash = match written_bytes.as_deref() {
-                Some(b) => Some(ownership::content_hash(b)),
-                None => ownership::file_content_hash(config_path)?,
-            };
-            ownership::record_install(ledger_path, &spec.name, &spec.owner_tag, hash.as_deref())?;
+            ownership::record_install(
+                ledger_path,
+                &spec.name,
+                &spec.owner_tag,
+                Some(&current_entry_hash),
+            )?;
         }
 
         if !changed && !owner_changed {
@@ -205,6 +204,12 @@ pub(crate) fn uninstall(
         ownership::require_owner(ledger_path, name, owner_tag, kind, in_config)?;
 
         if in_config {
+            let current_value = json_patch::lookup_named(&root, servers_path, name)
+                .expect("contains_named was true; entry must exist");
+            let current_bytes =
+                serde_json::to_vec(current_value).expect("Value serializes to JSON");
+            ownership::check_entry_drift(ledger_path, name, config_path, &current_bytes)?;
+
             let removed = json_patch::remove_named_object_entry(&mut root, servers_path, name)?;
             debug_assert!(removed);
 
@@ -404,5 +409,79 @@ mod tests {
         .unwrap();
         assert!(!cfg.exists());
         assert!(!led.exists());
+    }
+
+    #[test]
+    fn uninstall_succeeds_after_sibling_install_does_not_trigger_drift() {
+        // Per-entry drift hashing: installing a sibling rewrites the YAML
+        // file, but the recorded hash is over the owned entry bytes only,
+        // so uninstalling the first entry must not trip ConfigDrifted.
+        let dir = tempdir().unwrap();
+        let cfg = dir.path().join("config.yaml");
+        let led = dir.path().join(".agent-config-mcp.json");
+
+        install(
+            &cfg,
+            &led,
+            &stdio_spec("alpha", "app-a"),
+            &["mcp_servers"],
+            value,
+        )
+        .unwrap();
+        install(
+            &cfg,
+            &led,
+            &stdio_spec("beta", "app-b"),
+            &["mcp_servers"],
+            value,
+        )
+        .unwrap();
+
+        let report =
+            uninstall(&cfg, &led, "alpha", "app-a", "mcp server", &["mcp_servers"]).unwrap();
+
+        assert_eq!(report.patched, vec![cfg.clone()]);
+        let v: Value = yaml_serde::from_str(&std::fs::read_to_string(&cfg).unwrap()).unwrap();
+        assert!(v["mcp_servers"].get("alpha").is_none());
+        assert_eq!(v["mcp_servers"]["beta"]["command"], json!("npx"));
+        assert!(!ownership::contains(&led, "alpha").unwrap());
+        assert!(ownership::contains(&led, "beta").unwrap());
+    }
+
+    #[test]
+    fn uninstall_refuses_when_entry_was_edited() {
+        // Hand-edit the owned entry on disk, then attempt uninstall. The
+        // per-entry drift check must catch this and refuse to remove it.
+        let dir = tempdir().unwrap();
+        let cfg = dir.path().join("config.yaml");
+        let led = dir.path().join(".agent-config-mcp.json");
+
+        install(
+            &cfg,
+            &led,
+            &stdio_spec("alpha", "app-a"),
+            &["mcp_servers"],
+            value,
+        )
+        .unwrap();
+
+        // String-level edit: replace the stdio command path. This mirrors
+        // a user editing the YAML directly rather than going through the
+        // installer.
+        let original = std::fs::read_to_string(&cfg).unwrap();
+        assert!(original.contains("npx"));
+        let edited = original.replace("npx", "uvx");
+        std::fs::write(&cfg, &edited).unwrap();
+
+        let err =
+            uninstall(&cfg, &led, "alpha", "app-a", "mcp server", &["mcp_servers"]).unwrap_err();
+
+        assert!(matches!(err, AgentConfigError::ConfigDrifted { .. }));
+        // File must be unchanged and ledger must still own the entry.
+        let after = std::fs::read_to_string(&cfg).unwrap();
+        assert_eq!(after, edited);
+        let v: Value = yaml_serde::from_str(&after).unwrap();
+        assert_eq!(v["mcp_servers"]["alpha"]["command"], json!("uvx"));
+        assert!(ownership::contains(&led, "alpha").unwrap());
     }
 }

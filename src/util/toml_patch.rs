@@ -5,13 +5,13 @@
 //! `~/.codex/config.toml`, and obliterating their formatting on every
 //! `install_mcp` call would be a hostile UX.
 
-use std::fs;
 use std::path::Path;
 
 use toml_edit::{DocumentMut, Item, Table};
 
 use crate::error::AgentConfigError;
 use crate::status::ConfigPresence;
+use crate::util::fs_atomic;
 
 /// Read a TOML document, returning an empty document when the file is missing.
 ///
@@ -19,11 +19,7 @@ use crate::status::ConfigPresence;
 /// should surface this rather than overwriting potentially-precious user
 /// config.
 pub(crate) fn read_or_empty(path: &Path) -> Result<DocumentMut, AgentConfigError> {
-    let text = match fs::read_to_string(path) {
-        Ok(s) => s,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(DocumentMut::new()),
-        Err(e) => return Err(AgentConfigError::io(path, e)),
-    };
+    let text = fs_atomic::read_to_string_capped(path)?;
     if text.trim().is_empty() {
         return Ok(DocumentMut::new());
     }
@@ -184,6 +180,7 @@ fn make_implicit_table() -> Table {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use tempfile::tempdir;
     use toml_edit::value;
 
@@ -314,5 +311,21 @@ foo = \"bar\"
         assert!(rendered.contains("# Hand-edited"), "comment lost");
         assert!(rendered.contains("[some.other.section]"));
         assert!(rendered.contains("[mcp_servers.github]"));
+    }
+
+    #[test]
+    fn read_or_empty_rejects_oversized_config() {
+        use std::fs::File;
+        let dir = tempdir().unwrap();
+        let cfg = dir.path().join("config.toml");
+        File::create(&cfg)
+            .unwrap()
+            .set_len(crate::util::fs_atomic::MAX_CONFIG_BYTES + 1)
+            .unwrap();
+        let err = read_or_empty(&cfg).unwrap_err();
+        assert!(matches!(
+            err,
+            crate::error::AgentConfigError::ConfigTooLarge { .. }
+        ));
     }
 }

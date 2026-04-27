@@ -131,6 +131,18 @@ pub enum AgentConfigError {
         path: PathBuf,
     },
 
+    /// A config file exceeds the library's read-size cap, set to prevent a
+    /// pathological harness config from consuming unbounded memory.
+    #[error("config at {path} is {size} bytes, exceeding the {limit}-byte cap")]
+    ConfigTooLarge {
+        /// The oversized config path.
+        path: PathBuf,
+        /// Actual file size.
+        size: u64,
+        /// The current cap.
+        limit: u64,
+    },
+
     /// Anything else, with context.
     #[error("{0}")]
     Other(#[from] anyhow::Error),
@@ -277,5 +289,15 @@ mod tests {
         let drifted_msg = format!("{drifted}");
         assert!(drifted_msg.contains("/e/config.json"));
         assert!(drifted_msg.contains("drifted"));
+
+        let too_large = AgentConfigError::ConfigTooLarge {
+            path: PathBuf::from("/f/big.json"),
+            size: 9_000_000,
+            limit: 8 * 1024 * 1024,
+        };
+        let too_large_msg = format!("{too_large}");
+        assert!(too_large_msg.contains("/f/big.json"));
+        assert!(too_large_msg.contains("9000000"));
+        assert!(too_large_msg.contains("8388608"));
     }
 }

@@ -16,7 +16,6 @@
 //! the config file on disk, we refuse with [`AgentConfigError::ConfigDrifted`].
 
 use std::collections::BTreeMap;
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
@@ -53,14 +52,21 @@ pub(crate) fn content_hash(data: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// Canonical SHA-256 hash of an owned MCP entry's `serde_json::Value`. Uses
+/// compact `serde_json::to_vec` (with `preserve_order` enabled at the crate
+/// level) so install-side and uninstall-side hashes agree even when the
+/// surrounding file is reformatted by a sibling install. Shared by every
+/// helper that records per-entry hashes — keeping one definition keeps
+/// `check_entry_drift` consistent across JSON, JSONC, JSON5, and YAML.
+pub(crate) fn hash_entry_value(value: &Value) -> String {
+    let canonical = serde_json::to_vec(value).expect("Value serializes to JSON");
+    content_hash(&canonical)
+}
+
 /// Read the file at `path` and return its SHA-256 hex digest.
 /// Returns `None` if the file does not exist.
 pub(crate) fn file_content_hash(path: &Path) -> Result<Option<String>, AgentConfigError> {
-    match fs::read(path) {
-        Ok(data) => Ok(Some(content_hash(&data))),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(AgentConfigError::io(path, e)),
-    }
+    Ok(fs_atomic::read_capped(path)?.map(|bytes| content_hash(&bytes)))
 }
 
 /// Record an install. Creates the ledger file if missing.
@@ -172,12 +178,8 @@ pub(crate) struct LedgerEntry {
 /// them as a side effect of checking state.
 pub(crate) fn read_strict(ledger_path: &Path) -> Result<StrictLedgerRead, AgentConfigError> {
     fs_atomic::reject_symlink(ledger_path)?;
-    let bytes = match fs::read(ledger_path) {
-        Ok(bytes) => bytes,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(StrictLedgerRead::Missing);
-        }
-        Err(e) => return Err(AgentConfigError::io(ledger_path, e)),
+    let Some(bytes) = fs_atomic::read_capped(ledger_path)? else {
+        return Ok(StrictLedgerRead::Missing);
     };
     if bytes.is_empty() || bytes.iter().all(|b| b.is_ascii_whitespace()) {
         return Ok(StrictLedgerRead::Malformed {
@@ -268,8 +270,6 @@ pub(crate) fn content_hash_of(
 /// Whole-file drift check used for skills (1:1 file per entry). MCP and
 /// other multi-entry surfaces use [`check_entry_drift`] instead so a sibling
 /// install does not invalidate earlier entries' hashes.
-// Wired into `skills_dir::uninstall` in a follow-up commit (Task B4).
-#[allow(dead_code)]
 pub(crate) fn check_drift(
     ledger_path: &Path,
     name: &str,

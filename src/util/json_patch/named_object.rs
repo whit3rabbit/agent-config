@@ -47,14 +47,16 @@ pub(crate) fn remove_named_object_entry(
 
 /// Returns true if a value is recorded at `<path>.<name>`.
 pub(crate) fn contains_named(root: &Value, path: &[&str], name: &str) -> bool {
+    lookup_named(root, path, name).is_some()
+}
+
+/// Walk `root.<path...>` and return the named entry under that object.
+pub(crate) fn lookup_named<'a>(root: &'a Value, path: &[&str], name: &str) -> Option<&'a Value> {
     let mut cur = root;
     for key in path {
-        let Some(next) = cur.get(*key) else {
-            return false;
-        };
-        cur = next;
+        cur = cur.get(*key)?;
     }
-    cur.get(name).is_some()
+    cur.get(name)
 }
 
 #[cfg(test)]

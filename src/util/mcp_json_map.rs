@@ -33,25 +33,6 @@ pub(crate) enum ConfigFormat {
 /// Builder for one server entry under the chosen object key.
 pub(crate) type ServerBuilder = fn(&McpSpec) -> Value;
 
-/// Canonical SHA-256 hash of an owned entry's value. Uses compact
-/// `serde_json::to_vec` (with `preserve_order` enabled at the crate level) so
-/// install-side and uninstall-side hashes agree even when the surrounding
-/// file gets reformatted by a sibling install.
-fn hash_entry(value: &Value) -> String {
-    let canonical = serde_json::to_vec(value).expect("Value serializes to JSON");
-    ownership::content_hash(&canonical)
-}
-
-/// Walk `root.<path...>` and return the named entry under that object.
-/// Mirrors `json_patch::contains_named` but returns the value reference.
-fn lookup_named<'a>(root: &'a Value, path: &[&str], name: &str) -> Option<&'a Value> {
-    let mut cur = root;
-    for key in path {
-        cur = cur.get(*key)?;
-    }
-    cur.get(name)
-}
-
 /// Returns true if `name` exists in the MCP ownership ledger.
 pub(crate) fn is_installed(ledger_path: &Path, name: &str) -> Result<bool, AgentConfigError> {
     ownership::contains(ledger_path, name)
@@ -119,7 +100,7 @@ pub(crate) fn install(
         // entry's recorded hash. `to_vec` is byte-stable for `serde_json::Value`
         // (preserve_order is enabled) and must be used identically on the
         // uninstall side via `check_entry_drift`.
-        let current_entry_hash = hash_entry(&value);
+        let current_entry_hash = ownership::hash_entry_value(&value);
         let changed =
             json_patch::upsert_named_object_entry(&mut root, servers_path, &spec.name, value)?;
 
@@ -263,7 +244,7 @@ pub(crate) fn uninstall(
             // canonically, and compare to the hash recorded at install time.
             // If a user (or another consumer's bug) edited our entry, refuse
             // to remove it instead of silently clobbering their change.
-            let current_value = lookup_named(&root, servers_path, name)
+            let current_value = json_patch::lookup_named(&root, servers_path, name)
                 .expect("contains_named was true; entry must exist");
             let current_bytes =
                 serde_json::to_vec(current_value).expect("Value serializes to JSON");

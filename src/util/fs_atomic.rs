@@ -15,6 +15,49 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::error::AgentConfigError;
 
+/// Hard ceiling on bytes the library will read from any harness config or
+/// rules file. Set high enough to never trip in practice (typical configs
+/// are <100 KiB) and low enough to keep memory bounded on a malicious
+/// or runaway file.
+pub(crate) const MAX_CONFIG_BYTES: u64 = 8 * 1024 * 1024;
+
+/// Read `path`, returning `Ok(None)` if it does not exist. The size cap is
+/// checked from `metadata()` before allocating, so an oversized sparse file
+/// surfaces [`AgentConfigError::ConfigTooLarge`] without materializing its
+/// bytes. Returning `Option` instead of collapsing missing into an empty
+/// `Vec` lets callers distinguish absence from a 0-byte file in one syscall.
+pub(crate) fn read_capped(path: &Path) -> Result<Option<Vec<u8>>, AgentConfigError> {
+    let meta = match std::fs::metadata(path) {
+        Ok(m) => m,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(AgentConfigError::io(path, e)),
+    };
+    if meta.len() > MAX_CONFIG_BYTES {
+        return Err(AgentConfigError::ConfigTooLarge {
+            path: path.to_path_buf(),
+            size: meta.len(),
+            limit: MAX_CONFIG_BYTES,
+        });
+    }
+    let bytes = std::fs::read(path).map_err(|e| AgentConfigError::io(path, e))?;
+    Ok(Some(bytes))
+}
+
+/// Like [`read_capped`] but treats a missing file as an empty buffer.
+pub(crate) fn read_capped_or_empty(path: &Path) -> Result<Vec<u8>, AgentConfigError> {
+    Ok(read_capped(path)?.unwrap_or_default())
+}
+
+pub(crate) fn read_to_string_capped(path: &Path) -> Result<String, AgentConfigError> {
+    let bytes = read_capped_or_empty(path)?;
+    String::from_utf8(bytes).map_err(|e| {
+        AgentConfigError::io(
+            path,
+            std::io::Error::new(std::io::ErrorKind::InvalidData, e),
+        )
+    })
+}
+
 /// Result of [`write_atomic`] / [`patch_in_place`].
 #[derive(Debug, Default, Clone)]
 pub(crate) struct WriteOutcome {
@@ -161,27 +204,31 @@ pub(super) fn remove_if_exists(path: &Path) -> Result<bool, AgentConfigError> {
 }
 
 /// Read `path` as UTF-8, returning an empty string if the file does not exist.
-/// Avoids the TOCTOU `exists()` + `read_to_string` two-syscall pattern.
+/// Routes through [`read_to_string_capped`] so an oversized config surfaces
+/// [`AgentConfigError::ConfigTooLarge`] instead of consuming unbounded memory.
+/// `read_to_string_capped` already returns an empty buffer for missing paths,
+/// preserving the original "or_empty" semantics.
 pub(crate) fn read_to_string_or_empty(path: &Path) -> Result<String, AgentConfigError> {
-    match fs::read_to_string(path) {
-        Ok(s) => Ok(s),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
-        Err(e) => Err(AgentConfigError::io(path, e)),
-    }
+    read_to_string_capped(path)
 }
 
 /// Restore `<path>.bak` over `path` only when the backup already matches the
-/// desired post-uninstall bytes. No-op if no backup exists or the backup is
-/// stale for the desired state.
+/// desired post-uninstall bytes. No-op if no backup exists, the backup is
+/// stale, or the backup exceeds the read cap. The oversize case mirrors
+/// `planning::plan_restore_backup_or_remove`: a giant `.bak` cannot be the
+/// small config we wrote, so we fall through to a fresh write rather than
+/// propagating `ConfigTooLarge`.
 pub(super) fn restore_backup_if_matches(
     path: &Path,
     desired_content: &[u8],
 ) -> Result<bool, AgentConfigError> {
     let bak = backup_path(path);
-    if !bak.exists() {
-        return Ok(false);
-    }
-    let backup_content = fs::read(&bak).map_err(|e| AgentConfigError::io(&bak, e))?;
+    let backup_content = match read_capped(&bak) {
+        Ok(Some(content)) => content,
+        Ok(None) => return Ok(false),
+        Err(AgentConfigError::ConfigTooLarge { .. }) => return Ok(false),
+        Err(e) => return Err(e),
+    };
     if backup_content != desired_content {
         return Ok(false);
     }
@@ -711,5 +758,59 @@ mod tests {
         let dir = tempdir().unwrap();
         let file = dir.path().join("ghost");
         reject_symlink(&file).unwrap();
+    }
+
+    #[test]
+    fn read_capped_rejects_oversized_files() {
+        let dir = tempdir().unwrap();
+        let big = dir.path().join("big.json");
+        let f = std::fs::File::create(&big).unwrap();
+        // sparse: set logical length above the cap without actually writing 8 MiB.
+        f.set_len(MAX_CONFIG_BYTES + 1).unwrap();
+        let err = read_capped(&big).unwrap_err();
+        assert!(
+            matches!(err, AgentConfigError::ConfigTooLarge { size, limit, .. } if size > limit)
+        );
+    }
+
+    #[test]
+    fn read_capped_returns_none_for_missing_file() {
+        let dir = tempdir().unwrap();
+        let missing = dir.path().join("nope.json");
+        assert!(read_capped(&missing).unwrap().is_none());
+    }
+
+    #[test]
+    fn read_capped_distinguishes_missing_from_empty() {
+        let dir = tempdir().unwrap();
+        let empty = dir.path().join("empty.json");
+        std::fs::write(&empty, b"").unwrap();
+        assert_eq!(read_capped(&empty).unwrap(), Some(Vec::<u8>::new()));
+        let missing = dir.path().join("absent.json");
+        assert!(read_capped(&missing).unwrap().is_none());
+    }
+
+    #[test]
+    fn read_capped_reads_small_file() {
+        let dir = tempdir().unwrap();
+        let small = dir.path().join("small.json");
+        std::fs::write(&small, b"{}").unwrap();
+        assert_eq!(read_capped(&small).unwrap(), Some(b"{}".to_vec()));
+    }
+
+    #[test]
+    fn read_capped_or_empty_collapses_missing() {
+        let dir = tempdir().unwrap();
+        let missing = dir.path().join("nope.json");
+        assert!(read_capped_or_empty(&missing).unwrap().is_empty());
+    }
+
+    #[test]
+    fn read_to_string_capped_rejects_invalid_utf8() {
+        let dir = tempdir().unwrap();
+        let bad = dir.path().join("bad.txt");
+        std::fs::write(&bad, [0xFF, 0xFE, 0xFD]).unwrap();
+        let err = read_to_string_capped(&bad).unwrap_err();
+        assert!(matches!(err, AgentConfigError::Io { .. }));
     }
 }

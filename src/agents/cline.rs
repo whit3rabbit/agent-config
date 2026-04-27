@@ -890,7 +890,6 @@ mod tests {
             "/tmp/TaskStart",
             "C:\\TaskStart",
             "Task.Start",
-            "",
         ] {
             let spec = HookSpec::builder("alpha")
                 .command_program("noop", [] as [&str; 0])
