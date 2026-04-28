@@ -893,10 +893,17 @@ mod tests {
         assert!(agent.is_installed(&scope, "alpha").unwrap());
         agent.uninstall(&scope, "alpha").unwrap();
 
-        agent
-            .install(&scope, &hook_spec("alpha", Event::PreToolUse, "x"))
-            .unwrap();
-        assert!(agent.is_installed(&scope, "alpha").unwrap());
+        // Hook surface install is POSIX-only (Cline writes a bash-shebanged
+        // script and refuses on native Windows with `UnsupportedPlatform`).
+        // Skip the hook portion of this dual-surface test on Windows; the
+        // rules-surface assertion above already exercises `is_installed`.
+        #[cfg(not(windows))]
+        {
+            agent
+                .install(&scope, &hook_spec("alpha", Event::PreToolUse, "x"))
+                .unwrap();
+            assert!(agent.is_installed(&scope, "alpha").unwrap());
+        }
     }
 
     #[test]

@@ -449,6 +449,13 @@ mod tests {
 
     #[test]
     fn claude_local_hook_path_is_settings_json() {
+        // Schema is the canonical Linux view (see `build` doc); on Windows the
+        // PathBuf separator is `\` and the assertion against forward-slash
+        // path strings is meaningless. Match the convention in
+        // `tests/schema_golden.rs` and skip the path-shape check off-Linux.
+        if !cfg!(target_os = "linux") {
+            return;
+        }
         let v = build();
         let agents = v.get("agents").and_then(|a| a.as_array()).unwrap();
         let claude = agents
