@@ -43,7 +43,9 @@
                 "~/.claude/CLAUDE.md",
                 "~/.claude/settings.json"
               ],
-              "directories": [],
+              "directories": [
+                "~/.claude"
+              ],
               "ledger_files": [],
               "refusals": []
             },
@@ -102,6 +104,7 @@
                 "~/.claude/skills/placeholder/SKILL.md"
               ],
               "directories": [
+                "~/.claude",
                 "~/.claude/skills",
                 "~/.claude/skills/placeholder"
               ],
@@ -139,7 +142,9 @@
                 "~/.claude/CLAUDE.md",
                 "~/.claude/PLACEHOLDER.md"
               ],
-              "directories": [],
+              "directories": [
+                "~/.claude"
+              ],
               "ledger_files": [
                 "~/.claude/.agent-config-instructions.json"
               ],
@@ -182,7 +187,9 @@
               "config_files": [
                 "~/.cursor/hooks.json"
               ],
-              "directories": [],
+              "directories": [
+                "~/.cursor"
+              ],
               "ledger_files": [],
               "refusals": []
             },
@@ -209,7 +216,9 @@
               "config_files": [
                 "~/.cursor/mcp.json"
               ],
-              "directories": [],
+              "directories": [
+                "~/.cursor"
+              ],
               "ledger_files": [
                 "~/.cursor/.agent-config-mcp.json"
               ],
@@ -241,6 +250,7 @@
                 "~/.cursor/skills/placeholder/SKILL.md"
               ],
               "directories": [
+                "~/.cursor",
                 "~/.cursor/skills",
                 "~/.cursor/skills/placeholder"
               ],
@@ -287,7 +297,9 @@
                 "~/.gemini/GEMINI.md",
                 "~/.gemini/settings.json"
               ],
-              "directories": [],
+              "directories": [
+                "~/.gemini"
+              ],
               "ledger_files": [],
               "refusals": []
             },
@@ -315,7 +327,9 @@
               "config_files": [
                 "~/.gemini/settings.json"
               ],
-              "directories": [],
+              "directories": [
+                "~/.gemini"
+              ],
               "ledger_files": [
                 "~/.gemini/.agent-config-mcp.json"
               ],
@@ -347,6 +361,7 @@
                 "~/.gemini/skills/placeholder/SKILL.md"
               ],
               "directories": [
+                "~/.gemini",
                 "~/.gemini/skills",
                 "~/.gemini/skills/placeholder"
               ],
@@ -383,7 +398,9 @@
               "config_files": [
                 "~/.gemini/GEMINI.md"
               ],
-              "directories": [],
+              "directories": [
+                "~/.gemini"
+              ],
               "ledger_files": [
                 "~/.gemini/.agent-config-instructions.json"
               ],
@@ -439,7 +456,9 @@
               "config_files": [
                 "~/.openclaw/openclaw.json"
               ],
-              "directories": [],
+              "directories": [
+                "~/.openclaw"
+              ],
               "ledger_files": [
                 "~/.openclaw/.agent-config-mcp.json"
               ],
@@ -458,6 +477,7 @@
                 "~/.openclaw/skills/placeholder/SKILL.md"
               ],
               "directories": [
+                "~/.openclaw",
                 "~/.openclaw/skills",
                 "~/.openclaw/skills/placeholder"
               ],
@@ -539,7 +559,9 @@
               "config_files": [
                 "~/.hermes/config.yaml"
               ],
-              "directories": [],
+              "directories": [
+                "~/.hermes"
+              ],
               "ledger_files": [
                 "~/.hermes/.agent-config-mcp.json"
               ],
@@ -557,6 +579,8 @@
                 "~/.hermes/skills/agent-config/placeholder/SKILL.md"
               ],
               "directories": [
+                "~/.hermes",
+                "~/.hermes/skills",
                 "~/.hermes/skills/agent-config",
                 "~/.hermes/skills/agent-config/placeholder"
               ],
@@ -609,7 +633,9 @@
                 "~/.codex/AGENTS.md",
                 "~/.codex/hooks.json"
               ],
-              "directories": [],
+              "directories": [
+                "~/.codex"
+              ],
               "ledger_files": [],
               "refusals": []
             },
@@ -637,7 +663,9 @@
               "config_files": [
                 "~/.codex/config.toml"
               ],
-              "directories": [],
+              "directories": [
+                "~/.codex"
+              ],
               "ledger_files": [
                 "~/.codex/.agent-config-mcp.json"
               ],
@@ -669,6 +697,8 @@
                 "~/.agents/skills/placeholder/SKILL.md"
               ],
               "directories": [
+                "~/.agents",
+                "~/.agents/skills",
                 "~/.agents/skills/placeholder"
               ],
               "ledger_files": [
@@ -704,7 +734,9 @@
               "config_files": [
                 "~/.codex/AGENTS.md"
               ],
-              "directories": [],
+              "directories": [
+                "~/.codex"
+              ],
               "ledger_files": [
                 "~/.codex/.agent-config-instructions.json"
               ],
@@ -764,7 +796,9 @@
               "config_files": [
                 "~/.copilot/mcp-config.json"
               ],
-              "directories": [],
+              "directories": [
+                "~/.copilot"
+              ],
               "ledger_files": [
                 "~/.copilot/.agent-config-mcp.json"
               ],
@@ -795,6 +829,7 @@
                 "~/.copilot/skills/placeholder/SKILL.md"
               ],
               "directories": [
+                "~/.copilot",
                 "~/.copilot/skills",
                 "~/.copilot/skills/placeholder"
               ],
@@ -861,7 +896,11 @@
               "config_files": [
                 "~/.config/opencode/plugins/placeholder.ts"
               ],
-              "directories": [],
+              "directories": [
+                "~/.config",
+                "~/.config/opencode",
+                "~/.config/opencode/plugins"
+              ],
               "ledger_files": [],
               "refusals": []
             },
@@ -889,7 +928,10 @@
               "config_files": [
                 "~/.config/opencode/opencode.json"
               ],
-              "directories": [],
+              "directories": [
+                "~/.config",
+                "~/.config/opencode"
+              ],
               "ledger_files": [
                 "~/.config/opencode/.agent-config-mcp.json"
               ],
@@ -920,6 +962,8 @@
                 "~/.config/opencode/skills/placeholder/SKILL.md"
               ],
               "directories": [
+                "~/.config",
+                "~/.config/opencode",
                 "~/.config/opencode/skills",
                 "~/.config/opencode/skills/placeholder"
               ],
@@ -979,14 +1023,18 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+                "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
               ],
               "directories": [
-                "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev",
-                "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings"
+                "~/.config",
+                "~/.config/Code",
+                "~/.config/Code/User",
+                "~/.config/Code/User/globalStorage",
+                "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev",
+                "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings"
               ],
               "ledger_files": [
-                "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.agent-config-mcp.json"
+                "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.agent-config-mcp.json"
               ],
               "refusals": []
             }
@@ -1086,14 +1134,18 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json"
+                "~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json"
               ],
               "directories": [
-                "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline",
-                "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings"
+                "~/.config",
+                "~/.config/Code",
+                "~/.config/Code/User",
+                "~/.config/Code/User/globalStorage",
+                "~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline",
+                "~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings"
               ],
               "ledger_files": [
-                "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/.agent-config-mcp.json"
+                "~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/.agent-config-mcp.json"
               ],
               "refusals": []
             },
@@ -1172,7 +1224,10 @@
               "config_files": [
                 "~/.codeium/windsurf/mcp_config.json"
               ],
-              "directories": [],
+              "directories": [
+                "~/.codeium",
+                "~/.codeium/windsurf"
+              ],
               "ledger_files": [
                 "~/.codeium/windsurf/.agent-config-mcp.json"
               ],
@@ -1204,6 +1259,8 @@
                 "~/.codeium/windsurf/skills/placeholder/SKILL.md"
               ],
               "directories": [
+                "~/.codeium",
+                "~/.codeium/windsurf",
                 "~/.codeium/windsurf/skills",
                 "~/.codeium/windsurf/skills/placeholder"
               ],
@@ -1290,6 +1347,7 @@
                 "~/.config/kilo/kilo.jsonc"
               ],
               "directories": [
+                "~/.config",
                 "~/.config/kilo"
               ],
               "ledger_files": [
@@ -1408,7 +1466,10 @@
               "config_files": [
                 "~/.gemini/antigravity/mcp_config.json"
               ],
-              "directories": [],
+              "directories": [
+                "~/.gemini",
+                "~/.gemini/antigravity"
+              ],
               "ledger_files": [
                 "~/.gemini/antigravity/.agent-config-mcp.json"
               ],
@@ -1440,6 +1501,8 @@
                 "~/.gemini/antigravity/skills/placeholder/SKILL.md"
               ],
               "directories": [
+                "~/.gemini",
+                "~/.gemini/antigravity",
                 "~/.gemini/antigravity/skills",
                 "~/.gemini/antigravity/skills/placeholder"
               ],
@@ -1759,11 +1822,12 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/Library/Application Support/crush/AGENTS.md",
-                "~/Library/Application Support/crush/crush.json"
+                "~/.config/crush/AGENTS.md",
+                "~/.config/crush/crush.json"
               ],
               "directories": [
-                "~/Library/Application Support/crush"
+                "~/.config",
+                "~/.config/crush"
               ],
               "ledger_files": [],
               "refusals": []
@@ -1789,13 +1853,14 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/Library/Application Support/crush/crush.json"
+                "~/.config/crush/crush.json"
               ],
               "directories": [
-                "~/Library/Application Support/crush"
+                "~/.config",
+                "~/.config/crush"
               ],
               "ledger_files": [
-                "~/Library/Application Support/crush/.agent-config-mcp.json"
+                "~/.config/crush/.agent-config-mcp.json"
               ],
               "refusals": []
             },
@@ -1821,15 +1886,16 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/Library/Application Support/crush/skills/placeholder/SKILL.md"
+                "~/.config/crush/skills/placeholder/SKILL.md"
               ],
               "directories": [
-                "~/Library/Application Support/crush",
-                "~/Library/Application Support/crush/skills",
-                "~/Library/Application Support/crush/skills/placeholder"
+                "~/.config",
+                "~/.config/crush",
+                "~/.config/crush/skills",
+                "~/.config/crush/skills/placeholder"
               ],
               "ledger_files": [
-                "~/Library/Application Support/crush/skills/.agent-config-skills.json"
+                "~/.config/crush/skills/.agent-config-skills.json"
               ],
               "refusals": []
             },
@@ -1859,13 +1925,14 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/Library/Application Support/crush/AGENTS.md"
+                "~/.config/crush/AGENTS.md"
               ],
               "directories": [
-                "~/Library/Application Support/crush"
+                "~/.config",
+                "~/.config/crush"
               ],
               "ledger_files": [
-                "~/Library/Application Support/crush/.agent-config-instructions.json"
+                "~/.config/crush/.agent-config-instructions.json"
               ],
               "refusals": []
             },
@@ -2200,7 +2267,10 @@
               "config_files": [
                 "~/.pi/agent/AGENTS.md"
               ],
-              "directories": [],
+              "directories": [
+                "~/.pi",
+                "~/.pi/agent"
+              ],
               "ledger_files": [],
               "refusals": []
             },
@@ -2226,7 +2296,10 @@
               "config_files": [
                 "~/.pi/agent/mcp.json"
               ],
-              "directories": [],
+              "directories": [
+                "~/.pi",
+                "~/.pi/agent"
+              ],
               "ledger_files": [
                 "~/.pi/agent/.agent-config-mcp.json"
               ],
@@ -2258,6 +2331,8 @@
                 "~/.pi/agent/skills/placeholder/SKILL.md"
               ],
               "directories": [
+                "~/.pi",
+                "~/.pi/agent",
                 "~/.pi/agent/skills",
                 "~/.pi/agent/skills/placeholder"
               ],
@@ -2294,7 +2369,10 @@
               "config_files": [
                 "~/.pi/agent/AGENTS.md"
               ],
-              "directories": [],
+              "directories": [
+                "~/.pi",
+                "~/.pi/agent"
+              ],
               "ledger_files": [
                 "~/.pi/agent/.agent-config-instructions.json"
               ],
@@ -2437,7 +2515,9 @@
               "config_files": [
                 "~/.qwen/QWEN.md"
               ],
-              "directories": [],
+              "directories": [
+                "~/.qwen"
+              ],
               "ledger_files": [],
               "refusals": []
             },
@@ -2463,7 +2543,9 @@
               "config_files": [
                 "~/.qwen/settings.json"
               ],
-              "directories": [],
+              "directories": [
+                "~/.qwen"
+              ],
               "ledger_files": [
                 "~/.qwen/.agent-config-mcp.json"
               ],
@@ -2495,6 +2577,8 @@
                 "~/.qwen/skills/placeholder/SKILL.md"
               ],
               "directories": [
+                "~/.qwen",
+                "~/.qwen/skills",
                 "~/.qwen/skills/placeholder"
               ],
               "ledger_files": [
@@ -2530,7 +2614,9 @@
               "config_files": [
                 "~/.qwen/QWEN.md"
               ],
-              "directories": [],
+              "directories": [
+                "~/.qwen"
+              ],
               "ledger_files": [
                 "~/.qwen/.agent-config-instructions.json"
               ],
