@@ -98,7 +98,7 @@ HTML-comment fenced block in the existing memory file.
 | | |
 | --- | --- |
 | Host file | `~/.gemini/GEMINI.md` |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `~/.gemini/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 
@@ -107,7 +107,7 @@ HTML-comment fenced block in the existing memory file.
 | | |
 | --- | --- |
 | Host file | `<root>/GEMINI.md` |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `<root>/.gemini/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 

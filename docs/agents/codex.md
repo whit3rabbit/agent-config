@@ -90,7 +90,7 @@ support `@import`, so the only available placement is InlineBlock.
 | | |
 | --- | --- |
 | Host file | `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`) |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `$CODEX_HOME/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 
@@ -99,7 +99,7 @@ support `@import`, so the only available placement is InlineBlock.
 | | |
 | --- | --- |
 | Host file | `<root>/AGENTS.md` |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `<root>/.codex/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 

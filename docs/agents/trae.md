@@ -31,7 +31,7 @@ injected as a tagged HTML-comment fenced block in the existing memory file.
 | | |
 | --- | --- |
 | Host file | `<root>/.trae/project_rules.md` |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `<root>/.trae/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 

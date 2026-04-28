@@ -36,7 +36,7 @@ file.
 | | |
 | --- | --- |
 | Host file | `<root>/.junie/AGENTS.md` |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `<root>/.junie/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 

@@ -88,7 +88,7 @@ the consumer overrides `placement`.
 | --- | --- |
 | Instruction file | `~/.claude/<name>.md` |
 | Host include in | `~/.claude/CLAUDE.md` |
-| Reference syntax | `@<name>.md` (inside a managed `<!-- BEGIN AGENT-CONFIG:<name> --> ... <!-- END AGENT-CONFIG:<name> -->` fence) |
+| Reference syntax | `@<name>.md` (inside a managed `<!-- BEGIN AGENT-CONFIG-INSTR:<name> --> ... <!-- END AGENT-CONFIG-INSTR:<name> -->` fence) |
 | Ledger | `~/.claude/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::ReferencedFile` |
 

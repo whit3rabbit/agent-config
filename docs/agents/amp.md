@@ -34,7 +34,7 @@ fenced block in the existing memory file.
 | | |
 | --- | --- |
 | Host file | `~/.amp/AGENTS.md` |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `~/.amp/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 
@@ -43,7 +43,7 @@ fenced block in the existing memory file.
 | | |
 | --- | --- |
 | Host file | `<root>/AGENTS.md` |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `<root>/.amp/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 

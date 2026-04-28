@@ -190,7 +190,7 @@ supports all three modes per [`InstructionPlacement`](../../src/spec/instruction
 | | |
 | --- | --- |
 | Host file | `~/.<id>/<MEMORY>.md` |
-| Mechanism | Tagged HTML-comment fence (or `@<name>.md` include if `ReferencedFile`) |
+| Mechanism | Tagged HTML-comment fence `AGENT-CONFIG-INSTR:<name>` (or `@<name>.md` include wrapped in that fence if `ReferencedFile`) |
 | Ledger | `~/.<id>/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::<picked>` |
 
@@ -199,7 +199,7 @@ supports all three modes per [`InstructionPlacement`](../../src/spec/instruction
 | | |
 | --- | --- |
 | Host file or instruction file | `<root>/<MEMORY>.md` (InlineBlock / ReferencedFile) **or** `<root>/.<id>/rules/<name>.md` (StandaloneFile) |
-| Mechanism | Tagged HTML-comment fence, `@`-include, or per-file rule |
+| Mechanism | Tagged HTML-comment fence `AGENT-CONFIG-INSTR:<name>`, `@`-include wrapped in that fence, or per-file rule |
 | Ledger | `<root>/.<id>/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::<picked>` |
 

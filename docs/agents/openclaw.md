@@ -27,7 +27,7 @@ injected as a tagged HTML-comment fenced block in the existing memory file.
 | | |
 | --- | --- |
 | Host file | `<root>/AGENTS.md` |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `<root>/.agents/.agent-config-instructions.json` (reuses the existing `.agents/` skills directory) |
 | Placement | `InstructionPlacement::InlineBlock` |
 

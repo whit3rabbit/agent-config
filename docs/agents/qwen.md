@@ -34,7 +34,7 @@ HTML-comment fenced block in the existing memory file.
 | | |
 | --- | --- |
 | Host file | `~/.qwen/QWEN.md` |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `~/.qwen/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 
@@ -43,7 +43,7 @@ HTML-comment fenced block in the existing memory file.
 | | |
 | --- | --- |
 | Host file | `<root>/QWEN.md` |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `<root>/.qwen/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 

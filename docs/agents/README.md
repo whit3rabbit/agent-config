@@ -50,6 +50,11 @@ the current file-backed locations implemented by this crate.
 - MCP servers and skills use sidecar ownership ledgers instead of embedding
   agent-config metadata in the harness payload.
 - Prompt-markdown injections are wrapped in HTML-comment fences keyed on the
-  tag: `<!-- BEGIN AGENT-CONFIG:<tag> --> ... <!-- END AGENT-CONFIG:<tag> -->`.
+  identifier. Hooks (and prompt-only rules) use
+  `<!-- BEGIN AGENT-CONFIG:<tag> --> ... <!-- END AGENT-CONFIG:<tag> -->`;
+  the instruction surface uses a distinct prefix
+  `<!-- BEGIN AGENT-CONFIG-INSTR:<name> --> ... <!-- END AGENT-CONFIG-INSTR:<name> -->`
+  so a hook tag and an instruction name with the same string cannot
+  collide.
 - Any pre-existing file we modify gets a one-time `<path>.bak` sibling on
   first patch.

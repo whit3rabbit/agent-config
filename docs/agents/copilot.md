@@ -91,7 +91,7 @@ file.
 | | |
 | --- | --- |
 | Host file | `<root>/.github/copilot-instructions.md` |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `<root>/.github/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 

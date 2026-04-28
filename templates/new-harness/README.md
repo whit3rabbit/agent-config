@@ -281,13 +281,21 @@ with SHA-256 content hash). The standard helper records ownership via
 `AgentConfigError::NotOwnedByCaller` on owner mismatch or hand-installed
 files.
 
-### Naming caveat
+### Fence prefix
 
 For `ReferencedFile` and `InlineBlock`, the instruction's `name` is reused as
-the markdown fence tag. If a consumer installs both a hook with `tag = T` and
-an instruction with `name = T` into the same memory file, the second upsert
-silently replaces the first. Document this in your agent's per-agent doc and
-recommend `StandaloneFile` if your harness has a per-tag rules directory.
+the markdown fence tag, but instructions live under a distinct
+`AGENT-CONFIG-INSTR:<name>` prefix (hooks use `AGENT-CONFIG:<tag>`). Hook
+tags and instruction names therefore cannot overwrite each other when they
+share a memory file. The shared helpers handle this for you — call
+`md_block::upsert_instruction` / `md_block::remove_instruction` /
+`md_block::contains_instruction` (or
+`planning::plan_markdown_upsert_instruction` /
+`planning::plan_markdown_remove_instruction` in dry-run paths) on
+instruction code paths; never reach for the bare `md_block::upsert` helpers,
+which still write the hook fence. Status detection and uninstall accept the
+legacy `AGENT-CONFIG:<name>` fence as a fallback so pre-rename installs
+drain on upgrade.
 
 Delete the `impl InstructionSurface` block (and the helpers it imports) if
 your harness has neither a memory file nor a per-tag rules directory.
@@ -433,7 +441,12 @@ shared helpers in `src/util/planning.rs`:
 
 - `plan_tagged_json_upsert` / `plan_tagged_json_remove_under` — tagged
   hook arrays.
-- `plan_markdown_upsert` / `plan_markdown_remove` — fenced rules blocks.
+- `plan_markdown_upsert` / `plan_markdown_remove` — fenced rules blocks
+  (hook fence: `AGENT-CONFIG:<tag>`).
+- `plan_markdown_upsert_instruction` / `plan_markdown_remove_instruction` —
+  fenced instruction blocks (`AGENT-CONFIG-INSTR:<name>`); the instruction
+  variants also fall back to the legacy hook prefix on remove so
+  pre-rename installs drain.
 - `plan_write_file`, `plan_remove_file`, `plan_restore_backup_or_remove` —
   raw file operations.
 - `plan_write_ledger` / `plan_remove_ledger_entry` — sidecar ledger edits.
@@ -523,8 +536,14 @@ tests live in `tests/`.
   multiple consumers coexist.
 - MCP servers and skills track ownership via a sidecar ledger, never via a
   marker in the harness payload.
-- Markdown injections use the `<!-- BEGIN AGENT-CONFIG:<tag> --> ... <!-- END
-  AGENT-CONFIG:<tag> -->` fence format.
+- Markdown injections use two fence prefixes. Hooks (and prompt-only
+  rules) write `<!-- BEGIN AGENT-CONFIG:<tag> --> ... <!-- END
+  AGENT-CONFIG:<tag> -->`; the instruction surface writes
+  `<!-- BEGIN AGENT-CONFIG-INSTR:<name> --> ... <!-- END
+  AGENT-CONFIG-INSTR:<name> -->`. The two namespaces are independent so a
+  hook tag and an instruction name can be the same string without
+  colliding. Use `md_block::upsert` for hooks,
+  `md_block::upsert_instruction` for instructions.
 - Any pre-existing file we modify gets a one-time `<path>.bak` sibling on
   first patch (`safe_fs::write(scope, _, _, true)`).
 - `safe_fs::restore_backup_if_matches(scope, path, desired_bytes)` is the only way to

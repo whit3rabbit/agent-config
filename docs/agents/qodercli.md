@@ -31,7 +31,7 @@ HTML-comment fenced block in the existing memory file.
 | | |
 | --- | --- |
 | Host file | `~/.qoder/AGENTS.md` |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `~/.qoder/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 
@@ -40,7 +40,7 @@ HTML-comment fenced block in the existing memory file.
 | | |
 | --- | --- |
 | Host file | `<root>/AGENTS.md` |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `<root>/.qoder/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 

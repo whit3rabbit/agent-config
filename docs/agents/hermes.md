@@ -27,7 +27,7 @@ file.
 | | |
 | --- | --- |
 | Host file | `<root>/.hermes.md` |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `<root>/.hermes/.agent-config-instructions.json` (new directory; created on demand to avoid cluttering project root) |
 | Placement | `InstructionPlacement::InlineBlock` |
 

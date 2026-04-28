@@ -91,7 +91,7 @@ HTML-comment fenced block in the existing memory file.
 | | |
 | --- | --- |
 | Host file | `~/.codebuddy/CLAUDE.md` |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `~/.codebuddy/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 
@@ -100,7 +100,7 @@ HTML-comment fenced block in the existing memory file.
 | | |
 | --- | --- |
 | Host file | `<root>/CLAUDE.md` |
-| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
 | Ledger | `<root>/.codebuddy/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 
