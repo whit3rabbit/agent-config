@@ -51,6 +51,19 @@ AGENT_CONFIG_UPDATE_GOLDENS=1 cargo test --test golden
 
 Inspect the diff before committing.
 
+The auto-generated `schema/agents.json` snapshot has its own regen flag.
+Run on Linux (the test only byte-compares on Linux; macOS/Windows views
+differ for any agent whose paths flow through `paths::config_dir()`):
+
+```bash
+AGENT_SCHEMA_UPDATE=1 cargo test --test schema_golden
+# or, equivalently
+cargo run --example gen_schema
+```
+
+Edits to platform-independent sections (e.g. `marker_conventions`) can be
+made directly on any host; only path-bearing entries need a Linux regen.
+
 ### Concurrency and Docker notes
 
 Concurrency coverage lives in `tests/concurrency.rs`, with helper-level stress
@@ -309,7 +322,17 @@ warrant a third shim for one consumer.
 - First-touch backups (`<path>.bak`) for any file we modify but did not create. Refuses to clobber an existing `.bak`.
 - Idempotency markers:
   - JSON: `_agent_config_tag` field on every object we insert.
-  - Markdown: HTML-comment fence `<!-- BEGIN AGENT-CONFIG:<tag> --> ... <!-- END AGENT-CONFIG:<tag> -->`.
+  - Markdown: two HTML-comment fence prefixes. Hooks (and prompt-only rules)
+    use `<!-- BEGIN AGENT-CONFIG:<tag> -->`; the instruction surface uses
+    `<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->` so a hook tag and an
+    instruction name with the same string cannot collide. Instruction code
+    paths MUST call `md_block::upsert_instruction` / `contains_instruction` /
+    `remove_instruction` (and `planning::plan_markdown_*_instruction` in
+    dry-run paths); bare `md_block::upsert` / `plan_markdown_upsert` writes
+    the hook fence. Status detection and uninstall on the instruction surface
+    accept the legacy `AGENT-CONFIG:<name>` fence as a fallback so pre-rename
+    installs drain on upgrade; install only prunes the legacy block when the
+    instructions ledger already records the name.
 - MCP, skills, and instructions use sidecar ownership ledgers instead of
   embedding `_agent_config_tag` into harness-owned server, skill, or
   instruction payloads. Per-surface ledger filenames:
