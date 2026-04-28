@@ -369,6 +369,20 @@ notes" for the user-facing contract.
 
 ## Deferred work
 
+### Crush hook ledger format
+
+Crush's `HookConfig` JSON schema declares `additionalProperties: false`. We
+embed our `_agent_config_tag` marker directly inside each hook entry,
+relying on Crush being implemented in Go (its `encoding/json` ignores
+unknown fields by default). A schema-aware editor may flag the marker at
+authoring time but Crush itself accepts and round-trips the file at
+runtime. If upstream switches to strict decoding, the marker will need to
+migrate to a sidecar `.agent-config-hooks.json` ledger paralleling the
+existing MCP / skills / instructions ledgers. No hook ledger
+infrastructure exists today; designing one is deferred until the upstream
+schema changes or a downstream consumer requests it. Tracked in
+`CHANGELOG.md` under "Documentation".
+
 ### Variants of supported harnesses
 
 Reachable via existing types but no first-party shim ships:
