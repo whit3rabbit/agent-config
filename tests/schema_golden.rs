@@ -67,30 +67,6 @@ fn schema_matches_checked_in_fixture() {
     });
 
     if on_disk != live {
-        // DIAGNOSTIC: print first few lines of diff to help debug CI-only drift.
-        // Remove after CI is green.
-        let on_disk_lines: Vec<&str> = on_disk.lines().collect();
-        let live_lines: Vec<&str> = live.lines().collect();
-        let max = on_disk_lines.len().max(live_lines.len());
-        let mut printed = 0;
-        for i in 0..max {
-            let a = on_disk_lines.get(i).copied().unwrap_or("<eof>");
-            let b = live_lines.get(i).copied().unwrap_or("<eof>");
-            if a != b {
-                eprintln!("DIFF line {}: on_disk={a:?} live={b:?}", i + 1);
-                printed += 1;
-                if printed >= 20 {
-                    break;
-                }
-            }
-        }
-        eprintln!(
-            "diagnostic: HOME={:?} XDG_CONFIG_HOME={:?} on_disk_len={} live_len={}",
-            std::env::var("HOME").ok(),
-            std::env::var("XDG_CONFIG_HOME").ok(),
-            on_disk.len(),
-            live.len()
-        );
         panic!(
             "{} is out of date. Run `AGENT_SCHEMA_UPDATE=1 cargo test --test schema_golden` \
              or `cargo run --example gen_schema` to regenerate.",

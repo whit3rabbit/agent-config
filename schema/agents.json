@@ -897,7 +897,6 @@
                 "~/.config/opencode/plugins/placeholder.ts"
               ],
               "directories": [
-                "~/.config",
                 "~/.config/opencode",
                 "~/.config/opencode/plugins"
               ],
@@ -929,7 +928,6 @@
                 "~/.config/opencode/opencode.json"
               ],
               "directories": [
-                "~/.config",
                 "~/.config/opencode"
               ],
               "ledger_files": [
@@ -962,7 +960,6 @@
                 "~/.config/opencode/skills/placeholder/SKILL.md"
               ],
               "directories": [
-                "~/.config",
                 "~/.config/opencode",
                 "~/.config/opencode/skills",
                 "~/.config/opencode/skills/placeholder"
@@ -1026,7 +1023,6 @@
                 "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
               ],
               "directories": [
-                "~/.config",
                 "~/.config/Code",
                 "~/.config/Code/User",
                 "~/.config/Code/User/globalStorage",
@@ -1137,7 +1133,6 @@
                 "~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json"
               ],
               "directories": [
-                "~/.config",
                 "~/.config/Code",
                 "~/.config/Code/User",
                 "~/.config/Code/User/globalStorage",
@@ -1347,7 +1342,6 @@
                 "~/.config/kilo/kilo.jsonc"
               ],
               "directories": [
-                "~/.config",
                 "~/.config/kilo"
               ],
               "ledger_files": [
@@ -1826,7 +1820,6 @@
                 "~/.config/crush/crush.json"
               ],
               "directories": [
-                "~/.config",
                 "~/.config/crush"
               ],
               "ledger_files": [],
@@ -1856,7 +1849,6 @@
                 "~/.config/crush/crush.json"
               ],
               "directories": [
-                "~/.config",
                 "~/.config/crush"
               ],
               "ledger_files": [
@@ -1889,7 +1881,6 @@
                 "~/.config/crush/skills/placeholder/SKILL.md"
               ],
               "directories": [
-                "~/.config",
                 "~/.config/crush",
                 "~/.config/crush/skills",
                 "~/.config/crush/skills/placeholder"
@@ -1928,7 +1919,6 @@
                 "~/.config/crush/AGENTS.md"
               ],
               "directories": [
-                "~/.config",
                 "~/.config/crush"
               ],
               "ledger_files": [
