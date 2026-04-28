@@ -1,0 +1,92 @@
+surface: mcp
+agent: crush
+scenario: existing_owned_same_name_reinstall
+
+install_result:
+Ok(
+    InstallReport {
+        created: [],
+        patched: [],
+        backed_up: [],
+        already_installed: true,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOwned {
+            owner: "golden-owner",
+        },
+        config_path: Some(
+            "[ROOT]/crush.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.agent-config-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/crush.json",
+            },
+            Exists {
+                path: "[ROOT]/.agent-config-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "crush",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+files:
+- .agent-config-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "content_hash": "1da156ef7a35eea4d7166f11e3d67b66992f91ee25a6c22321d921a39519ac9e",
+      "owner": "golden-owner"
+    }
+  },
+  "version": 2
+}
+```
+- crush.json
+  content:
+```text
+{
+  "mcp": {
+    "golden-server": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

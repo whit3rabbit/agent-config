@@ -325,7 +325,7 @@ impl Integration for MyagentAgent {
 // `mcp_json_object` import) if your harness has no file-backed MCP contract.
 //
 // For TOML-shaped MCP (e.g., Codex's `[mcp_servers.<name>]`), see
-// `src/agents/codex.rs`. For object-map shapes under arbitrary keys, see
+// `src/agents/codex/mcp.rs`. For object-map shapes under arbitrary keys, see
 // `src/agents/opencode.rs` and `src/agents/copilot.rs`. For YAML maps see
 // `src/agents/hermes.rs`.
 //
@@ -518,11 +518,12 @@ impl SkillSurface for MyagentAgent {
 //
 // - **StandaloneFile** (per-tag rules directory like `.clinerules/`):
 //   provide a `StandaloneLayout { config_dir, instruction_dir }` and call the
-//   `standalone_*` shims. See `src/agents/cline.rs` or `src/agents/roo.rs`.
+//   `standalone_*` shims. See `src/agents/cline/instructions.rs` or
+//   `src/agents/roo.rs`.
 // - **ReferencedFile** (Claude only — writes `<NAME>.md` separately and
 //   injects `@<NAME>.md` into a host file): no shim exists; call
 //   `instructions_dir::{install, uninstall, plan_install, plan_uninstall}`
-//   directly. See `src/agents/claude.rs`.
+//   directly. See `src/agents/claude/instructions.rs`.
 
 impl MyagentAgent {
     fn inline_layout(

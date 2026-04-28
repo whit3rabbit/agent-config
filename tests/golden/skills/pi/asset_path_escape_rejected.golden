@@ -1,0 +1,58 @@
+surface: skills
+agent: pi
+scenario: asset_path_escape_rejected
+
+install_result:
+Err(
+    Other(
+        "skill asset path must not contain `..` or root (got \"../escape.txt\")",
+    ),
+)
+status:
+Ok(
+    StatusReport {
+        target: Skill {
+            name: "golden-skill",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.pi/skills/golden-skill",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.pi/skills/.agent-config-skills.json",
+        ),
+        files: [
+            Missing {
+                path: "[ROOT]/.pi/skills/golden-skill",
+            },
+            Missing {
+                path: "[ROOT]/.pi/skills/golden-skill/SKILL.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Skill {
+            integration_id: "pi",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-skill",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+<empty>
+
+HOME tree:
+<empty>

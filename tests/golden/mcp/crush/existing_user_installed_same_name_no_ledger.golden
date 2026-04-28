@@ -1,0 +1,81 @@
+surface: mcp
+agent: crush
+scenario: existing_user_installed_same_name_no_ledger
+
+install_result:
+Err(
+    NotOwnedByCaller {
+        kind: "mcp server",
+        name: "golden-server",
+        expected: "golden-owner",
+        actual: None,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: PresentUnowned,
+        config_path: Some(
+            "[ROOT]/crush.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.agent-config-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/crush.json",
+            },
+            Missing {
+                path: "[ROOT]/.agent-config-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "crush",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            ConfigOnly {
+                path: "[ROOT]/crush.json",
+            },
+        ],
+        suggested_actions: [
+            RemoveConfigEntry,
+        ],
+    },
+)
+
+ROOT tree:
+files:
+- crush.json
+  content:
+```text
+{
+  "mcp": {
+    "golden-server": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

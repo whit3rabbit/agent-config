@@ -19,7 +19,9 @@ pub(crate) use named_object::{
     contains_named, lookup_named, remove_named_object_entry, upsert_named_object_entry,
 };
 #[allow(unused_imports)]
-pub(crate) use status_probe::{tagged_hook_presence, tagged_hook_presence_for_event};
+pub(crate) use status_probe::{
+    tagged_hook_presence, tagged_hook_presence_for_event, tagged_hook_presence_jsonc,
+};
 #[allow(unused_imports)]
 pub(crate) use tagged_array::{
     contains_tagged_array_entry_under, remove_tagged_array_entries_under, upsert_tagged_array_entry,

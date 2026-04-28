@@ -1,0 +1,123 @@
+surface: hooks
+agent: crush
+scenario: different_consumer_preserved
+
+install_result:
+Ok(
+    InstallReport {
+        created: [],
+        patched: [
+            "[ROOT]/crush.json",
+            "[ROOT]/AGENTS.md",
+        ],
+        backed_up: [
+            "[ROOT]/crush.json.bak",
+            "[ROOT]/AGENTS.md.bak",
+        ],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: InstalledOwned {
+            owner: "golden-hook",
+        },
+        config_path: Some(
+            "[ROOT]/crush.json",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/crush.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "crush",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/crush.json.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+files:
+- AGENTS.md
+  content:
+```text
+<!-- BEGIN AGENT-CONFIG:sibling-hook -->
+Use sibling hook rules.
+<!-- END AGENT-CONFIG:sibling-hook -->
+
+<!-- BEGIN AGENT-CONFIG:golden-hook -->
+Use golden hook rules.
+<!-- END AGENT-CONFIG:golden-hook -->
+```
+- AGENTS.md.bak
+  content:
+```text
+<!-- BEGIN AGENT-CONFIG:sibling-hook -->
+Use sibling hook rules.
+<!-- END AGENT-CONFIG:sibling-hook -->
+```
+- crush.json
+  content:
+```text
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^bash$",
+        "command": "golden hook",
+        "timeout": 30,
+        "_agent_config_tag": "sibling-hook"
+      },
+      {
+        "matcher": "^bash$",
+        "command": "golden hook",
+        "timeout": 30,
+        "_agent_config_tag": "golden-hook"
+      }
+    ]
+  }
+}
+```
+- crush.json.bak
+  content:
+```text
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^bash$",
+        "command": "golden hook",
+        "timeout": 30,
+        "_agent_config_tag": "sibling-hook"
+      }
+    ]
+  }
+}
+```
+
+HOME tree:
+<empty>

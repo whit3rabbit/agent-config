@@ -231,6 +231,36 @@ pub fn windsurf_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
         .join("mcp_config.json"))
 }
 
+/// Charm Crush's per-user config directory.
+///
+/// Honors `$CRUSH_GLOBAL_CONFIG` if set (Crush's documented override). Falls
+/// back to `$XDG_CONFIG_HOME/crush` on Unix and `%APPDATA%\crush` on Windows
+/// via [`config_dir`]. The single `crush.json` file lives directly under this
+/// directory.
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] when no usable directory
+/// is found.
+pub fn crush_home() -> Result<PathBuf, AgentConfigError> {
+    if let Some(p) = env_path("CRUSH_GLOBAL_CONFIG") {
+        return Ok(p);
+    }
+    Ok(config_dir()?.join("crush"))
+}
+
+/// Pi coding-agent's per-user config directory: `~/.pi/agent`.
+///
+/// Pi keeps its global memory file (`AGENTS.md`), MCP file (`mcp.json` for the
+/// `pi-mcp-adapter`), skills (`skills/`), and extensions all under this root.
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`].
+pub fn pi_home() -> Result<PathBuf, AgentConfigError> {
+    Ok(home_dir()?.join(".pi").join("agent"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,6 +313,28 @@ mod tests {
                 "{p:?} does not end with {suffix}"
             );
         }
+        // pi_home is a two-segment suffix.
+        let p = pi_home().expect("path resolved");
+        assert!(p.ends_with(PathBuf::from(".pi").join("agent")));
+        // crush_home ends in `crush` whether sourced from $XDG_CONFIG_HOME or
+        // platform default.
+        let p = crush_home().expect("path resolved");
+        assert!(p.ends_with("crush"));
+    }
+
+    #[test]
+    fn crush_home_respects_env_var() {
+        let _guard = env_lock().lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_path_buf();
+        let prev = std::env::var_os("CRUSH_GLOBAL_CONFIG");
+        std::env::set_var("CRUSH_GLOBAL_CONFIG", &path);
+        let resolved = crush_home().unwrap();
+        match prev {
+            Some(v) => std::env::set_var("CRUSH_GLOBAL_CONFIG", v),
+            None => std::env::remove_var("CRUSH_GLOBAL_CONFIG"),
+        }
+        assert_eq!(resolved, path);
     }
 
     #[test]

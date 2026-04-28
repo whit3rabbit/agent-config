@@ -11,6 +11,7 @@ use serde_json::Value;
 
 use crate::error::AgentConfigError;
 use crate::status::ConfigPresence;
+use crate::util::mcp_json_map;
 
 use super::common::{matches_tag, read_or_empty, traverse_object};
 
@@ -29,6 +30,35 @@ pub(crate) fn tagged_hook_presence(
         Err(AgentConfigError::JsonInvalid { source, .. }) => {
             return Ok(ConfigPresence::Invalid {
                 reason: source.to_string(),
+            });
+        }
+        Err(e) => return Err(e),
+    };
+    let count = count_tagged_under(&root, parent_path, tag);
+    Ok(presence_from_count(count))
+}
+
+/// JSONC variant of [`tagged_hook_presence`] for harnesses (Crush) whose
+/// settings file is JSON-with-comments. Comments and trailing commas are
+/// accepted; parser failures surface as [`ConfigPresence::Invalid`].
+pub(crate) fn tagged_hook_presence_jsonc(
+    config_path: &Path,
+    parent_path: &[&str],
+    tag: &str,
+) -> Result<ConfigPresence, AgentConfigError> {
+    if !config_path.exists() {
+        return Ok(ConfigPresence::Absent);
+    }
+    let root = match mcp_json_map::read_jsonc_or_empty(config_path) {
+        Ok(v) => v,
+        Err(AgentConfigError::JsonInvalid { source, .. }) => {
+            return Ok(ConfigPresence::Invalid {
+                reason: source.to_string(),
+            });
+        }
+        Err(AgentConfigError::Other(e)) => {
+            return Ok(ConfigPresence::Invalid {
+                reason: e.to_string(),
             });
         }
         Err(e) => return Err(e),

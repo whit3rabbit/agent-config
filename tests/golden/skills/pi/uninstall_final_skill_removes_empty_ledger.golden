@@ -1,0 +1,65 @@
+surface: skills
+agent: pi
+scenario: uninstall_final_skill_removes_empty_ledger
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [
+            "[ROOT]/.pi/skills/golden-skill",
+        ],
+        patched: [],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Skill {
+            name: "golden-skill",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/.pi/skills/golden-skill",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.pi/skills/.agent-config-skills.json",
+        ),
+        files: [
+            Missing {
+                path: "[ROOT]/.pi/skills/golden-skill",
+            },
+            Missing {
+                path: "[ROOT]/.pi/skills/golden-skill/SKILL.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Skill {
+            integration_id: "pi",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-skill",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+directories:
+- .pi
+- .pi/skills
+
+HOME tree:
+<empty>

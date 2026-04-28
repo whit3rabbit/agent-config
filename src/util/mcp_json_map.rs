@@ -443,7 +443,13 @@ fn read_or_empty(path: &Path, format: ConfigFormat) -> Result<Value, AgentConfig
     }
 }
 
-fn read_jsonc_or_empty(path: &Path) -> Result<Value, AgentConfigError> {
+/// Read a JSONC file, returning `Value::Object(empty)` when the file is
+/// missing or whitespace-only. Comments and trailing commas are accepted;
+/// invalid JSONC is surfaced as [`AgentConfigError::Other`].
+///
+/// Exposed `pub(crate)` so harnesses whose primary config is JSONC (Crush,
+/// Kilo) can read their host file with the same parser the MCP layer uses.
+pub(crate) fn read_jsonc_or_empty(path: &Path) -> Result<Value, AgentConfigError> {
     let text = fs_atomic::read_to_string_or_empty(path)?;
     if text.trim().is_empty() {
         return Ok(Value::Object(Map::new()));

@@ -7,8 +7,8 @@ a smoke test. Done.
 This file walks through the parts that are not obvious. The two reference
 implementations are:
 
-- `src/agents/claude.rs` — JSON throughout, all four surfaces.
-- `src/agents/codex.rs` — JSON hooks, **TOML** MCP, all four surfaces.
+- `src/agents/claude/` — JSON throughout, all four surfaces.
+- `src/agents/codex/` — JSON hooks, **TOML** MCP, all four surfaces.
 
 If your harness's MCP shape is JSON, follow Claude. If it's TOML, follow
 Codex. Everything else is shared.
@@ -53,7 +53,7 @@ Trait definitions live in `src/integration.rs`.
 6. Confirm every mutating method (`install`, `uninstall`, `install_mcp`,
    `uninstall_mcp`, `install_skill`, `uninstall_skill`) calls
    `scope.ensure_contained(&path)?` before touching disk.
-7. Register in `src/agents/mod.rs` (one `pub mod`, one `pub use`) and
+7. Register in `src/agents/mod.rs` (one `pub(crate) mod`, one `pub use`) and
    `src/registry.rs` (one entry per surface you implemented). Skill-only
    and MCP-only agents must still implement `Integration` because
    `tests/skill_registry.rs` and `tests/mcp_registry.rs` assert
@@ -61,8 +61,8 @@ Trait definitions live in `src/integration.rs`.
 8. `cp templates/new-harness/agent.md docs/agents/<id>.md` and fill it in
    (date, doc URLs, surfaces, format example).
 9. Add a smoke test entry in `tests/registry.rs`, `tests/mcp_registry.rs`,
-   `tests/skill_registry.rs`, and/or `tests/plan_api.rs` (only the suites
-   you participate in).
+   `tests/skill_registry.rs`, `tests/instruction_registry.rs`, and/or
+   `tests/plan_api.rs` (only the suites you participate in).
 10. Regenerate golden fixtures:
     `AGENT_CONFIG_UPDATE_GOLDENS=1 cargo test --test golden`. Inspect the
     diff before committing.
@@ -261,8 +261,9 @@ impl InstructionSurface for MyAgent {
     }
     // status / plan_install_instruction / plan_uninstall_instruction /
     // uninstall_instruction follow the same one-line delegation pattern.
-    // See `src/agents/codex.rs` (InlineBlock) and `src/agents/cline.rs`
-    // (StandaloneFile, with `standalone_layout` and `standalone_*` shims).
+    // See `src/agents/codex/mod.rs` (InlineBlock) and
+    // `src/agents/cline/instructions.rs` (StandaloneFile, with
+    // `standalone_layout` and `standalone_*` shims).
 }
 ```
 
@@ -270,7 +271,7 @@ For **ReferencedFile** (only Claude uses this today, with its dual-file
 write — standalone instruction file *plus* an `@import` reference in the
 host memory file) there is no shim; call
 `instructions_dir::{install, uninstall, plan_install, plan_uninstall}`
-directly. See `src/agents/claude.rs`.
+directly. See `src/agents/claude/instructions.rs`.
 
 ### Ownership ledger
 
@@ -323,7 +324,7 @@ shape under different filenames.)
 ### Variant B: TOML shape — `[mcp_servers.<name>]` (Codex pattern)
 
 If your harness uses TOML, you cannot delegate; you build a `Table` and call
-`toml_patch`. The reference is `src/agents/codex.rs`. Key moves:
+`toml_patch`. The reference is `src/agents/codex/mcp.rs`. Key moves:
 
 - `toml_patch::read_or_empty(&cfg)` to load (returns empty doc if missing).
 - `toml_patch::contains_named_table(&doc, &["mcp_servers"], &spec.name)`
@@ -339,8 +340,9 @@ If your harness uses TOML, you cannot delegate; you build a `Table` and call
   on writes that changed the file, or `ownership::file_content_hash(&cfg)?`
   when reusing the existing on-disk content.
 
-The `build_mcp_table` helper in `codex.rs` handles the three `McpTransport`
-variants (Stdio, Http, Sse). Copy it verbatim if you go this route.
+The `build_mcp_table` helper in `codex/mcp.rs` handles the three
+`McpTransport` variants (Stdio, Http, Sse). Copy it verbatim if you go this
+route.
 
 ### Other shapes
 
@@ -351,7 +353,7 @@ variants (Stdio, Http, Sse). Copy it verbatim if you go this route.
 - **JSON5** (OpenClaw): see `src/agents/openclaw.rs`.
 - **YAML map** (Hermes `mcp_servers`): see `src/agents/hermes.rs`, which
   goes through `yaml_mcp_map`.
-- **VS Code globalStorage** paths (Cline, Roo): see `src/agents/cline.rs`.
+- **VS Code globalStorage** paths (Cline, Roo): see `src/agents/cline/mcp.rs`.
 
 ### Universal MCP rules
 
@@ -560,8 +562,8 @@ tests live in `tests/`.
 - Plan adapters: `src/agents/planning.rs`
 - Utility layer: `src/util/` (don't reinvent these)
 - Security model: `docs/SECURITY.md`
-- JSON-shape MCP example (prompt + MCP + skills): `src/agents/claude.rs`
-- TOML-shape MCP example: `src/agents/codex.rs`
+- JSON-shape MCP example (prompt + MCP + skills): `src/agents/claude/mod.rs`
+- TOML-shape MCP example: `src/agents/codex/mcp.rs`
 - Object-map MCP variant: `src/agents/opencode.rs`, `src/agents/copilot.rs`
 - JSONC MCP variant: `src/agents/kilocode.rs`
 - JSON5 MCP variant: `src/agents/openclaw.rs`

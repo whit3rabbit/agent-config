@@ -1,0 +1,63 @@
+surface: mcp
+agent: crush
+scenario: uninstall_only_managed_entry
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [
+            "[ROOT]/crush.json",
+        ],
+        patched: [],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/crush.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.agent-config-mcp.json",
+        ),
+        files: [
+            Missing {
+                path: "[ROOT]/crush.json",
+            },
+            Missing {
+                path: "[ROOT]/.agent-config-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "crush",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: true,
+        issues: [],
+        suggested_actions: [
+            NoAction,
+        ],
+    },
+)
+
+ROOT tree:
+<empty>
+
+HOME tree:
+<empty>

@@ -21,7 +21,9 @@ const SKILL_CAPABLE: &[&str] = &[
     "antigravity",
     "amp",
     "codebuddy",
+    "crush",
     "forge",
+    "pi",
     "qwen",
     "trae",
 ];
@@ -40,7 +42,9 @@ const LOCAL_SKILL_CAPABLE: &[&str] = &[
     "antigravity",
     "amp",
     "codebuddy",
+    "crush",
     "forge",
+    "pi",
     "qwen",
     "trae",
 ];

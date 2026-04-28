@@ -260,9 +260,11 @@ release-facing path contract is in
 | hermes               | -     | done   | done  | done   | done (Local, InlineBlock) |
 | amp                  | -     | done   | done  | done   | done (InlineBlock) |
 | codebuddy            | done  | done   | -     | done   | done (InlineBlock) |
+| crush                | done  | done   | done  | done   | done (InlineBlock) |
 | forge                | -     | done   | done  | done   | done (InlineBlock) |
 | iflow                | done  | -      | done  | -      | -            |
 | junie                | -     | done   | done  | -      | done (Local, InlineBlock) |
+| pi                   | -     | done   | done  | done   | done (InlineBlock) |
 | qodercli             | -     | done   | done  | -      | done (InlineBlock) |
 | qwen                 | -     | done   | done  | done   | done (InlineBlock) |
 | tabnine              | done  | -      | done  | -      | -            |
@@ -277,7 +279,8 @@ Three placement modes ([`InstructionPlacement`](src/spec/instruction.rs)):
   documented `@import` syntax).
 - **`InlineBlock`** — inject the body as a tagged HTML-comment fenced block
   inside the harness's existing memory file (Codex, Gemini, Copilot,
-  CodeBuddy, Amp, Forge, Qoder, Qwen, Junie, Trae, OpenClaw, Hermes).
+  CodeBuddy, Amp, Crush, Forge, Pi, Qoder, Qwen, Junie, Trae, OpenClaw,
+  Hermes).
 - **`StandaloneFile`** — write `<rules-dir>/<NAME>.md` only, no host edit
   (Cline, Roo, Kilo Code, Windsurf, Antigravity — agents whose memory model
   is a per-file rules dir).
@@ -396,6 +399,11 @@ MCP — cannot be registered without speculating about file paths.
 | goose    | YAML recipes don't fit the `SkillSurface` model; needs separate design |
 | kimi     | TOML MCP and skills documented, but no rules/hook surface; would need a speculative `Integration` impl |
 | kiro-cli | Hooks live in per-event JSON files and MCP in agent-config files; both shapes need bespoke ledgers |
-| pi       | MCP only via the optional `pi-mcp-adapter` extension package           |
 | shai     | Per-agent config-file format not publicly documented                   |
 | vibe     | Skills documented, but no rules/hook surface                           |
+
+**Pi** was previously deferred here (2026-04-26) as "MCP only via
+`pi-mcp-adapter`". Re-checked 2026-04-28: Pi natively reads `AGENTS.md`
+prompt rules and natively loads SKILL.md folders, so it qualifies via the
+prompt-rules + skills surfaces. Registered as `pi` (rules-only Integration,
+plus MCP / skills / instructions). See `src/agents/pi.rs`.

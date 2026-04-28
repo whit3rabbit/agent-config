@@ -1,0 +1,83 @@
+surface: hooks
+agent: pi
+scenario: different_consumer_preserved
+
+install_result:
+Ok(
+    InstallReport {
+        created: [],
+        patched: [
+            "[ROOT]/AGENTS.md",
+        ],
+        backed_up: [
+            "[ROOT]/AGENTS.md.bak",
+        ],
+        already_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Hook {
+            tag: "golden-hook",
+        },
+        status: InstalledOwned {
+            owner: "golden-hook",
+        },
+        config_path: Some(
+            "[ROOT]/AGENTS.md",
+        ),
+        ledger_path: None,
+        files: [
+            Exists {
+                path: "[ROOT]/AGENTS.md",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Hook {
+            integration_id: "pi",
+            scope: Local(
+                "[ROOT]",
+            ),
+            tag: "golden-hook",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/AGENTS.md.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+files:
+- AGENTS.md
+  content:
+```text
+<!-- BEGIN AGENT-CONFIG:sibling-hook -->
+Use sibling hook rules.
+<!-- END AGENT-CONFIG:sibling-hook -->
+
+<!-- BEGIN AGENT-CONFIG:golden-hook -->
+Use golden hook rules.
+<!-- END AGENT-CONFIG:golden-hook -->
+```
+- AGENTS.md.bak
+  content:
+```text
+<!-- BEGIN AGENT-CONFIG:sibling-hook -->
+Use sibling hook rules.
+<!-- END AGENT-CONFIG:sibling-hook -->
+```
+
+HOME tree:
+<empty>

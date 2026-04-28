@@ -30,7 +30,9 @@ const INSTRUCTION_CAPABLE: &[&str] = &[
     "copilot",
     "codebuddy",
     "amp",
+    "crush",
     "forge",
+    "pi",
     "qodercli",
     "qwen",
     "junie",
@@ -46,7 +48,9 @@ const GLOBAL_AND_LOCAL: &[&str] = &[
     "codex",
     "codebuddy",
     "amp",
+    "crush",
     "forge",
+    "pi",
     "qodercli",
     "qwen",
 ];
@@ -121,7 +125,8 @@ fn instruction_by_id_returns_each_agent() {
 #[test]
 fn instruction_by_id_returns_none_for_non_instruction_agents() {
     // Cursor, OpenCode, iFlow, Tabnine have no prompt surface so they do not
-    // implement `InstructionSurface`.
+    // implement `InstructionSurface`. (Pi *does* implement it via inline
+    // blocks in AGENTS.md, so it is intentionally absent from this list.)
     assert!(instruction_by_id("cursor").is_none());
     assert!(instruction_by_id("opencode").is_none());
     assert!(instruction_by_id("iflow").is_none());

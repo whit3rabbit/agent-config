@@ -21,8 +21,8 @@ links and a verification date. This keeps the support promise honest: tests
 prove our behavior, but they do not prove that a fast-moving harness will keep
 the same file contract.
 
-Last repository contract review: 2026-04-27.
-Last upstream path-contract audit: 2026-04-26.
+Last repository contract review: 2026-04-28.
+Last upstream path-contract audit: 2026-04-28.
 
 | Agent | ID | Hooks and prompt writes | MCP writes | Skill writes | Instruction writes | Support | Source review | Notes |
 | ----- | -- | ----------------------- | ---------- | ------------ | ------------------ | ------- | ------------- | ----- |
@@ -41,9 +41,11 @@ Last upstream path-contract audit: 2026-04-26.
 | Google Antigravity | `antigravity` | Prompt: `<root>/.agent/rules/<tag>.md` | `~/.gemini/antigravity/mcp_config.json`, `<root>/.agent/mcp_config.json` | `~/.gemini/antigravity/skills/<name>/`, `<root>/.agent/skills/<name>/` | `<root>/.agent/rules/<name>.md` (StandaloneFile) | Observed | 2026-04-26 upstream audit | Prompt rules are documented; skill and MCP paths need stronger upstream source. |
 | Amp | `amp` | Prompt: `~/.amp/AGENTS.md`, `<root>/AGENTS.md` | `~/.amp/settings.json`, `<root>/.amp/settings.json` | `~/.amp/skills/<name>/`, `<root>/.amp/skills/<name>/` | `~/.amp/AGENTS.md`, `<root>/AGENTS.md` (InlineBlock); local ledger at `<root>/.amp/.agent-config-instructions.json` | Observed | 2026-04-26 upstream audit | No hook surface is registered; fetched manual did not expose every global path. |
 | CodeBuddy CLI | `codebuddy` | Hooks: `~/.codebuddy/settings.json`, `<root>/.codebuddy/settings.json`<br>Prompt: `~/.codebuddy/CLAUDE.md`, `<root>/CLAUDE.md` | - | `~/.codebuddy/skills/<name>/`, `<root>/.codebuddy/skills/<name>/` | `~/.codebuddy/CLAUDE.md`, `<root>/CLAUDE.md` (InlineBlock) | Observed | 2026-04-26 upstream audit | Settings and hooks are documented; prompt and skill paths need stronger upstream source. |
+| Charm Crush | `crush` | Hooks: `<crush_home>/crush.json`, `<root>/crush.json`<br>Prompt: `<crush_home>/AGENTS.md`, `<root>/AGENTS.md` | `<crush_home>/crush.json`, `<root>/crush.json` (under `mcp.<name>`, JSONC) | `<crush_home>/skills/<name>/`, `<root>/.crush/skills/<name>/` | `<crush_home>/AGENTS.md`, `<root>/AGENTS.md` (InlineBlock) | Observed | 2026-04-28 upstream audit | `crush_home` honors `$CRUSH_GLOBAL_CONFIG`, else `$XDG_CONFIG_HOME/crush`. Hooks currently fire only `PreToolUse` upstream. |
 | Forge | `forge` | Prompt: `~/.forge/AGENTS.md`, `<root>/AGENTS.md` | `~/.forge/.mcp.json`, `<root>/.mcp.json` | `~/.forge/skills/<name>/`, `<root>/.forge/skills/<name>/` | `~/.forge/AGENTS.md`, `<root>/AGENTS.md` (InlineBlock) | Observed | 2026-04-26 upstream audit | No hook surface is registered; fetched docs did not expose every skill path. |
 | iFlow CLI | `iflow` | Hooks: `~/.iflow/settings.json`, `<root>/.iflow/settings.json` | `~/.iflow/settings.json`, `<root>/.iflow/settings.json` | - | - | StableDocumented | 2026-04-26 upstream audit | Hooks and MCP share `settings.json`. |
 | JetBrains Junie | `junie` | Prompt: `<root>/.junie/AGENTS.md` | `~/.junie/mcp/mcp.json`, `<root>/.junie/mcp/mcp.json` | - | `<root>/.junie/AGENTS.md` (InlineBlock; Local-only) | StableDocumented | 2026-04-26 upstream audit | Prompt writes are project-local. |
+| Pi | `pi` | Prompt: `~/.pi/agent/AGENTS.md`, `<root>/AGENTS.md` | `~/.pi/agent/mcp.json`, `<root>/.pi/mcp.json` | `~/.pi/agent/skills/<name>/`, `<root>/.pi/skills/<name>/` | `~/.pi/agent/AGENTS.md`, `<root>/AGENTS.md` (InlineBlock) | Observed | 2026-04-28 upstream audit | Pi has no config-file hook surface; HookSpec installs require a `rules` body. MCP file shape matches `pi-mcp-adapter`. |
 | Qoder CLI | `qodercli` | Prompt: `~/.qoder/AGENTS.md`, `<root>/AGENTS.md` | `~/.qoder.json`, `<root>/.mcp.json` | - | `~/.qoder/AGENTS.md`, `<root>/AGENTS.md` (InlineBlock) | Observed | 2026-04-26 upstream audit | No skill surface is registered; MCP shape needs stronger upstream source. |
 | Qwen Code | `qwen` | Prompt: `~/.qwen/QWEN.md`, `<root>/QWEN.md` | `~/.qwen/settings.json`, `<root>/.qwen/settings.json` | `~/.qwen/skills/<name>/`, `<root>/.qwen/skills/<name>/` | `~/.qwen/QWEN.md`, `<root>/QWEN.md` (InlineBlock) | StableDocumented | 2026-04-26 upstream audit | No hook surface is registered. |
 | Tabnine CLI | `tabnine` | Hooks: `~/.tabnine/agent/settings.json`, `<root>/.tabnine/agent/settings.json` | `~/.tabnine/agent/settings.json`, `<root>/.tabnine/agent/settings.json` | - | - | StableDocumented | 2026-04-26 upstream audit | Hooks and MCP share `settings.json`. |

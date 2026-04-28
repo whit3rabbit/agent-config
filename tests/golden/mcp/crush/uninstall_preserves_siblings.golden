@@ -1,0 +1,116 @@
+surface: mcp
+agent: crush
+scenario: uninstall_preserves_siblings
+
+uninstall_result:
+Ok(
+    UninstallReport {
+        removed: [],
+        patched: [
+            "[ROOT]/crush.json",
+        ],
+        restored: [],
+        not_installed: false,
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: Absent,
+        config_path: Some(
+            "[ROOT]/crush.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.agent-config-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/crush.json",
+            },
+            Exists {
+                path: "[ROOT]/.agent-config-mcp.json",
+            },
+        ],
+        warnings: [
+            BackupExists {
+                path: "[ROOT]/crush.json.bak",
+            },
+        ],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "crush",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/crush.json.bak",
+            },
+        ],
+        suggested_actions: [
+            RestoreBackup,
+        ],
+    },
+)
+
+ROOT tree:
+files:
+- .agent-config-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "sibling-server": {
+      "content_hash": "1da156ef7a35eea4d7166f11e3d67b66992f91ee25a6c22321d921a39519ac9e",
+      "owner": "golden-owner"
+    }
+  },
+  "version": 2
+}
+```
+- crush.json
+  content:
+```text
+{
+  "mcp": {
+    "sibling-server": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+- crush.json.bak
+  content:
+```text
+{
+  "mcp": {
+    "golden-server": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>

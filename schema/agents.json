@@ -1744,6 +1744,149 @@
       }
     },
     {
+      "id": "crush",
+      "display_name": "Charm Crush",
+      "supported_scopes": [
+        "global",
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/Library/Application Support/crush/AGENTS.md",
+                "~/Library/Application Support/crush/crush.json"
+              ],
+              "directories": [
+                "~/Library/Application Support/crush"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md",
+                "<project>/crush.json"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/Library/Application Support/crush/crush.json"
+              ],
+              "directories": [
+                "~/Library/Application Support/crush"
+              ],
+              "ledger_files": [
+                "~/Library/Application Support/crush/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/crush.json"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [
+                "<project>/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/Library/Application Support/crush/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/Library/Application Support/crush",
+                "~/Library/Application Support/crush/skills",
+                "~/Library/Application Support/crush/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/Library/Application Support/crush/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.crush/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.crush",
+                "<project>/.crush/skills",
+                "<project>/.crush/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.crush/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "placement": "inline_block",
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/Library/Application Support/crush/AGENTS.md"
+              ],
+              "directories": [
+                "~/Library/Application Support/crush"
+              ],
+              "ledger_files": [
+                "~/Library/Application Support/crush/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.crush"
+              ],
+              "ledger_files": [
+                "<project>/.crush/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
       "id": "forge",
       "display_name": "Forge",
       "supported_scopes": [
@@ -2032,6 +2175,141 @@
               ],
               "ledger_files": [
                 "<project>/.junie/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "pi",
+      "display_name": "Pi",
+      "supported_scopes": [
+        "global",
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.pi/agent/AGENTS.md"
+              ],
+              "directories": [],
+              "ledger_files": [],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.pi/agent/mcp.json"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.pi/agent/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.pi/mcp.json"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.pi"
+              ],
+              "ledger_files": [
+                "<project>/.pi/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.pi/agent/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.pi/agent/skills",
+                "~/.pi/agent/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.pi/agent/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.pi/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.pi",
+                "<project>/.pi/skills",
+                "<project>/.pi/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.pi/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "placement": "inline_block",
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.pi/agent/AGENTS.md"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.pi/agent/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.pi"
+              ],
+              "ledger_files": [
+                "<project>/.pi/.agent-config-instructions.json"
               ],
               "refusals": []
             }

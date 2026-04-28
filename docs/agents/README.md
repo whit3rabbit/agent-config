@@ -10,7 +10,7 @@ contract across all integrations. Each entry documents:
 - **MCP**, **Skills**, and **Instructions** — implemented where this crate has
   a file-backed or config-backed contract and tests for the emitted shape.
 
-**Last updated:** 2026-04-27. MCP, skills, and instruction coverage reflects
+**Last updated:** 2026-04-28. MCP, skills, and instruction coverage reflects
 the current file-backed locations implemented by this crate.
 
 ## Implemented
@@ -32,9 +32,11 @@ the current file-backed locations implemented by this crate.
 | [Google Antigravity](antigravity.md) | -                | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Local, StandaloneFile) |
 | [Amp](amp.md)                    | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
 | [CodeBuddy CLI](codebuddy.md)    | ✓ (Global + Local) | ✓ | - | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
+| [Charm Crush](crush.md)          | ✓ (Global + Local) | ✓ | ✓ (Global + Local, JSONC) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
 | [Forge](forge.md)                | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
 | [iFlow CLI](iflow.md)            | ✓ (Global + Local) | - | ✓ (Global + Local) | - | - |
 | [JetBrains Junie](junie.md)      | - | ✓ (Local) | ✓ (Global + Local) | - | ✓ (Local, InlineBlock) |
+| [Pi](pi.md)                      | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
 | [Qoder CLI](qodercli.md)         | - | ✓ | ✓ (Global + Local) | - | ✓ (Global + Local, InlineBlock) |
 | [Qwen Code](qwen.md)             | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
 | [Tabnine CLI](tabnine.md)        | ✓ (Global + Local) | - | ✓ (Global + Local) | - | - |

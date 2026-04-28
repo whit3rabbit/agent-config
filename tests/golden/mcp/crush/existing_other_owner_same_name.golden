@@ -1,0 +1,104 @@
+surface: mcp
+agent: crush
+scenario: existing_other_owner_same_name
+
+install_result:
+Err(
+    NotOwnedByCaller {
+        kind: "mcp server",
+        name: "golden-server",
+        expected: "golden-owner",
+        actual: Some(
+            "other-owner",
+        ),
+    },
+)
+status:
+Ok(
+    StatusReport {
+        target: Mcp {
+            name: "golden-server",
+        },
+        status: InstalledOtherOwner {
+            owner: "other-owner",
+        },
+        config_path: Some(
+            "[ROOT]/crush.json",
+        ),
+        ledger_path: Some(
+            "[ROOT]/.agent-config-mcp.json",
+        ),
+        files: [
+            Exists {
+                path: "[ROOT]/crush.json",
+            },
+            Exists {
+                path: "[ROOT]/.agent-config-mcp.json",
+            },
+        ],
+        warnings: [],
+    },
+)
+validation:
+Ok(
+    ValidationReport {
+        target: Mcp {
+            integration_id: "crush",
+            scope: Local(
+                "[ROOT]",
+            ),
+            name: "golden-server",
+            owner: "golden-owner",
+        },
+        ok: false,
+        issues: [
+            OwnerMismatch {
+                expected: "golden-owner",
+                actual: Some(
+                    "other-owner",
+                ),
+                path: Some(
+                    "[ROOT]/.agent-config-mcp.json",
+                ),
+            },
+        ],
+        suggested_actions: [
+            UninstallWithOwner,
+        ],
+    },
+)
+
+ROOT tree:
+files:
+- .agent-config-mcp.json
+  content:
+```text
+{
+  "entries": {
+    "golden-server": {
+      "content_hash": "1da156ef7a35eea4d7166f11e3d67b66992f91ee25a6c22321d921a39519ac9e",
+      "owner": "other-owner"
+    }
+  },
+  "version": 2
+}
+```
+- crush.json
+  content:
+```text
+{
+  "mcp": {
+    "golden-server": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/server"
+      ]
+    }
+  }
+}
+```
+
+HOME tree:
+<empty>
