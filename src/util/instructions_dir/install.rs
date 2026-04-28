@@ -119,9 +119,24 @@ fn install_referenced(
         let outcome = safe_fs::write(scope, &instr_path, body.as_bytes(), false)?;
         record_outcome(&mut report, outcome);
 
-        // Upsert include reference in host file.
+        // Upsert include reference in host file. If our ledger already
+        // records this name as an instruction (a pre-rename install), drain
+        // its legacy AGENT-CONFIG:<name> block before writing the new
+        // AGENT-CONFIG-INSTR fence so old installs migrate cleanly. We only
+        // prune when `prior.is_some()` because a legacy-prefixed block with
+        // a matching name could otherwise belong to a hook with the same
+        // tag and must be left alone.
         let host_content = fs_atomic::read_to_string_or_empty(host_file)?;
-        let new_host = md_block::upsert(&host_content, &spec.name, reference_line);
+        let host_content_pruned = if prior.is_some()
+            && md_block::contains_legacy_instruction(&host_content, &spec.name)
+        {
+            let (stripped, _) = md_block::remove_legacy_instruction(&host_content, &spec.name);
+            stripped
+        } else {
+            host_content.clone()
+        };
+        let new_host =
+            md_block::upsert_instruction(&host_content_pruned, &spec.name, reference_line);
         if new_host != host_content {
             let host_outcome = safe_fs::write(scope, host_file, new_host.as_bytes(), true)?;
             record_outcome(&mut report, host_outcome);
@@ -154,8 +169,11 @@ fn install_inline(
         let mut report = InstallReport::default();
 
         // For inline, check if a block with our name already exists.
+        // Accept the legacy AGENT-CONFIG:<name> fence so adoption logic also
+        // recognizes pre-rename installs as already-present.
         let host_content = fs_atomic::read_to_string_or_empty(host_file)?;
-        let block_exists = md_block::contains(&host_content, &spec.name);
+        let block_exists = md_block::contains_instruction(&host_content, &spec.name)
+            || md_block::contains_legacy_instruction(&host_content, &spec.name);
 
         let prior = ownership::owner_of(&led, &spec.name)?;
         let adopting = spec.adopt_unowned && block_exists && prior.is_none();
@@ -177,7 +195,20 @@ fn install_inline(
         // `<root>/.amp/.agent-config-instructions.json`).
         fs::create_dir_all(config_dir).map_err(|e| AgentConfigError::io(config_dir, e))?;
 
-        let new_host = md_block::upsert(&host_content, &spec.name, &spec.body);
+        // Drain a legacy AGENT-CONFIG:<name> block (from a pre-rename
+        // install) before writing the new fence so we never end up with
+        // both. Only prune when our ledger says this name is ours
+        // (`prior.is_some()`); otherwise a hook with a matching tag would
+        // be erased.
+        let host_content_pruned = if prior.is_some()
+            && md_block::contains_legacy_instruction(&host_content, &spec.name)
+        {
+            let (stripped, _) = md_block::remove_legacy_instruction(&host_content, &spec.name);
+            stripped
+        } else {
+            host_content.clone()
+        };
+        let new_host = md_block::upsert_instruction(&host_content_pruned, &spec.name, &spec.body);
         if new_host != host_content {
             let host_outcome = safe_fs::write(scope, host_file, new_host.as_bytes(), true)?;
             record_outcome(&mut report, host_outcome);

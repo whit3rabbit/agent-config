@@ -30,7 +30,8 @@ pub(crate) fn inline_status(
     InstructionSpec::validate_name(name)?;
     let led = ledger_path(&layout.config_dir);
     let content = fs_atomic::read_to_string_or_empty(&layout.host_file)?;
-    let block_in_host = md_block::contains(&content, name);
+    let block_in_host = md_block::contains_instruction(&content, name)
+        || md_block::contains_legacy_instruction(&content, name);
     let presence = if block_in_host {
         ConfigPresence::Single
     } else {

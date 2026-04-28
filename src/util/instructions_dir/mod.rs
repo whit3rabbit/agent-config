@@ -199,7 +199,7 @@ mod tests {
 
         let host_content = fs::read_to_string(&host).unwrap();
         assert!(host_content.contains("@MYAPP.md"));
-        assert!(host_content.contains("BEGIN AGENT-CONFIG:MYAPP"));
+        assert!(host_content.contains("BEGIN AGENT-CONFIG-INSTR:MYAPP"));
     }
 
     #[test]
@@ -310,7 +310,7 @@ mod tests {
 
         let content = fs::read_to_string(&host).unwrap();
         assert!(content.contains("# MyApp"));
-        assert!(content.contains("BEGIN AGENT-CONFIG:MYAPP"));
+        assert!(content.contains("BEGIN AGENT-CONFIG-INSTR:MYAPP"));
     }
 
     #[test]
@@ -722,5 +722,78 @@ mod tests {
             &basic_inline_spec("MYAPP", "myapp"),
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn inline_install_replaces_legacy_fence_with_new_prefix() {
+        // Simulate a host file written by a pre-rename version: a fenced
+        // block under the legacy AGENT-CONFIG:<name> prefix, plus a ledger
+        // entry confirming we own that name.
+        let dir = tempdir().unwrap();
+        let host = dir.path().join("AGENTS.md");
+        let cfg = dir.path().join(".cfg");
+        fs::create_dir_all(&cfg).unwrap();
+        let legacy = crate::util::md_block::upsert("# Top\n", "myinstr", "old body");
+        fs::write(&host, &legacy).unwrap();
+        let led = ledger_path(&cfg);
+        crate::util::ownership::record_install(
+            &led,
+            "myinstr",
+            "owner-A",
+            Some(&crate::util::ownership::content_hash(b"old body\n")),
+        )
+        .unwrap();
+
+        let mut spec = basic_inline_spec("myinstr", "owner-A");
+        spec.body = "new body\n".to_string();
+
+        install(
+            &local_scope(dir.path()),
+            &cfg,
+            &spec,
+            Some(&host),
+            None,
+            None,
+        )
+        .expect("install_inline succeeds");
+
+        let after = fs::read_to_string(&host).unwrap();
+        assert!(after.contains("<!-- BEGIN AGENT-CONFIG-INSTR:myinstr -->"));
+        assert!(after.contains("new body"));
+        assert!(!after.contains("<!-- BEGIN AGENT-CONFIG:myinstr -->"));
+        assert!(!after.contains("old body"));
+    }
+
+    #[test]
+    fn uninstall_removes_legacy_fence_when_present() {
+        let dir = tempdir().unwrap();
+        let host = dir.path().join("AGENTS.md");
+        let cfg = dir.path().join(".cfg");
+        fs::create_dir_all(&cfg).unwrap();
+        let legacy = crate::util::md_block::upsert("# Top\n", "myinstr", "old body");
+        fs::write(&host, &legacy).unwrap();
+        let led = ledger_path(&cfg);
+        crate::util::ownership::record_install(
+            &led,
+            "myinstr",
+            "owner-A",
+            Some(&crate::util::ownership::content_hash(b"old body\n")),
+        )
+        .unwrap();
+
+        uninstall(
+            &local_scope(dir.path()),
+            &cfg,
+            "myinstr",
+            "owner-A",
+            Some(&host),
+            None,
+        )
+        .expect("uninstall succeeds");
+
+        let after = fs::read_to_string(&host).unwrap();
+        assert!(!after.contains("AGENT-CONFIG:myinstr"));
+        assert!(!after.contains("AGENT-CONFIG-INSTR:myinstr"));
+        assert!(after.contains("# Top"));
     }
 }

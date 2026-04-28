@@ -68,7 +68,8 @@ impl InstructionSurface for ClaudeAgent {
         let instr_exists = instr_path.exists();
         let block_in_host = if host_file.exists() {
             let host = fs_atomic::read_to_string_or_empty(&host_file)?;
-            md_block::contains(&host, name)
+            md_block::contains_instruction(&host, name)
+                || md_block::contains_legacy_instruction(&host, name)
         } else {
             false
         };
@@ -219,7 +220,7 @@ mod tests {
         let claude_md = root.join("CLAUDE.md");
         let content = fs::read_to_string(&claude_md).unwrap();
         assert!(content.contains("@.claude/instructions/MYAPP.md"));
-        assert!(content.contains("BEGIN AGENT-CONFIG:MYAPP"));
+        assert!(content.contains("BEGIN AGENT-CONFIG-INSTR:MYAPP"));
     }
 
     #[test]

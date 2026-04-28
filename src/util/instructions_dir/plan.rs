@@ -94,7 +94,12 @@ fn plan_referenced(
     planning::plan_write_file(&mut changes, &instr_path, body.as_bytes(), false)?;
 
     // Plan the include reference in host file.
-    planning::plan_markdown_upsert(&mut changes, host_file, &spec.name, reference_line)?;
+    planning::plan_markdown_upsert_instruction(
+        &mut changes,
+        host_file,
+        &spec.name,
+        reference_line,
+    )?;
 
     let owner_changed = actual_owner.as_deref() != Some(spec.owner_tag.as_str());
     let file_would_change = changes.iter().any(|c| {
@@ -120,7 +125,8 @@ fn plan_inline(
 
     let actual_owner = ownership::owner_of(&led, &spec.name)?;
     let host_content = fs_atomic::read_to_string_or_empty(host_file)?;
-    let block_exists = md_block::contains(&host_content, &spec.name);
+    let block_exists = md_block::contains_instruction(&host_content, &spec.name)
+        || md_block::contains_legacy_instruction(&host_content, &spec.name);
     let adopting = spec.adopt_unowned && block_exists && actual_owner.is_none();
 
     match (actual_owner.as_deref(), block_exists) {
@@ -141,7 +147,7 @@ fn plan_inline(
         _ => {}
     }
 
-    planning::plan_markdown_upsert(&mut changes, host_file, &spec.name, &spec.body)?;
+    planning::plan_markdown_upsert_instruction(&mut changes, host_file, &spec.name, &spec.body)?;
 
     let owner_changed = actual_owner.as_deref() != Some(spec.owner_tag.as_str());
     let file_would_change = changes.iter().any(|c| {

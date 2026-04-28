@@ -12,12 +12,22 @@
 //! when the markdown is rendered, and stable enough to grep over.
 
 const FENCE_PREFIX: &str = "AGENT-CONFIG";
+const INSTRUCTION_FENCE_PREFIX: &str = "AGENT-CONFIG-INSTR";
 
-/// Returns the BEGIN/END marker pair for `tag`.
+/// Returns the BEGIN/END marker pair for a hook `tag`.
 fn markers(tag: &str) -> (String, String) {
+    markers_with_prefix(FENCE_PREFIX, tag)
+}
+
+/// Returns the BEGIN/END marker pair for an instruction `name`.
+fn instruction_markers(name: &str) -> (String, String) {
+    markers_with_prefix(INSTRUCTION_FENCE_PREFIX, name)
+}
+
+fn markers_with_prefix(prefix: &str, tag: &str) -> (String, String) {
     (
-        format!("<!-- BEGIN {FENCE_PREFIX}:{tag} -->"),
-        format!("<!-- END {FENCE_PREFIX}:{tag} -->"),
+        format!("<!-- BEGIN {prefix}:{tag} -->"),
+        format!("<!-- END {prefix}:{tag} -->"),
     )
 }
 
@@ -28,9 +38,22 @@ fn markers(tag: &str) -> (String, String) {
 /// repeated upserts stay idempotent.
 pub(crate) fn upsert(host: &str, tag: &str, body: &str) -> String {
     let (begin, end) = markers(tag);
-    let block = render_block(&begin, &end, body);
+    upsert_with_markers(host, &begin, &end, body)
+}
 
-    if let Some((start, stop)) = find_block(host, &begin, &end) {
+/// Insert or replace the instruction-tagged block in `host`.
+///
+/// Uses a distinct fence prefix (`AGENT-CONFIG-INSTR`) so instruction names
+/// cannot collide with hook tags in the same memory file.
+pub(crate) fn upsert_instruction(host: &str, name: &str, body: &str) -> String {
+    let (begin, end) = instruction_markers(name);
+    upsert_with_markers(host, &begin, &end, body)
+}
+
+fn upsert_with_markers(host: &str, begin: &str, end: &str, body: &str) -> String {
+    let block = render_block(begin, end, body);
+
+    if let Some((start, stop)) = find_block(host, begin, end) {
         let mut out = String::with_capacity(host.len() + block.len());
         out.push_str(&host[..start]);
         out.push_str(&block);
@@ -63,15 +86,41 @@ pub(crate) fn contains(host: &str, tag: &str) -> bool {
     find_block(host, &begin, &end).is_some()
 }
 
+/// Returns true if an instruction block with `name` exists in `host`.
+pub(crate) fn contains_instruction(host: &str, name: &str) -> bool {
+    let (begin, end) = instruction_markers(name);
+    find_block(host, &begin, &end).is_some()
+}
+
+/// Returns true if an instruction block written with the legacy `AGENT-CONFIG`
+/// prefix exists. Used during status detection and uninstall to drain
+/// pre-rename installs without leaving orphan content.
+pub(crate) fn contains_legacy_instruction(host: &str, name: &str) -> bool {
+    let (begin, end) = markers(name);
+    find_block(host, &begin, &end).is_some()
+}
+
 /// Returns true when `host` contains an incomplete or duplicate fenced block
 /// for `tag`.
 pub(crate) fn malformed(host: &str, tag: &str) -> bool {
     let (begin, end) = markers(tag);
-    let begin_count = host.matches(&begin).count();
-    let end_count = host.matches(&end).count();
+    is_malformed(host, &begin, &end)
+}
+
+/// Returns true when `host` contains an incomplete or duplicate instruction
+/// fenced block for `name`.
+#[allow(dead_code)]
+pub(crate) fn malformed_instruction(host: &str, name: &str) -> bool {
+    let (begin, end) = instruction_markers(name);
+    is_malformed(host, &begin, &end)
+}
+
+fn is_malformed(host: &str, begin: &str, end: &str) -> bool {
+    let begin_count = host.matches(begin).count();
+    let end_count = host.matches(end).count();
     match (begin_count, end_count) {
         (0, 0) => false,
-        (1, 1) => find_block(host, &begin, &end).is_none(),
+        (1, 1) => find_block(host, begin, end).is_none(),
         _ => true,
     }
 }
@@ -83,7 +132,24 @@ pub(crate) fn malformed(host: &str, tag: &str) -> bool {
 /// upsert/remove cycles don't accumulate whitespace.
 pub(crate) fn remove(host: &str, tag: &str) -> (String, bool) {
     let (begin, end) = markers(tag);
-    let Some((start, stop)) = find_block(host, &begin, &end) else {
+    remove_with_markers(host, &begin, &end)
+}
+
+/// Remove the instruction-tagged block. Returns `(new_contents, removed)`.
+pub(crate) fn remove_instruction(host: &str, name: &str) -> (String, bool) {
+    let (begin, end) = instruction_markers(name);
+    remove_with_markers(host, &begin, &end)
+}
+
+/// Remove a legacy (`AGENT-CONFIG`-prefixed) instruction block. Used during
+/// uninstall to clean up pre-rename installs.
+pub(crate) fn remove_legacy_instruction(host: &str, name: &str) -> (String, bool) {
+    let (begin, end) = markers(name);
+    remove_with_markers(host, &begin, &end)
+}
+
+fn remove_with_markers(host: &str, begin: &str, end: &str) -> (String, bool) {
+    let Some((start, stop)) = find_block(host, begin, end) else {
         return (host.to_string(), false);
     };
 
@@ -186,6 +252,44 @@ mod tests {
         let once = upsert("# A", "app", "body");
         let twice = upsert(&once, "app", "body");
         assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn instruction_and_hook_fences_do_not_collide() {
+        let mut host = String::new();
+        host = upsert(&host, "myapp", "hook body");
+        host = upsert_instruction(&host, "myapp", "instruction body");
+        assert!(host.contains("<!-- BEGIN AGENT-CONFIG:myapp -->"));
+        assert!(host.contains("<!-- BEGIN AGENT-CONFIG-INSTR:myapp -->"));
+        assert!(host.contains("hook body"));
+        assert!(host.contains("instruction body"));
+        assert!(contains(&host, "myapp"));
+        assert!(contains_instruction(&host, "myapp"));
+    }
+
+    #[test]
+    fn instruction_remove_does_not_strip_hook_block() {
+        let mut host = String::new();
+        host = upsert(&host, "shared", "hook stays");
+        host = upsert_instruction(&host, "shared", "instruction goes");
+        let (after, removed) = remove_instruction(&host, "shared");
+        assert!(removed);
+        assert!(after.contains("hook stays"));
+        assert!(!after.contains("instruction goes"));
+        assert!(after.contains("<!-- BEGIN AGENT-CONFIG:shared -->"));
+        assert!(!after.contains("AGENT-CONFIG-INSTR:shared"));
+    }
+
+    #[test]
+    fn legacy_instruction_helpers_match_hook_prefix() {
+        // Pre-rename installs used the AGENT-CONFIG:<name> fence. The legacy
+        // helpers must read that exact fence so uninstall drains old content.
+        let host = upsert("# Top\n", "old_name", "old body");
+        assert!(contains_legacy_instruction(&host, "old_name"));
+        let (stripped, removed) = remove_legacy_instruction(&host, "old_name");
+        assert!(removed);
+        assert!(!stripped.contains("AGENT-CONFIG:old_name"));
+        assert!(stripped.contains("# Top"));
     }
 
     #[test]

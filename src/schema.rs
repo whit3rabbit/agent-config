@@ -93,6 +93,10 @@ fn marker_conventions_block() -> Value {
             "begin": "<!-- BEGIN AGENT-CONFIG:<NAME> -->",
             "end": "<!-- END AGENT-CONFIG:<NAME> -->",
         },
+        "instruction_markdown_fence": {
+            "begin": "<!-- BEGIN AGENT-CONFIG-INSTR:<NAME> -->",
+            "end": "<!-- END AGENT-CONFIG-INSTR:<NAME> -->",
+        },
         "ledger_files": {
             "mcp": ".agent-config-mcp.json",
             "skill": ".agent-config-skills.json",

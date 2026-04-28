@@ -31,7 +31,8 @@ pub(crate) fn uninstall(
     let in_ledger = ownership::contains(&led, name)?;
     let block_exists = host_file.is_some_and(|h| {
         let content = fs_atomic::read_to_string_or_empty(h).unwrap_or_default();
-        md_block::contains(&content, name)
+        md_block::contains_instruction(&content, name)
+            || md_block::contains_legacy_instruction(&content, name)
     });
     let anything_present = instr_exists || block_exists;
 
@@ -59,7 +60,8 @@ pub(crate) fn uninstall(
         let in_ledger = ownership::contains(&led, name)?;
         let block_exists = host_file.is_some_and(|h| {
             let content = fs_atomic::read_to_string_or_empty(h).unwrap_or_default();
-            md_block::contains(&content, name)
+            md_block::contains_instruction(&content, name)
+                || md_block::contains_legacy_instruction(&content, name)
         });
 
         if !instr_exists && !block_exists && !in_ledger {
@@ -74,7 +76,12 @@ pub(crate) fn uninstall(
         // ledger record to repair against.
         if let (Some(host), true) = (host_file, block_exists) {
             let content = fs_atomic::read_to_string_or_empty(host)?;
-            let (new_content, removed) = md_block::remove(&content, name);
+            let (new_content, removed) = md_block::remove_instruction(&content, name);
+            let (new_content, removed) = if removed {
+                (new_content, true)
+            } else {
+                md_block::remove_legacy_instruction(&content, name)
+            };
             if removed && new_content != content {
                 safe_fs::write(scope, host, new_content.as_bytes(), true)?;
                 report.patched.push(host.to_path_buf());
@@ -143,7 +150,7 @@ pub(crate) fn plan_uninstall(
 
     // Plan removing include block from host file.
     if let Some(host) = host_file {
-        planning::plan_markdown_remove(&mut changes, host, name)?;
+        planning::plan_markdown_remove_instruction(&mut changes, host, name)?;
     }
 
     // Plan removing instruction file.

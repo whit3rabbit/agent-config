@@ -9,8 +9,9 @@ use super::validate::{validate_identifier, IdentifierKind};
 #[non_exhaustive]
 pub enum InstructionPlacement {
     /// Inject content as a managed markdown block inside a shared file
-    /// (reuses `md_block::upsert`/`md_block::remove` with the instruction
-    /// name as the tag).
+    /// (reuses `md_block::upsert_instruction`/`md_block::remove_instruction`
+    /// with the `AGENT-CONFIG-INSTR` fence prefix and the instruction name
+    /// as the tag).
     InlineBlock,
 
     /// Write a standalone file and add a managed include reference line
@@ -37,16 +38,18 @@ pub struct InstructionSpec {
     /// Instruction name. Used as the filename stem (e.g. `MYAPP` becomes
     /// `MYAPP.md`). Must be ASCII alnum / `_` / `-`, non-empty.
     ///
-    /// **Naming caveat.** For [`InstructionPlacement::ReferencedFile`] and
-    /// [`InstructionPlacement::InlineBlock`], `name` is also reused as the
-    /// fence tag in the host markdown file
-    /// (`<!-- BEGIN AGENT-CONFIG:<name> --> ... <!-- END AGENT-CONFIG:<name> -->`).
-    /// If a consumer installs a hook with `tag = "T"` *and* an instruction with
-    /// `name = "T"` into the same memory file (e.g. both in
-    /// `~/.claude/CLAUDE.md`), the second upsert silently replaces the first.
-    /// Pick a name that does not collide with any of your hook tags. When in
-    /// doubt, prefix the name (e.g. `instr-myapp`) or use
-    /// [`InstructionPlacement::StandaloneFile`].
+    /// **Fence prefix.** For [`InstructionPlacement::ReferencedFile`] and
+    /// [`InstructionPlacement::InlineBlock`], `name` is reused as the fence
+    /// tag in the host markdown file using a distinct instruction-only
+    /// prefix:
+    /// `<!-- BEGIN AGENT-CONFIG-INSTR:<name> --> ... <!-- END AGENT-CONFIG-INSTR:<name> -->`.
+    /// This is intentionally separate from the hook fence
+    /// (`<!-- BEGIN AGENT-CONFIG:<tag> -->`) so a hook with `tag = "T"` and
+    /// an instruction with `name = "T"` cannot overwrite each other when
+    /// they share a memory file (e.g. `~/.claude/CLAUDE.md`). Installs from
+    /// versions before this rename used the hook prefix; status detection
+    /// and uninstall accept the legacy prefix as a fallback so existing
+    /// installs drain cleanly on upgrade.
     pub name: String,
 
     /// The consumer of this library that owns the instruction.

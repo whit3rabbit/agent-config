@@ -162,6 +162,49 @@ pub(crate) fn plan_markdown_remove(
     Ok(())
 }
 
+/// Plan upserting an instruction-fenced markdown block (uses
+/// `AGENT-CONFIG-INSTR` prefix).
+pub(crate) fn plan_markdown_upsert_instruction(
+    changes: &mut Vec<PlannedChange>,
+    path: &Path,
+    name: &str,
+    body: &str,
+) -> Result<(), AgentConfigError> {
+    let host = fs_atomic::read_to_string_or_empty(path)?;
+    let new_host = md_block::upsert_instruction(&host, name, body);
+    plan_write_file(changes, path, new_host.as_bytes(), true)
+}
+
+/// Plan removing an instruction-fenced markdown block. If the new-prefix
+/// block is absent but a legacy `AGENT-CONFIG:<name>` block exists, plan its
+/// removal instead so pre-rename installs drain on uninstall.
+pub(crate) fn plan_markdown_remove_instruction(
+    changes: &mut Vec<PlannedChange>,
+    path: &Path,
+    name: &str,
+) -> Result<(), AgentConfigError> {
+    let host = fs_atomic::read_to_string_or_empty(path)?;
+    let (stripped, removed) = md_block::remove_instruction(&host, name);
+    let (stripped, removed) = if removed {
+        (stripped, true)
+    } else {
+        md_block::remove_legacy_instruction(&host, name)
+    };
+    if !removed {
+        changes.push(PlannedChange::NoOp {
+            path: path.to_path_buf(),
+            reason: "instruction markdown block is already absent".into(),
+        });
+        return Ok(());
+    }
+    if stripped.trim().is_empty() {
+        plan_restore_backup_or_remove(changes, path, stripped.as_bytes())?;
+    } else {
+        plan_write_file(changes, path, stripped.as_bytes(), false)?;
+    }
+    Ok(())
+}
+
 /// Plan upserting a tagged JSON array entry at `entry_path`.
 pub(crate) fn plan_tagged_json_upsert<F>(
     changes: &mut Vec<PlannedChange>,
