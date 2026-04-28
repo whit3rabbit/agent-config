@@ -254,11 +254,8 @@ impl Integration for CrushAgent {
         if p.exists() {
             file_lock::with_lock(&p, || {
                 let mut root = mcp_json_map::read_jsonc_or_empty(&p)?;
-                let changed = json_patch::remove_tagged_array_entries_under(
-                    &mut root,
-                    &[HOOKS_KEY],
-                    tag,
-                )?;
+                let changed =
+                    json_patch::remove_tagged_array_entries_under(&mut root, &[HOOKS_KEY], tag)?;
                 if changed {
                     let empty = root.as_object().map(|o| o.is_empty()).unwrap_or(true);
                     let bytes = json_patch::to_pretty(&root);
@@ -580,10 +577,7 @@ fn build_hook_entry(spec: &HookSpec) -> Value {
     if let Some(m) = matcher_to_crush(&spec.matcher) {
         obj.insert("matcher".into(), Value::String(m));
     }
-    obj.insert(
-        "command".into(),
-        Value::String(spec.command.render_shell()),
-    );
+    obj.insert("command".into(), Value::String(spec.command.render_shell()));
     obj.insert("timeout".into(), json!(30));
     Value::Object(obj)
 }
@@ -616,19 +610,7 @@ fn regex_escape(s: &str) -> String {
     for c in s.chars() {
         if matches!(
             c,
-            '\\' | '.'
-                | '+'
-                | '*'
-                | '?'
-                | '('
-                | ')'
-                | '['
-                | ']'
-                | '{'
-                | '}'
-                | '^'
-                | '$'
-                | '|'
+            '\\' | '.' | '+' | '*' | '?' | '(' | ')' | '[' | ']' | '{' | '}' | '^' | '$' | '|'
         ) {
             out.push('\\');
         }
@@ -870,10 +852,7 @@ mod tests {
             .body("Body.")
             .build();
         agent.install_skill(&scope, &spec).unwrap();
-        assert!(dir
-            .path()
-            .join(".crush/skills/my-skill/SKILL.md")
-            .exists());
+        assert!(dir.path().join(".crush/skills/my-skill/SKILL.md").exists());
     }
 
     #[test]

@@ -10,7 +10,9 @@ use crate::agents::planning as agent_planning;
 use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, McpSurface, UninstallReport};
 use crate::paths;
-use crate::plan::{has_refusal, InstallPlan, PlanTarget, PlannedChange, RefusalReason, UninstallPlan};
+use crate::plan::{
+    has_refusal, InstallPlan, PlanTarget, PlannedChange, RefusalReason, UninstallPlan,
+};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{HookSpec, McpSpec, McpTransport};
 use crate::status::StatusReport;
