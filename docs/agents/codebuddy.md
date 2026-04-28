@@ -79,6 +79,31 @@ CodeBuddy supports `Notification`, `UserPromptSubmit`, `Stop`, `SubagentStop`,
 | Project scope file | `<root>/CLAUDE.md` |
 | Format | Tagged HTML-comment fence |
 
+## Instructions
+
+Standalone instruction files installed via `InstructionSurface`. Uses
+`InstructionPlacement::InlineBlock` because CodeBuddy CLI's memory file does
+not expose a documented `@import` syntax; the body is injected as a tagged
+HTML-comment fenced block in the existing memory file.
+
+### User scope (`Scope::Global`)
+
+| | |
+| --- | --- |
+| Host file | `~/.codebuddy/CLAUDE.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `~/.codebuddy/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
+
+### Project scope (`Scope::Local(<root>)`)
+
+| | |
+| --- | --- |
+| Host file | `<root>/CLAUDE.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `<root>/.codebuddy/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
+
 ## Skills
 
 | Scope | Path |

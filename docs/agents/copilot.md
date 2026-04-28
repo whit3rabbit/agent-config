@@ -80,6 +80,21 @@ Copilot also reads `<root>/.github/instructions/*.instructions.md` (path-scoped
 via frontmatter) and project-root `AGENTS.md`. Use the Codex integration to
 write `AGENTS.md`.
 
+## Instructions
+
+Standalone instruction files installed via `InstructionSurface`. Uses
+`InstructionPlacement::InlineBlock` (project-local only) because GitHub
+Copilot's memory file does not expose a documented `@import` syntax; the body
+is injected as a tagged HTML-comment fenced block in the existing memory
+file.
+
+| | |
+| --- | --- |
+| Host file | `<root>/.github/copilot-instructions.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `<root>/.github/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
+
 ## MCP servers
 
 ### User scope (`Scope::Global`)

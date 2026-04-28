@@ -82,6 +82,20 @@ Uninstall removes the file and prunes empty parent directories.
 > writes. Rules can include YAML frontmatter for conditional activation;
 > consumers may pass that as part of `RulesBlock::content`.
 
+## Instructions
+
+Standalone instruction files installed via `InstructionSurface`. Uses
+`InstructionPlacement::StandaloneFile` because Cline already has a per-tag
+rules directory; each instruction is one file in that directory, with no host
+include needed.
+
+| | |
+| --- | --- |
+| Instruction file | `<root>/.clinerules/<name>.md` |
+| Mechanism | One file per instruction — no host file needed |
+| Ledger | `<root>/.clinerules/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::StandaloneFile` |
+
 ## MCP servers
 
 ### User scope (`Scope::Global`)

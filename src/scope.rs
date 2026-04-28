@@ -35,18 +35,26 @@ impl Scope {
 
     /// Verify that `path` is contained within the local project root.
     ///
-    /// For [`Scope::Global`], rejects symlinked target files so writes do not
-    /// follow symlinked config files. For [`Scope::Local`], rejects symlink
-    /// components under the project root,
-    /// canonicalizes the deepest existing path component, then checks it stays
-    /// within the canonical project root.
+    /// For [`Scope::Global`], rejects symlinks anywhere along the path so a
+    /// symlinked `~/.claude`, `~/.cursor`, etc. cannot redirect writes outside
+    /// the user's intended config tree. For [`Scope::Local`], rejects symlink
+    /// components under the project root, canonicalizes the deepest existing
+    /// path component, then checks it stays within the canonical project root.
     ///
-    /// Returns [`crate::AgentConfigError::PathResolution`] if the path escapes the root.
     /// Missing tail components are allowed when every existing ancestor stays
     /// inside the root and is not a symlink.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::AgentConfigError::PathResolution`] when:
+    /// - any path component is a symlink (Global scope) or a symlink under the
+    ///   local root (Local scope) — `"refusing to write through symlink"`,
+    /// - the canonicalized path escapes the local project root —
+    ///   `"refusing to write outside scope root"`,
+    /// - an unexpected I/O error occurs while inspecting an existing component.
     pub fn ensure_contained(&self, path: &Path) -> Result<(), crate::error::AgentConfigError> {
         match self {
-            Scope::Global => crate::util::fs_atomic::reject_symlink(path),
+            Scope::Global => crate::util::fs_atomic::reject_symlink_components(path),
             Scope::Local(root) => crate::util::fs_atomic::ensure_contained(path, root),
         }
     }

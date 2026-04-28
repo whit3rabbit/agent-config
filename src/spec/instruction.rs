@@ -14,28 +14,39 @@ pub enum InstructionPlacement {
     InlineBlock,
 
     /// Write a standalone file and add a managed include reference line
-    /// (e.g. `@RTK.md` in `~/.claude/CLAUDE.md`). The reference itself
+    /// (e.g. `@MYAPP.md` in `~/.claude/CLAUDE.md`). The reference itself
     /// is managed as a fenced markdown block so it can be removed cleanly.
     ReferencedFile,
 
     /// Write a standalone file only, no include reference.
     /// For agents with rules directories where the file's presence alone
-    /// causes the agent to load it (e.g. `.roo/rules/RTK.md`).
+    /// causes the agent to load it (e.g. `.roo/rules/MYAPP.md`).
     StandaloneFile,
 }
 
 /// Caller-supplied description of a standalone instruction file to install.
 ///
 /// Instructions differ from hook rules: they are named, standalone files
-/// that persist across sessions (like `~/.claude/RTK.md`). They may be
+/// that persist across sessions (like `~/.claude/MYAPP.md`). They may be
 /// referenced via include directives from the agent's memory file, or
 /// placed directly in a rules directory.
 ///
 /// Build via [`InstructionSpec::builder`].
 #[derive(Debug, Clone)]
 pub struct InstructionSpec {
-    /// Instruction name. Used as the filename stem (e.g. `RTK` becomes
-    /// `RTK.md`). Must be ASCII alnum / `_` / `-`, non-empty.
+    /// Instruction name. Used as the filename stem (e.g. `MYAPP` becomes
+    /// `MYAPP.md`). Must be ASCII alnum / `_` / `-`, non-empty.
+    ///
+    /// **Naming caveat.** For [`InstructionPlacement::ReferencedFile`] and
+    /// [`InstructionPlacement::InlineBlock`], `name` is also reused as the
+    /// fence tag in the host markdown file
+    /// (`<!-- BEGIN AGENT-CONFIG:<name> --> ... <!-- END AGENT-CONFIG:<name> -->`).
+    /// If a consumer installs a hook with `tag = "T"` *and* an instruction with
+    /// `name = "T"` into the same memory file (e.g. both in
+    /// `~/.claude/CLAUDE.md`), the second upsert silently replaces the first.
+    /// Pick a name that does not collide with any of your hook tags. When in
+    /// doubt, prefix the name (e.g. `instr-myapp`) or use
+    /// [`InstructionPlacement::StandaloneFile`].
     pub name: String,
 
     /// The consumer of this library that owns the instruction.
@@ -49,6 +60,11 @@ pub struct InstructionSpec {
 
     /// Markdown body of the instruction file.
     pub body: String,
+
+    /// When true, install adopts an instruction file (or include block) that
+    /// exists on disk but has no recorded owner instead of refusing. Use
+    /// after a crash between file write and ledger record. Default `false`.
+    pub adopt_unowned: bool,
 }
 
 impl InstructionSpec {
@@ -59,6 +75,7 @@ impl InstructionSpec {
             owner_tag: None,
             placement: InstructionPlacement::ReferencedFile,
             body: String::new(),
+            adopt_unowned: false,
         }
     }
 
@@ -75,7 +92,7 @@ impl InstructionSpec {
     }
 
     pub(crate) fn validate_name(name: &str) -> Result<(), AgentConfigError> {
-        validate_identifier(name, IdentifierKind::McpName)
+        validate_identifier(name, IdentifierKind::InstructionName)
     }
 }
 
@@ -86,12 +103,20 @@ pub struct InstructionSpecBuilder {
     owner_tag: Option<String>,
     placement: InstructionPlacement,
     body: String,
+    adopt_unowned: bool,
 }
 
 impl InstructionSpecBuilder {
     /// Set the owner tag. Required.
     pub fn owner(mut self, tag: impl Into<String>) -> Self {
         self.owner_tag = Some(tag.into());
+        self
+    }
+
+    /// Adopt an instruction file (or include block) that exists on disk but
+    /// has no recorded owner. See [`InstructionSpec::adopt_unowned`].
+    pub fn adopt_unowned(mut self, adopt: bool) -> Self {
+        self.adopt_unowned = adopt;
         self
     }
 
@@ -119,6 +144,14 @@ impl InstructionSpecBuilder {
 
     /// Consume the builder and return an [`InstructionSpec`], or an error
     /// if required fields are missing or validation fails.
+    ///
+    /// # Errors
+    ///
+    /// - [`AgentConfigError::MissingSpecField`] with `field = "owner"` when
+    ///   [`InstructionSpecBuilder::owner`] was never called, or
+    ///   `field = "body"` when the body is empty/whitespace-only.
+    /// - [`AgentConfigError::InvalidTag`] when `name` or `owner_tag` contain
+    ///   characters outside ASCII alnum / `_` / `-`.
     pub fn try_build(self) -> Result<InstructionSpec, AgentConfigError> {
         let owner_tag = self.owner_tag.ok_or(AgentConfigError::MissingSpecField {
             id: "<instruction>",
@@ -129,8 +162,50 @@ impl InstructionSpecBuilder {
             owner_tag,
             placement: self.placement,
             body: self.body,
+            adopt_unowned: self.adopt_unowned,
         };
         spec.validate()?;
         Ok(spec)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_name_error_mentions_instruction_not_mcp() {
+        let err = InstructionSpec::builder("bad name")
+            .owner("owner")
+            .body("body")
+            .try_build()
+            .expect_err("space in name must be rejected");
+        let AgentConfigError::InvalidTag { reason, .. } = err else {
+            panic!("expected InvalidTag, got {err:?}");
+        };
+        assert!(
+            reason.contains("instruction name"),
+            "error reason should reference instruction name, got: {reason}"
+        );
+        assert!(
+            !reason.contains("MCP"),
+            "error reason must not mention MCP for an instruction failure: {reason}"
+        );
+    }
+
+    #[test]
+    fn empty_name_error_mentions_instruction() {
+        let err = InstructionSpec::builder("")
+            .owner("owner")
+            .body("body")
+            .try_build()
+            .expect_err("empty name must be rejected");
+        let AgentConfigError::InvalidTag { reason, .. } = err else {
+            panic!("expected InvalidTag, got {err:?}");
+        };
+        assert!(
+            reason.contains("instruction name"),
+            "empty-name reason should reference instruction name, got: {reason}"
+        );
     }
 }

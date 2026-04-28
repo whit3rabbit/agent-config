@@ -9,6 +9,10 @@
 //! - Prompt/rules (optional): `<scope>/.myagent/RULES.md` or `<scope>/RULES.md`
 //! - MCP (optional, JSON shape): `<scope>/.myagent/mcp.json`
 //! - Skills (optional): `<scope>/.myagent/skills/<name>/`
+//! - Instructions (optional): standalone `<NAME>.md` files installed via
+//!   `InstructionSurface` — InlineBlock by default for single-memory-file
+//!   harnesses, StandaloneFile for per-tag rules-dir harnesses, or
+//!   ReferencedFile when the harness documents an `@import` syntax.
 
 use std::path::PathBuf;
 
@@ -16,14 +20,17 @@ use serde_json::json;
 
 use crate::agents::planning as agent_planning;
 use crate::error::AgentConfigError;
-use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
+use crate::integration::{
+    InstallReport, InstructionSurface, Integration, McpSurface, SkillSurface, UninstallReport,
+};
 use crate::paths;
 use crate::plan::{has_refusal, InstallPlan, PlanTarget, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
+use crate::spec::{Event, HookSpec, InstructionSpec, Matcher, McpSpec, SkillSpec};
 use crate::status::StatusReport;
 use crate::util::{
-    file_lock, fs_atomic, safe_fs, json_patch, mcp_json_object, md_block, ownership, planning, skills_dir,
+    file_lock, fs_atomic, instructions_dir, json_patch, mcp_json_object, md_block, ownership,
+    planning, safe_fs, skills_dir,
 };
 
 /// <Display Name> harness.
@@ -68,6 +75,18 @@ impl MyagentAgent {
         Ok(match scope {
             Scope::Global => paths::home_dir()?.join(".myagent").join("skills"),
             Scope::Local(p) => p.join(".myagent").join("skills"),
+        })
+    }
+
+    /// Directory holding the instruction ownership ledger
+    /// (`<dir>/.agent-config-instructions.json`). For `InlineBlock` placement
+    /// this should sit next to (or inside a sibling of) the host file; for
+    /// `StandaloneFile` it can be the same as the rules directory.
+    /// Delete if your harness has no prompt or rules-dir surface.
+    fn instruction_config_dir(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
+        Ok(match scope {
+            Scope::Global => paths::home_dir()?.join(".myagent"),
+            Scope::Local(p) => p.join(".myagent"),
         })
     }
 }
@@ -480,6 +499,104 @@ impl SkillSurface for MyagentAgent {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
+    }
+}
+
+// === OPTIONAL: InstructionSurface (standalone instruction files) ===
+//
+// Delete this whole block + the `instruction_config_dir` helper above + the
+// imports of `InstructionSurface`, `InstructionSpec`, and `instructions_dir`
+// if your harness has no documented prompt or rules-dir surface.
+//
+// This template shows the **InlineBlock** shape via the `inline_*` shim
+// helpers in `instructions_dir`. The agent only supplies an `InlineLayout`
+// (the per-scope paths); the shim handles validation, scope containment,
+// status detection, and `UnsupportedScope -> RefusalReason::UnsupportedScope`
+// conversion in plan methods.
+//
+// For other placements:
+//
+// - **StandaloneFile** (per-tag rules directory like `.clinerules/`):
+//   provide a `StandaloneLayout { config_dir, instruction_dir }` and call the
+//   `standalone_*` shims. See `src/agents/cline.rs` or `src/agents/roo.rs`.
+// - **ReferencedFile** (Claude only — writes `<NAME>.md` separately and
+//   injects `@<NAME>.md` into a host file): no shim exists; call
+//   `instructions_dir::{install, uninstall, plan_install, plan_uninstall}`
+//   directly. See `src/agents/claude.rs`.
+
+impl MyagentAgent {
+    fn inline_layout(
+        &self,
+        scope: &Scope,
+    ) -> Result<instructions_dir::InlineLayout, AgentConfigError> {
+        Ok(instructions_dir::InlineLayout {
+            config_dir: Self::instruction_config_dir(scope)?,
+            host_file: Self::rules_path(scope)?,
+        })
+    }
+}
+
+impl InstructionSurface for MyagentAgent {
+    fn id(&self) -> &'static str {
+        "myagent"
+    }
+
+    fn supported_instruction_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Global, ScopeKind::Local]
+    }
+
+    fn instruction_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, AgentConfigError> {
+        instructions_dir::inline_status(self.inline_layout(scope)?, name, expected_owner)
+    }
+
+    fn plan_install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
+        instructions_dir::inline_plan_install(
+            InstructionSurface::id(self),
+            scope,
+            self.inline_layout(scope),
+            spec,
+        )
+    }
+
+    fn plan_uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, AgentConfigError> {
+        instructions_dir::inline_plan_uninstall(
+            InstructionSurface::id(self),
+            scope,
+            self.inline_layout(scope),
+            name,
+            owner_tag,
+        )
+    }
+
+    fn install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
+        instructions_dir::inline_install(scope, self.inline_layout(scope)?, spec)
+    }
+
+    fn uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, AgentConfigError> {
+        instructions_dir::inline_uninstall(scope, self.inline_layout(scope)?, name, owner_tag)
     }
 }
 

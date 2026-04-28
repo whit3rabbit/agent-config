@@ -22,6 +22,31 @@ ID: `amp` — `agent_config::by_id("amp")`
 Amp falls back to `CLAUDE.md` when `AGENTS.md` is absent. This crate writes
 the canonical `AGENTS.md`. Set `HookSpec::rules` to inject a `RulesBlock`.
 
+## Instructions
+
+Standalone instruction files installed via `InstructionSurface`. Uses
+`InstructionPlacement::InlineBlock` because Amp's memory file does not expose
+a documented `@import` syntax; the body is injected as a tagged HTML-comment
+fenced block in the existing memory file.
+
+### User scope (`Scope::Global`)
+
+| | |
+| --- | --- |
+| Host file | `~/.amp/AGENTS.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `~/.amp/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
+
+### Project scope (`Scope::Local(<root>)`)
+
+| | |
+| --- | --- |
+| Host file | `<root>/AGENTS.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `<root>/.amp/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
+
 ## MCP servers
 
 | Scope | File |

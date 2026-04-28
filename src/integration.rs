@@ -47,6 +47,13 @@ pub trait Integration: Send + Sync {
     /// result and treats [`InstallStatus::InstalledOwned`] and
     /// [`InstallStatus::InstalledOtherOwner`] as installed; agents that have
     /// already implemented `status` get this for free.
+    ///
+    /// # Errors
+    ///
+    /// Propagates whatever [`status`](Integration::status) returns: typically
+    /// [`AgentConfigError::PathResolution`], [`AgentConfigError::Io`],
+    /// [`AgentConfigError::JsonInvalid`], or
+    /// [`AgentConfigError::ConfigTooLarge`].
     fn is_installed(&self, scope: &Scope, tag: &str) -> Result<bool, AgentConfigError> {
         Ok(matches!(
             self.status(scope, tag)?.status,
@@ -59,12 +66,32 @@ pub trait Integration: Send + Sync {
     /// Distinguishes installed-by-us from installed-by-someone-else, surfaces
     /// drift (parse failures, duplicate entries), and reports any pending
     /// `.bak` files. See [`StatusReport`] for the full shape.
+    ///
+    /// # Errors
+    ///
+    /// - [`AgentConfigError::PathResolution`] when the harness config path
+    ///   cannot be resolved (e.g. `$HOME` missing).
+    /// - [`AgentConfigError::Io`] for unreadable files other than the
+    ///   "missing" case (which becomes [`InstallStatus::Absent`]).
+    /// - [`AgentConfigError::ConfigTooLarge`] when the config file exceeds
+    ///   the 8 MiB read cap.
+    ///
+    /// Parse failures are intentionally folded into a [`StatusReport`] with
+    /// [`crate::status::DriftIssue::InvalidConfig`] rather than surfaced as
+    /// errors.
     fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, AgentConfigError>;
 
     /// Validate hook state without mutating user files.
     ///
     /// Unlike [`status`](Integration::status), this reports whether the
     /// discovered state is internally consistent and safe to repair.
+    ///
+    /// # Errors
+    ///
+    /// - [`AgentConfigError::InvalidTag`] when `tag` is not a legal hook tag.
+    /// - Any error from [`status`](Integration::status) other than
+    ///   [`AgentConfigError::JsonInvalid`], which is folded into the
+    ///   returned [`ValidationReport`] as malformed-ledger output.
     fn validate(&self, scope: &Scope, tag: &str) -> Result<ValidationReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let target = PlanTarget::Hook {
@@ -87,23 +114,68 @@ pub trait Integration: Send + Sync {
     }
 
     /// Plan a hook install without mutating user files.
+    ///
+    /// # Errors
+    ///
+    /// - [`AgentConfigError::PathResolution`] when the target config path
+    ///   cannot be resolved or escapes the scope root.
+    /// - [`AgentConfigError::UnsupportedScope`] is encoded as
+    ///   [`crate::plan::PlanStatus::Refused`] rather than returned.
+    /// - [`AgentConfigError::Io`] / [`AgentConfigError::ConfigTooLarge`]
+    ///   when the existing config cannot be read.
+    /// - [`AgentConfigError::InvalidTag`] from spec re-validation.
     fn plan_install(&self, scope: &Scope, spec: &HookSpec)
         -> Result<InstallPlan, AgentConfigError>;
 
     /// Plan a hook uninstall without mutating user files.
+    ///
+    /// # Errors
+    ///
+    /// Same envelope as [`plan_install`](Integration::plan_install).
+    /// Predictable refusals (unsupported scope, owner mismatch) are encoded
+    /// as [`crate::plan::PlanStatus::Refused`].
     fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError>;
 
     /// Install the hook. Repeated calls with the same `spec.tag` are a no-op
     /// after the first (the on-disk state is reached, then preserved).
+    ///
+    /// # Errors
+    ///
+    /// - [`AgentConfigError::PathResolution`] when the target path escapes
+    ///   the scope root or contains a symlink component.
+    /// - [`AgentConfigError::UnsupportedScope`] when the scope is not in
+    ///   [`supported_scopes`](Integration::supported_scopes).
+    /// - [`AgentConfigError::Io`] for filesystem failures, including
+    ///   permission denials and atomic-rename collisions.
+    /// - [`AgentConfigError::JsonInvalid`] / [`AgentConfigError::TomlInvalid`]
+    ///   when the existing config is unparseable and cannot be merged.
+    /// - [`AgentConfigError::ConfigTooLarge`] when the existing config
+    ///   exceeds the 8 MiB read cap.
+    /// - [`AgentConfigError::BackupExists`] when a sibling `.bak` already
+    ///   exists for a file we would otherwise back up.
+    /// - [`AgentConfigError::MissingSpecField`] /
+    ///   [`AgentConfigError::InvalidTag`] from spec re-validation.
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError>;
 
     /// Uninstall the hook identified by `tag`. Restores `.bak` files when
     /// removing our content leaves the target file empty or pristine.
+    ///
+    /// # Errors
+    ///
+    /// Same envelope as [`install`](Integration::install). Hooks have no
+    /// separate ownership ledger (the tag is the owner), so there is no
+    /// [`AgentConfigError::NotOwnedByCaller`] arm here.
     fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError>;
 
     /// Migrate any prior layout produced by an earlier version of the consumer
     /// (e.g., remove a legacy shell-script wrapper that has since been
     /// superseded by a native binary). Default impl is a no-op.
+    ///
+    /// # Errors
+    ///
+    /// Implementation-defined; the default returns [`MigrationReport::NoOp`]
+    /// unconditionally. Concrete impls typically return
+    /// [`AgentConfigError::Io`] or [`AgentConfigError::PathResolution`].
     fn migrate(&self, _scope: &Scope, _tag: &str) -> Result<MigrationReport, AgentConfigError> {
         Ok(MigrationReport::NoOp)
     }
@@ -135,6 +207,10 @@ pub trait McpSurface: Send + Sync {
     /// ("under any owner"); concretely, both
     /// [`InstallStatus::InstalledOwned`] and
     /// [`InstallStatus::InstalledOtherOwner`] count as installed.
+    ///
+    /// # Errors
+    ///
+    /// Propagates whatever [`mcp_status`](McpSurface::mcp_status) returns.
     fn is_mcp_installed(&self, scope: &Scope, name: &str) -> Result<bool, AgentConfigError> {
         // Pass the agent's id as the expected owner so any real consumer
         // owner (e.g. "myapp") routes through `InstalledOtherOwner`. The
@@ -152,6 +228,13 @@ pub trait McpSurface: Send + Sync {
     /// against — when the ledger records this owner, the report returns
     /// [`InstallStatus::InstalledOwned`]; anything else recorded becomes
     /// [`InstallStatus::InstalledOtherOwner`].
+    ///
+    /// # Errors
+    ///
+    /// Same envelope as [`Integration::status`]:
+    /// [`AgentConfigError::PathResolution`], [`AgentConfigError::Io`], and
+    /// [`AgentConfigError::ConfigTooLarge`]. Parse failures fold into
+    /// [`crate::status::DriftIssue::InvalidConfig`] inside the report.
     fn mcp_status(
         &self,
         scope: &Scope,
@@ -160,6 +243,12 @@ pub trait McpSurface: Send + Sync {
     ) -> Result<StatusReport, AgentConfigError>;
 
     /// Validate MCP state without mutating user files.
+    ///
+    /// # Errors
+    ///
+    /// Equivalent to
+    /// [`validate_mcp_for_owner`](McpSurface::validate_mcp_for_owner) with
+    /// `expected_owner = None`.
     fn validate_mcp(
         &self,
         scope: &Scope,
@@ -169,6 +258,14 @@ pub trait McpSurface: Send + Sync {
     }
 
     /// Validate MCP state against a caller-supplied expected owner.
+    ///
+    /// # Errors
+    ///
+    /// - [`AgentConfigError::InvalidTag`] when `name` or `expected_owner`
+    ///   fails identifier validation.
+    /// - Any error from [`mcp_status`](McpSurface::mcp_status) other than
+    ///   [`AgentConfigError::JsonInvalid`], which is folded into the
+    ///   returned [`ValidationReport`] as malformed-ledger output.
     fn validate_mcp_for_owner(
         &self,
         scope: &Scope,
@@ -209,6 +306,20 @@ pub trait McpSurface: Send + Sync {
     }
 
     /// Plan an MCP server install without mutating user files.
+    ///
+    /// # Errors
+    ///
+    /// - [`AgentConfigError::PathResolution`] when the MCP config path
+    ///   cannot be resolved.
+    /// - [`AgentConfigError::Io`] / [`AgentConfigError::ConfigTooLarge`]
+    ///   when the existing config or ledger cannot be read.
+    /// - [`AgentConfigError::MissingSpecField`] /
+    ///   [`AgentConfigError::InvalidTag`] from [`McpSpec`] re-validation.
+    /// - [`AgentConfigError::InlineSecretInLocalScope`] when `spec` carries an
+    ///   inline secret (`SecretPolicy::Inline`) under `Scope::Local`.
+    ///
+    /// Predictable refusals (unsupported scope, owner mismatch, parse
+    /// failure) are encoded as [`crate::plan::PlanStatus::Refused`].
     fn plan_install_mcp(
         &self,
         scope: &Scope,
@@ -216,6 +327,10 @@ pub trait McpSurface: Send + Sync {
     ) -> Result<InstallPlan, AgentConfigError>;
 
     /// Plan an MCP server uninstall without mutating user files.
+    ///
+    /// # Errors
+    ///
+    /// Same envelope as [`plan_install_mcp`](McpSurface::plan_install_mcp).
     fn plan_uninstall_mcp(
         &self,
         scope: &Scope,
@@ -225,6 +340,26 @@ pub trait McpSurface: Send + Sync {
 
     /// Install (or update) the MCP server. Repeated calls with the same
     /// `spec.name` and same content are a no-op after the first.
+    ///
+    /// # Errors
+    ///
+    /// - [`AgentConfigError::PathResolution`] when the target path escapes
+    ///   the scope root or contains a symlink component.
+    /// - [`AgentConfigError::UnsupportedScope`] when the scope is not in
+    ///   [`supported_mcp_scopes`](McpSurface::supported_mcp_scopes).
+    /// - [`AgentConfigError::Io`] for filesystem failures.
+    /// - [`AgentConfigError::JsonInvalid`] / [`AgentConfigError::TomlInvalid`]
+    ///   when the existing config is unparseable and cannot be merged.
+    /// - [`AgentConfigError::ConfigTooLarge`] when an input exceeds 8 MiB.
+    /// - [`AgentConfigError::BackupExists`] when a sibling `.bak` already
+    ///   exists for a file that would otherwise be backed up.
+    /// - [`AgentConfigError::NotOwnedByCaller`] when an existing server entry
+    ///   belongs to a different consumer (or is unowned and `adopt_unowned`
+    ///   is false).
+    /// - [`AgentConfigError::InlineSecretInLocalScope`] under `Scope::Local`
+    ///   when the spec carries an inline secret.
+    /// - [`AgentConfigError::MissingSpecField`] /
+    ///   [`AgentConfigError::InvalidTag`] from spec re-validation.
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec)
         -> Result<InstallReport, AgentConfigError>;
 
@@ -233,6 +368,11 @@ pub trait McpSurface: Send + Sync {
     /// Returns [`AgentConfigError::NotOwnedByCaller`] if the entry is recorded
     /// under a different owner, or if it exists in the harness config but is
     /// missing from the ledger (i.e., user-installed by hand).
+    ///
+    /// # Errors
+    ///
+    /// Same envelope as [`install_mcp`](McpSurface::install_mcp). The
+    /// owner-mismatch case is the typical one.
     fn uninstall_mcp(
         &self,
         scope: &Scope,
@@ -264,6 +404,10 @@ pub trait SkillSurface: Send + Sync {
     /// Default impl mirrors [`McpSurface::is_mcp_installed`]: both
     /// [`InstallStatus::InstalledOwned`] and
     /// [`InstallStatus::InstalledOtherOwner`] count as installed.
+    ///
+    /// # Errors
+    ///
+    /// Propagates whatever [`skill_status`](SkillSurface::skill_status) returns.
     fn is_skill_installed(&self, scope: &Scope, name: &str) -> Result<bool, AgentConfigError> {
         Ok(matches!(
             self.skill_status(scope, name, self.id())?.status,
@@ -274,6 +418,10 @@ pub trait SkillSurface: Send + Sync {
     /// Detailed installation state for the skill identified by `name`,
     /// scored against `expected_owner`. See [`McpSurface::mcp_status`] for
     /// the owner-comparison semantics.
+    ///
+    /// # Errors
+    ///
+    /// Same envelope as [`McpSurface::mcp_status`].
     fn skill_status(
         &self,
         scope: &Scope,
@@ -282,6 +430,12 @@ pub trait SkillSurface: Send + Sync {
     ) -> Result<StatusReport, AgentConfigError>;
 
     /// Validate skill state without mutating user files.
+    ///
+    /// # Errors
+    ///
+    /// Equivalent to
+    /// [`validate_skill_for_owner`](SkillSurface::validate_skill_for_owner)
+    /// with `expected_owner = None`.
     fn validate_skill(
         &self,
         scope: &Scope,
@@ -291,6 +445,14 @@ pub trait SkillSurface: Send + Sync {
     }
 
     /// Validate skill state against a caller-supplied expected owner.
+    ///
+    /// # Errors
+    ///
+    /// - [`AgentConfigError::InvalidTag`] when `name` violates the kebab-case
+    ///   skill-name contract or `expected_owner` is malformed.
+    /// - Any error from [`skill_status`](SkillSurface::skill_status) other
+    ///   than [`AgentConfigError::JsonInvalid`], which is folded into the
+    ///   returned [`ValidationReport`] as malformed-ledger output.
     fn validate_skill_for_owner(
         &self,
         scope: &Scope,
@@ -331,6 +493,18 @@ pub trait SkillSurface: Send + Sync {
     }
 
     /// Plan a skill install without mutating user files.
+    ///
+    /// # Errors
+    ///
+    /// - [`AgentConfigError::PathResolution`] when the skill directory cannot
+    ///   be resolved.
+    /// - [`AgentConfigError::Io`] / [`AgentConfigError::ConfigTooLarge`]
+    ///   when reading existing skill assets or the ledger fails.
+    /// - [`AgentConfigError::MissingSpecField`] /
+    ///   [`AgentConfigError::InvalidTag`] from [`SkillSpec`] re-validation.
+    ///
+    /// Predictable refusals (unsupported scope, owner mismatch) are encoded
+    /// as [`crate::plan::PlanStatus::Refused`].
     fn plan_install_skill(
         &self,
         scope: &Scope,
@@ -338,6 +512,11 @@ pub trait SkillSurface: Send + Sync {
     ) -> Result<InstallPlan, AgentConfigError>;
 
     /// Plan a skill uninstall without mutating user files.
+    ///
+    /// # Errors
+    ///
+    /// Same envelope as
+    /// [`plan_install_skill`](SkillSurface::plan_install_skill).
     fn plan_uninstall_skill(
         &self,
         scope: &Scope,
@@ -348,6 +527,23 @@ pub trait SkillSurface: Send + Sync {
     /// Install (or update) the skill directory and record ownership.
     /// Repeated calls with byte-identical contents are a no-op after the
     /// first.
+    ///
+    /// # Errors
+    ///
+    /// - [`AgentConfigError::PathResolution`] when a target path escapes the
+    ///   scope root or contains a symlink component.
+    /// - [`AgentConfigError::UnsupportedScope`] when the scope is not in
+    ///   [`supported_skill_scopes`](SkillSurface::supported_skill_scopes).
+    /// - [`AgentConfigError::Io`] for filesystem failures.
+    /// - [`AgentConfigError::JsonInvalid`] when the ownership ledger is
+    ///   malformed.
+    /// - [`AgentConfigError::ConfigTooLarge`] when an input exceeds 8 MiB.
+    /// - [`AgentConfigError::BackupExists`] when a sibling `.bak` already
+    ///   exists for a file we would back up.
+    /// - [`AgentConfigError::NotOwnedByCaller`] when the skill exists on
+    ///   disk under another owner (or unowned and `adopt_unowned` is false).
+    /// - [`AgentConfigError::MissingSpecField`] /
+    ///   [`AgentConfigError::InvalidTag`] from spec re-validation.
     fn install_skill(
         &self,
         scope: &Scope,
@@ -357,6 +553,11 @@ pub trait SkillSurface: Send + Sync {
     /// Uninstall the skill identified by `name`, owned by `owner_tag`.
     /// Returns [`AgentConfigError::NotOwnedByCaller`] on owner mismatch or when
     /// the skill exists on disk but is missing from the ledger.
+    ///
+    /// # Errors
+    ///
+    /// Same envelope as [`install_skill`](SkillSurface::install_skill). The
+    /// owner-mismatch case is the typical one.
     fn uninstall_skill(
         &self,
         scope: &Scope,
@@ -390,6 +591,11 @@ pub trait InstructionSurface: Send + Sync {
 
     /// Returns true if an instruction named `name` is currently recorded
     /// under any owner in this scope's ownership ledger.
+    ///
+    /// # Errors
+    ///
+    /// Propagates whatever
+    /// [`instruction_status`](InstructionSurface::instruction_status) returns.
     fn is_instruction_installed(
         &self,
         scope: &Scope,
@@ -403,6 +609,10 @@ pub trait InstructionSurface: Send + Sync {
 
     /// Detailed installation state for the instruction identified by `name`,
     /// scored against `expected_owner`.
+    ///
+    /// # Errors
+    ///
+    /// Same envelope as [`McpSurface::mcp_status`].
     fn instruction_status(
         &self,
         scope: &Scope,
@@ -411,6 +621,12 @@ pub trait InstructionSurface: Send + Sync {
     ) -> Result<StatusReport, AgentConfigError>;
 
     /// Validate instruction state without mutating user files.
+    ///
+    /// # Errors
+    ///
+    /// Equivalent to
+    /// [`validate_instruction_for_owner`](InstructionSurface::validate_instruction_for_owner)
+    /// with `expected_owner = None`.
     fn validate_instruction(
         &self,
         scope: &Scope,
@@ -420,6 +636,15 @@ pub trait InstructionSurface: Send + Sync {
     }
 
     /// Validate instruction state against a caller-supplied expected owner.
+    ///
+    /// # Errors
+    ///
+    /// - [`AgentConfigError::InvalidTag`] when `name` or `expected_owner`
+    ///   fails identifier validation.
+    /// - Any error from
+    ///   [`instruction_status`](InstructionSurface::instruction_status)
+    ///   other than [`AgentConfigError::JsonInvalid`], which is folded into
+    ///   the returned [`ValidationReport`] as malformed-ledger output.
     fn validate_instruction_for_owner(
         &self,
         scope: &Scope,
@@ -460,6 +685,19 @@ pub trait InstructionSurface: Send + Sync {
     }
 
     /// Plan an instruction install without mutating user files.
+    ///
+    /// # Errors
+    ///
+    /// - [`AgentConfigError::PathResolution`] when the instruction or host
+    ///   memory file cannot be resolved.
+    /// - [`AgentConfigError::Io`] / [`AgentConfigError::ConfigTooLarge`]
+    ///   when reading the existing instruction, host file, or ledger fails.
+    /// - [`AgentConfigError::MissingSpecField`] /
+    ///   [`AgentConfigError::InvalidTag`] from [`InstructionSpec`]
+    ///   re-validation.
+    ///
+    /// Predictable refusals (unsupported scope, owner mismatch) are encoded
+    /// as [`crate::plan::PlanStatus::Refused`].
     fn plan_install_instruction(
         &self,
         scope: &Scope,
@@ -467,6 +705,11 @@ pub trait InstructionSurface: Send + Sync {
     ) -> Result<InstallPlan, AgentConfigError>;
 
     /// Plan an instruction uninstall without mutating user files.
+    ///
+    /// # Errors
+    ///
+    /// Same envelope as
+    /// [`plan_install_instruction`](InstructionSurface::plan_install_instruction).
     fn plan_uninstall_instruction(
         &self,
         scope: &Scope,
@@ -476,6 +719,24 @@ pub trait InstructionSurface: Send + Sync {
 
     /// Install (or update) the instruction. Repeated calls with the same
     /// name and identical content are a no-op after the first.
+    ///
+    /// # Errors
+    ///
+    /// - [`AgentConfigError::PathResolution`] when the instruction or host
+    ///   path escapes the scope root or contains a symlink component.
+    /// - [`AgentConfigError::UnsupportedScope`] when the scope is not in
+    ///   [`supported_instruction_scopes`](InstructionSurface::supported_instruction_scopes).
+    /// - [`AgentConfigError::Io`] for filesystem failures.
+    /// - [`AgentConfigError::JsonInvalid`] when the ownership ledger is
+    ///   malformed.
+    /// - [`AgentConfigError::ConfigTooLarge`] when an input exceeds 8 MiB.
+    /// - [`AgentConfigError::BackupExists`] when a sibling `.bak` already
+    ///   exists for a file we would back up.
+    /// - [`AgentConfigError::NotOwnedByCaller`] when the instruction or
+    ///   include block exists under another owner (or unowned and
+    ///   `adopt_unowned` is false).
+    /// - [`AgentConfigError::MissingSpecField`] /
+    ///   [`AgentConfigError::InvalidTag`] from spec re-validation.
     fn install_instruction(
         &self,
         scope: &Scope,
@@ -484,6 +745,11 @@ pub trait InstructionSurface: Send + Sync {
 
     /// Uninstall the instruction identified by `name`, owned by `owner_tag`.
     /// Returns [`AgentConfigError::NotOwnedByCaller`] on owner mismatch.
+    ///
+    /// # Errors
+    ///
+    /// Same envelope as
+    /// [`install_instruction`](InstructionSurface::install_instruction).
     fn uninstall_instruction(
         &self,
         scope: &Scope,

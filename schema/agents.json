@@ -1,0 +1,2440 @@
+{
+  "_warning": "AUTO-GENERATED. Do not edit by hand. Regenerate on Linux via `cargo run --example gen_schema` or `AGENT_SCHEMA_UPDATE=1 cargo test --test schema_golden`. A few VS Code globalStorage paths are OS-specific; the canonical schema is the Linux view.",
+  "crate_version": "0.1.0",
+  "placeholders": {
+    "home": "~",
+    "project_root": "<project>",
+    "skill_name": "placeholder",
+    "instruction_name": "PLACEHOLDER",
+    "mcp_name": "placeholder",
+    "hook_tag": "placeholder",
+    "owner_tag": "placeholder"
+  },
+  "marker_conventions": {
+    "json_tag_field": "_agent_config_tag",
+    "markdown_fence": {
+      "begin": "<!-- BEGIN AGENT-CONFIG:<NAME> -->",
+      "end": "<!-- END AGENT-CONFIG:<NAME> -->"
+    },
+    "ledger_files": {
+      "mcp": ".agent-config-mcp.json",
+      "skill": ".agent-config-skills.json",
+      "instruction": ".agent-config-instructions.json"
+    },
+    "backup_suffix": ".bak"
+  },
+  "agents": [
+    {
+      "id": "claude",
+      "display_name": "Claude Code",
+      "supported_scopes": [
+        "global",
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.claude/CLAUDE.md",
+                "~/.claude/settings.json"
+              ],
+              "directories": [],
+              "ledger_files": [],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.claude/settings.json",
+                "<project>/CLAUDE.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.claude"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.claude.json"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.mcp.json"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [
+                "<project>/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.claude/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.claude/skills",
+                "~/.claude/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.claude/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.claude/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.claude",
+                "<project>/.claude/skills",
+                "<project>/.claude/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.claude/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "placement": "referenced_file",
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.claude/CLAUDE.md",
+                "~/.claude/PLACEHOLDER.md"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.claude/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.claude/instructions/PLACEHOLDER.md",
+                "<project>/CLAUDE.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.claude",
+                "<project>/.claude/instructions"
+              ],
+              "ledger_files": [
+                "<project>/.claude/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "cursor",
+      "display_name": "Cursor",
+      "supported_scopes": [
+        "global",
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.cursor/hooks.json"
+              ],
+              "directories": [],
+              "ledger_files": [],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.cursor/hooks.json"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.cursor"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.cursor/mcp.json"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.cursor/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.cursor/mcp.json"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.cursor"
+              ],
+              "ledger_files": [
+                "<project>/.cursor/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.cursor/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.cursor/skills",
+                "~/.cursor/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.cursor/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.cursor/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.cursor",
+                "<project>/.cursor/skills",
+                "<project>/.cursor/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.cursor/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "gemini",
+      "display_name": "Gemini CLI",
+      "supported_scopes": [
+        "global",
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.gemini/GEMINI.md",
+                "~/.gemini/settings.json"
+              ],
+              "directories": [],
+              "ledger_files": [],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.gemini/settings.json",
+                "<project>/GEMINI.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.gemini"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.gemini/settings.json"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.gemini/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.gemini/settings.json"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.gemini"
+              ],
+              "ledger_files": [
+                "<project>/.gemini/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.gemini/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.gemini/skills",
+                "~/.gemini/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.gemini/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.gemini/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.gemini",
+                "<project>/.gemini/skills",
+                "<project>/.gemini/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.gemini/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "placement": "inline_block",
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.gemini/GEMINI.md"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.gemini/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/GEMINI.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.gemini"
+              ],
+              "ledger_files": [
+                "<project>/.gemini/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "openclaw",
+      "display_name": "OpenClaw",
+      "supported_scopes": [
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "local"
+          ],
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.openclaw/openclaw.json"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.openclaw/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.openclaw/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.openclaw/skills",
+                "~/.openclaw/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.openclaw/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.agents/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.agents",
+                "<project>/.agents/skills",
+                "<project>/.agents/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.agents/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "local"
+          ],
+          "placement": "inline_block",
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.agents"
+              ],
+              "ledger_files": [
+                "<project>/.agents/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "hermes",
+      "display_name": "Hermes Agent",
+      "supported_scopes": [
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "local"
+          ],
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.hermes.md"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.hermes/config.yaml"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.hermes/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.hermes/skills/agent-config/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.hermes/skills/agent-config",
+                "~/.hermes/skills/agent-config/placeholder"
+              ],
+              "ledger_files": [
+                "~/.hermes/skills/agent-config/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "local"
+          ],
+          "placement": "inline_block",
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.hermes.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.hermes"
+              ],
+              "ledger_files": [
+                "<project>/.hermes/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "codex",
+      "display_name": "Codex CLI",
+      "supported_scopes": [
+        "global",
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.codex/AGENTS.md",
+                "~/.codex/hooks.json"
+              ],
+              "directories": [],
+              "ledger_files": [],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.codex/hooks.json",
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.codex"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.codex/config.toml"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.codex/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.codex/config.toml"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.codex"
+              ],
+              "ledger_files": [
+                "<project>/.codex/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.agents/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.agents/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.agents/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.agents/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.agents",
+                "<project>/.agents/skills",
+                "<project>/.agents/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.agents/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "placement": "inline_block",
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.codex/AGENTS.md"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.codex/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.codex"
+              ],
+              "ledger_files": [
+                "<project>/.codex/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "copilot",
+      "display_name": "GitHub Copilot",
+      "supported_scopes": [
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "local"
+          ],
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.github/copilot-instructions.md",
+                "<project>/.github/hooks/placeholder-rewrite.json"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.github",
+                "<project>/.github/hooks"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.copilot/mcp-config.json"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.copilot/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.mcp.json"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [
+                "<project>/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.copilot/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.copilot/skills",
+                "~/.copilot/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.copilot/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.github/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.github",
+                "<project>/.github/skills",
+                "<project>/.github/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.github/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "local"
+          ],
+          "placement": "inline_block",
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.github/copilot-instructions.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.github"
+              ],
+              "ledger_files": [
+                "<project>/.github/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "opencode",
+      "display_name": "OpenCode",
+      "supported_scopes": [
+        "global",
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.config/opencode/plugins/placeholder.ts"
+              ],
+              "directories": [],
+              "ledger_files": [],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.opencode/plugins/placeholder.ts"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.opencode",
+                "<project>/.opencode/plugins"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.config/opencode/opencode.json"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.config/opencode/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/opencode.json"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [
+                "<project>/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.config/opencode/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.config/opencode/skills",
+                "~/.config/opencode/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.config/opencode/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.opencode/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.opencode",
+                "<project>/.opencode/skills",
+                "<project>/.opencode/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.opencode/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "cline",
+      "display_name": "Cline",
+      "supported_scopes": [
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "local"
+          ],
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.clinerules/placeholder.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.clinerules"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+              ],
+              "directories": [
+                "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev",
+                "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings"
+              ],
+              "ledger_files": [
+                "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.cline/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.cline",
+                "~/.cline/skills",
+                "~/.cline/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.cline/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.cline/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.cline",
+                "<project>/.cline/skills",
+                "<project>/.cline/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.cline/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "local"
+          ],
+          "placement": "standalone_file",
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.clinerules/PLACEHOLDER.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.clinerules"
+              ],
+              "ledger_files": [
+                "<project>/.clinerules/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "roo",
+      "display_name": "Roo Code",
+      "supported_scopes": [
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "local"
+          ],
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.roo/rules/placeholder.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.roo",
+                "<project>/.roo/rules"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json"
+              ],
+              "directories": [
+                "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline",
+                "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings"
+              ],
+              "ledger_files": [
+                "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.roo/mcp.json"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.roo"
+              ],
+              "ledger_files": [
+                "<project>/.roo/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "local"
+          ],
+          "placement": "standalone_file",
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.roo/rules/PLACEHOLDER.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.roo",
+                "<project>/.roo/rules"
+              ],
+              "ledger_files": [
+                "<project>/.roo/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "windsurf",
+      "display_name": "Windsurf",
+      "supported_scopes": [
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "local"
+          ],
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.windsurf/rules/placeholder.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.windsurf",
+                "<project>/.windsurf/rules"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.codeium/windsurf/mcp_config.json"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.codeium/windsurf/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.windsurf/mcp_config.json"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.windsurf"
+              ],
+              "ledger_files": [
+                "<project>/.windsurf/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.codeium/windsurf/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.codeium/windsurf/skills",
+                "~/.codeium/windsurf/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.codeium/windsurf/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.windsurf/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.windsurf",
+                "<project>/.windsurf/skills",
+                "<project>/.windsurf/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.windsurf/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "local"
+          ],
+          "placement": "standalone_file",
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.windsurf/rules/PLACEHOLDER.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.windsurf",
+                "<project>/.windsurf/rules"
+              ],
+              "ledger_files": [
+                "<project>/.windsurf/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "kilocode",
+      "display_name": "Kilo Code",
+      "supported_scopes": [
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "local"
+          ],
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.kilocode/rules/placeholder.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.kilocode",
+                "<project>/.kilocode/rules"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.config/kilo/kilo.jsonc"
+              ],
+              "directories": [
+                "~/.config/kilo"
+              ],
+              "ledger_files": [
+                "~/.config/kilo/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/kilo.jsonc"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [
+                "<project>/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.kilo/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.kilo",
+                "~/.kilo/skills",
+                "~/.kilo/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.kilo/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.kilo/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.kilo",
+                "<project>/.kilo/skills",
+                "<project>/.kilo/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.kilo/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "local"
+          ],
+          "placement": "standalone_file",
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.kilocode/rules/PLACEHOLDER.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.kilocode",
+                "<project>/.kilocode/rules"
+              ],
+              "ledger_files": [
+                "<project>/.kilocode/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "antigravity",
+      "display_name": "Google Antigravity",
+      "supported_scopes": [
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "local"
+          ],
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.agent/rules/placeholder.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.agent",
+                "<project>/.agent/rules"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.gemini/antigravity/mcp_config.json"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.gemini/antigravity/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.agent/mcp_config.json"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.agent"
+              ],
+              "ledger_files": [
+                "<project>/.agent/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.gemini/antigravity/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.gemini/antigravity/skills",
+                "~/.gemini/antigravity/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.gemini/antigravity/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.agent/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.agent",
+                "<project>/.agent/skills",
+                "<project>/.agent/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.agent/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "local"
+          ],
+          "placement": "standalone_file",
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.agent/rules/PLACEHOLDER.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.agent",
+                "<project>/.agent/rules"
+              ],
+              "ledger_files": [
+                "<project>/.agent/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "amp",
+      "display_name": "Amp",
+      "supported_scopes": [
+        "global",
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.amp/AGENTS.md"
+              ],
+              "directories": [
+                "~/.amp"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.amp/settings.json"
+              ],
+              "directories": [
+                "~/.amp"
+              ],
+              "ledger_files": [
+                "~/.amp/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.amp/settings.json"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.amp"
+              ],
+              "ledger_files": [
+                "<project>/.amp/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.amp/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.amp",
+                "~/.amp/skills",
+                "~/.amp/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.amp/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.amp/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.amp",
+                "<project>/.amp/skills",
+                "<project>/.amp/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.amp/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "placement": "inline_block",
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.amp/AGENTS.md"
+              ],
+              "directories": [
+                "~/.amp"
+              ],
+              "ledger_files": [
+                "~/.amp/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.amp"
+              ],
+              "ledger_files": [
+                "<project>/.amp/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "codebuddy",
+      "display_name": "CodeBuddy CLI",
+      "supported_scopes": [
+        "global",
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.codebuddy/CLAUDE.md",
+                "~/.codebuddy/settings.json"
+              ],
+              "directories": [
+                "~/.codebuddy"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.codebuddy/settings.json",
+                "<project>/CLAUDE.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.codebuddy"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.codebuddy/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.codebuddy",
+                "~/.codebuddy/skills",
+                "~/.codebuddy/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.codebuddy/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.codebuddy/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.codebuddy",
+                "<project>/.codebuddy/skills",
+                "<project>/.codebuddy/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.codebuddy/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "placement": "inline_block",
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.codebuddy/CLAUDE.md"
+              ],
+              "directories": [
+                "~/.codebuddy"
+              ],
+              "ledger_files": [
+                "~/.codebuddy/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/CLAUDE.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.codebuddy"
+              ],
+              "ledger_files": [
+                "<project>/.codebuddy/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "forge",
+      "display_name": "Forge",
+      "supported_scopes": [
+        "global",
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.forge/AGENTS.md"
+              ],
+              "directories": [
+                "~/.forge"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.forge/.mcp.json"
+              ],
+              "directories": [
+                "~/.forge"
+              ],
+              "ledger_files": [
+                "~/.forge/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.mcp.json"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [
+                "<project>/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.forge/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.forge",
+                "~/.forge/skills",
+                "~/.forge/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.forge/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.forge/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.forge",
+                "<project>/.forge/skills",
+                "<project>/.forge/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.forge/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "placement": "inline_block",
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.forge/AGENTS.md"
+              ],
+              "directories": [
+                "~/.forge"
+              ],
+              "ledger_files": [
+                "~/.forge/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.forge"
+              ],
+              "ledger_files": [
+                "<project>/.forge/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "iflow",
+      "display_name": "iFlow CLI",
+      "supported_scopes": [
+        "global",
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.iflow/settings.json"
+              ],
+              "directories": [
+                "~/.iflow"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.iflow/settings.json"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.iflow"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.iflow/settings.json"
+              ],
+              "directories": [
+                "~/.iflow"
+              ],
+              "ledger_files": [
+                "~/.iflow/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.iflow/settings.json"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.iflow"
+              ],
+              "ledger_files": [
+                "<project>/.iflow/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "junie",
+      "display_name": "JetBrains Junie",
+      "supported_scopes": [
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "local"
+          ],
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.junie/AGENTS.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.junie"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.junie/mcp/mcp.json"
+              ],
+              "directories": [
+                "~/.junie",
+                "~/.junie/mcp"
+              ],
+              "ledger_files": [
+                "~/.junie/mcp/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.junie/mcp/mcp.json"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.junie",
+                "<project>/.junie/mcp"
+              ],
+              "ledger_files": [
+                "<project>/.junie/mcp/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "local"
+          ],
+          "placement": "inline_block",
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.junie/AGENTS.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.junie"
+              ],
+              "ledger_files": [
+                "<project>/.junie/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "qodercli",
+      "display_name": "Qoder CLI",
+      "supported_scopes": [
+        "global",
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.qoder/AGENTS.md"
+              ],
+              "directories": [
+                "~/.qoder"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.qoder.json"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.mcp.json"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [
+                "<project>/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "placement": "inline_block",
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.qoder/AGENTS.md"
+              ],
+              "directories": [
+                "~/.qoder"
+              ],
+              "ledger_files": [
+                "~/.qoder/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.qoder"
+              ],
+              "ledger_files": [
+                "<project>/.qoder/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "qwen",
+      "display_name": "Qwen Code",
+      "supported_scopes": [
+        "global",
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.qwen/QWEN.md"
+              ],
+              "directories": [],
+              "ledger_files": [],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/QWEN.md"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.qwen/settings.json"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.qwen/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.qwen/settings.json"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.qwen"
+              ],
+              "ledger_files": [
+                "<project>/.qwen/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.qwen/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.qwen/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.qwen/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.qwen/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.qwen",
+                "<project>/.qwen/skills",
+                "<project>/.qwen/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.qwen/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "placement": "inline_block",
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.qwen/QWEN.md"
+              ],
+              "directories": [],
+              "ledger_files": [
+                "~/.qwen/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/QWEN.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.qwen"
+              ],
+              "ledger_files": [
+                "<project>/.qwen/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "tabnine",
+      "display_name": "Tabnine CLI",
+      "supported_scopes": [
+        "global",
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.tabnine/agent/settings.json"
+              ],
+              "directories": [
+                "~/.tabnine",
+                "~/.tabnine/agent"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.tabnine/agent/settings.json"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.tabnine",
+                "<project>/.tabnine/agent"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.tabnine/agent/settings.json"
+              ],
+              "directories": [
+                "~/.tabnine",
+                "~/.tabnine/agent"
+              ],
+              "ledger_files": [
+                "~/.tabnine/agent/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.tabnine/agent/settings.json"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.tabnine",
+                "<project>/.tabnine/agent"
+              ],
+              "ledger_files": [
+                "<project>/.tabnine/agent/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "trae",
+      "display_name": "Trae",
+      "supported_scopes": [
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "local"
+          ],
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.trae/project_rules.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.trae"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.trae/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.trae",
+                "~/.trae/skills",
+                "~/.trae/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.trae/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.trae/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.trae",
+                "<project>/.trae/skills",
+                "<project>/.trae/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.trae/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "local"
+          ],
+          "placement": "inline_block",
+          "scopes": {
+            "local": {
+              "config_files": [
+                "<project>/.trae/project_rules.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.trae"
+              ],
+              "ledger_files": [
+                "<project>/.trae/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    }
+  ]
+}

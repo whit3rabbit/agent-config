@@ -1,6 +1,6 @@
 //! Cline integration.
 //!
-//! Two surfaces:
+//! Surfaces:
 //!
 //! 1. **Rules** — project-local markdown files at `.clinerules/<tag>.md`.
 //!    Same model as Roo / Kilo (one file per consumer, owned outright).
@@ -15,33 +15,38 @@
 //!
 //! 3. **MCP servers** — global VS Code extension config at
 //!    `Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`,
-//!    keyed by server name under `mcpServers`.
+//!    keyed by server name under `mcpServers`. Lives in `mcp.rs`.
 //!
 //! 4. **Skills** — directory-scoped skills at `.cline/skills/<name>/`
-//!    (Local) or `~/.cline/skills/<name>/` (Global).
+//!    (Local) or `~/.cline/skills/<name>/` (Global). Lives in `skills.rs`.
+//!
+//! 5. **Instructions** — standalone files in `.clinerules/`. Lives in
+//!    `instructions.rs`.
 
 use std::path::PathBuf;
 
-use crate::agents::planning as agent_planning;
 use crate::error::AgentConfigError;
-use crate::integration::{
-    InstallReport, InstructionSurface, Integration, McpSurface, SkillSurface, UninstallReport,
-};
-use crate::paths;
+use crate::integration::{InstallReport, Integration, UninstallReport};
 use crate::plan::{
     has_refusal, InstallPlan, PlanTarget as DryPlanTarget, PlannedChange, RefusalReason,
     UninstallPlan,
 };
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{Event, HookSpec, InstructionSpec, McpSpec, ScriptTemplate, SkillSpec};
+use crate::spec::HookSpec;
+#[cfg(not(windows))]
+use crate::spec::{Event, ScriptTemplate};
 use crate::status::{InstallStatus, PathStatus, PlanTarget, StatusReport, StatusWarning};
-use crate::util::{
-    file_lock, fs_atomic, instructions_dir, mcp_json_object, ownership, planning, rules_dir,
-    safe_fs, skills_dir,
-};
+#[cfg(not(windows))]
+use crate::util::fs_atomic;
+use crate::util::{file_lock, ownership, planning, rules_dir, safe_fs};
 
-const RULES_DIR: &str = ".clinerules";
+mod instructions;
+mod mcp;
+mod skills;
+
+pub(super) const RULES_DIR: &str = ".clinerules";
 const HOOKS_SUBDIR: &str = "hooks";
+#[cfg(not(windows))]
 const KIND: &str = "cline hook";
 
 /// Cline integration.
@@ -56,7 +61,10 @@ impl ClineAgent {
         Self { _private: () }
     }
 
-    fn project_root<'a>(&self, scope: &'a Scope) -> Result<&'a std::path::Path, AgentConfigError> {
+    pub(super) fn project_root<'a>(
+        &self,
+        scope: &'a Scope,
+    ) -> Result<&'a std::path::Path, AgentConfigError> {
         match scope {
             Scope::Local(p) => Ok(p),
             Scope::Global => Err(AgentConfigError::UnsupportedScope {
@@ -75,23 +83,6 @@ impl ClineAgent {
 
     fn ledger_path(&self, scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(self.hooks_dir(scope)?.join(".agent-config-hooks.json"))
-    }
-
-    fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
-        match scope {
-            Scope::Global => paths::cline_mcp_global_file(),
-            Scope::Local(_) => Err(AgentConfigError::UnsupportedScope {
-                id: "cline",
-                scope: ScopeKind::Local,
-            }),
-        }
-    }
-
-    fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
-        Ok(match scope {
-            Scope::Global => paths::home_dir()?.join(".cline").join("skills"),
-            Scope::Local(p) => p.join(".cline").join("skills"),
-        })
     }
 }
 
@@ -215,51 +206,66 @@ impl Integration for ClineAgent {
         }
 
         if spec.script.is_some() || spec.rules.is_none() {
-            let body = match &spec.script {
-                Some(ScriptTemplate::Shell(s)) => {
-                    fs_atomic::ensure_trailing_newline(&prefix_shebang(s))
-                }
-                Some(ScriptTemplate::TypeScript(_)) => {
-                    return Ok(InstallPlan::refused(
-                        target,
-                        None,
-                        RefusalReason::MissingRequiredSpecField,
-                    ));
-                }
-                None => default_hook_body(&spec.command.render_shell()),
-            };
-            let event_filename = event_to_filename(&spec.event)?;
-            let path = self.hooks_dir(scope)?.join(&event_filename);
-            let ledger = self.ledger_path(scope)?;
-            let actual_owner = ownership::owner_of(&ledger, &event_filename)?;
-            match (actual_owner.as_deref(), path.exists()) {
-                (Some(owner), _) if owner != spec.tag => {
-                    changes.push(PlannedChange::Refuse {
-                        path: Some(ledger),
-                        reason: RefusalReason::OwnerMismatch,
-                    });
-                    return Ok(InstallPlan::from_changes(target, changes));
-                }
-                (None, true) => {
-                    changes.push(PlannedChange::Refuse {
-                        path: Some(path),
-                        reason: RefusalReason::UserInstalledEntry,
-                    });
-                    return Ok(InstallPlan::from_changes(target, changes));
-                }
-                _ => {}
+            // Cline's hook contract is a `bash`-shebanged script chmod'd
+            // executable. On native Windows the chmod is a no-op and the
+            // shebang is meaningless, so the install would silently
+            // produce a non-runnable hook. Refuse before any mutation.
+            #[cfg(windows)]
+            {
+                return Ok(InstallPlan::refused(
+                    target,
+                    None,
+                    RefusalReason::UnsupportedPlatform,
+                ));
             }
-            planning::plan_write_file(&mut changes, &path, body.as_bytes(), false)?;
-            planning::plan_set_permissions(&mut changes, &path, 0o755);
-            let owner_changed = actual_owner.as_deref() != Some(spec.tag.as_str());
-            let file_changed = changes.iter().any(|change| {
-                matches!(
-                    change,
-                    PlannedChange::CreateFile { .. } | PlannedChange::PatchFile { .. }
-                )
-            });
-            if owner_changed || file_changed {
-                planning::plan_write_ledger(&mut changes, &ledger, &event_filename, &spec.tag);
+            #[cfg(not(windows))]
+            {
+                let body = match &spec.script {
+                    Some(ScriptTemplate::Shell(s)) => {
+                        fs_atomic::ensure_trailing_newline(&prefix_shebang(s))
+                    }
+                    Some(ScriptTemplate::TypeScript(_)) => {
+                        return Ok(InstallPlan::refused(
+                            target,
+                            None,
+                            RefusalReason::MissingRequiredSpecField,
+                        ));
+                    }
+                    None => default_hook_body(&spec.command.render_shell()),
+                };
+                let event_filename = event_to_filename(&spec.event)?;
+                let path = self.hooks_dir(scope)?.join(&event_filename);
+                let ledger = self.ledger_path(scope)?;
+                let actual_owner = ownership::owner_of(&ledger, &event_filename)?;
+                match (actual_owner.as_deref(), path.exists()) {
+                    (Some(owner), _) if owner != spec.tag => {
+                        changes.push(PlannedChange::Refuse {
+                            path: Some(ledger),
+                            reason: RefusalReason::OwnerMismatch,
+                        });
+                        return Ok(InstallPlan::from_changes(target, changes));
+                    }
+                    (None, true) => {
+                        changes.push(PlannedChange::Refuse {
+                            path: Some(path),
+                            reason: RefusalReason::UserInstalledEntry,
+                        });
+                        return Ok(InstallPlan::from_changes(target, changes));
+                    }
+                    _ => {}
+                }
+                planning::plan_write_file(&mut changes, &path, body.as_bytes(), false)?;
+                planning::plan_set_permissions(&mut changes, &path, 0o755);
+                let owner_changed = actual_owner.as_deref() != Some(spec.tag.as_str());
+                let file_changed = changes.iter().any(|change| {
+                    matches!(
+                        change,
+                        PlannedChange::CreateFile { .. } | PlannedChange::PatchFile { .. }
+                    )
+                });
+                if owner_changed || file_changed {
+                    planning::plan_write_ledger(&mut changes, &ledger, &event_filename, &spec.tag);
+                }
             }
         }
 
@@ -335,13 +341,28 @@ impl Integration for ClineAgent {
 
         if let Some(rules) = &spec.rules {
             scope.ensure_contained(&rules_dir::target_path(root, RULES_DIR, &spec.tag))?;
-            let r = rules_dir::install(root, RULES_DIR, &spec.tag, &rules.content)?;
+            let r = rules_dir::install(scope, RULES_DIR, &spec.tag, &rules.content)?;
             report.merge(r);
         }
 
         if spec.script.is_some() || spec.rules.is_none() {
+            // Cline's hook script body is bash-shebanged and chmod'd 0o755;
+            // both are no-ops on native Windows. Refuse before any
+            // mutation so the install does not silently produce a
+            // non-runnable hook. See `plan_install` for the matching
+            // refusal in dry-run mode.
+            #[cfg(windows)]
+            {
+                return Err(AgentConfigError::UnsupportedPlatform {
+                    id: "cline",
+                    reason: "Cline hooks require a POSIX shell environment; native Windows is not supported",
+                });
+            }
+            #[cfg(not(windows))]
             let hooks_dir = self.hooks_dir(scope)?;
+            #[cfg(not(windows))]
             scope.ensure_contained(&hooks_dir)?;
+            #[cfg(not(windows))]
             file_lock::with_lock(&hooks_dir, || {
                 let body = match &spec.script {
                     Some(ScriptTemplate::Shell(s)) => {
@@ -402,7 +423,7 @@ impl Integration for ClineAgent {
         let mut report = UninstallReport::default();
 
         scope.ensure_contained(&rules_dir::target_path(root, RULES_DIR, tag))?;
-        let r = rules_dir::uninstall(root, RULES_DIR, tag)?;
+        let r = rules_dir::uninstall(scope, RULES_DIR, tag)?;
         report.merge(r);
 
         // Any hook scripts owned by this tag.
@@ -455,294 +476,9 @@ impl Integration for ClineAgent {
     }
 }
 
-impl McpSurface for ClineAgent {
-    fn id(&self) -> &'static str {
-        "cline"
-    }
-
-    fn supported_mcp_scopes(&self) -> &'static [ScopeKind] {
-        &[ScopeKind::Global]
-    }
-
-    fn mcp_status(
-        &self,
-        scope: &Scope,
-        name: &str,
-        expected_owner: &str,
-    ) -> Result<StatusReport, AgentConfigError> {
-        McpSpec::validate_name(name)?;
-        let cfg = Self::mcp_path(scope)?;
-        let ledger = ownership::mcp_ledger_for(&cfg);
-        let presence = mcp_json_object::config_presence(&cfg, name)?;
-        let recorded = ownership::owner_of(&ledger, name)?;
-        Ok(StatusReport::for_mcp(
-            name,
-            cfg,
-            ledger,
-            presence,
-            expected_owner,
-            recorded,
-        ))
-    }
-
-    fn plan_install_mcp(
-        &self,
-        scope: &Scope,
-        spec: &McpSpec,
-    ) -> Result<InstallPlan, AgentConfigError> {
-        agent_planning::mcp_json_object_install(
-            McpSurface::id(self),
-            scope,
-            spec,
-            Self::mcp_path(scope),
-        )
-    }
-
-    fn plan_uninstall_mcp(
-        &self,
-        scope: &Scope,
-        name: &str,
-        owner_tag: &str,
-    ) -> Result<UninstallPlan, AgentConfigError> {
-        agent_planning::mcp_json_object_uninstall(
-            McpSurface::id(self),
-            scope,
-            name,
-            owner_tag,
-            Self::mcp_path(scope),
-        )
-    }
-
-    fn install_mcp(
-        &self,
-        scope: &Scope,
-        spec: &McpSpec,
-    ) -> Result<InstallReport, AgentConfigError> {
-        spec.validate()?;
-        let cfg = Self::mcp_path(scope)?;
-        spec.validate_local_secret_policy(scope)?;
-        scope.ensure_contained(&cfg)?;
-        let ledger = ownership::mcp_ledger_for(&cfg);
-        mcp_json_object::install(&cfg, &ledger, spec)
-    }
-
-    fn uninstall_mcp(
-        &self,
-        scope: &Scope,
-        name: &str,
-        owner_tag: &str,
-    ) -> Result<UninstallReport, AgentConfigError> {
-        McpSpec::validate_name(name)?;
-        HookSpec::validate_tag(owner_tag)?;
-        let cfg = Self::mcp_path(scope)?;
-        scope.ensure_contained(&cfg)?;
-        let ledger = ownership::mcp_ledger_for(&cfg);
-        mcp_json_object::uninstall(&cfg, &ledger, name, owner_tag, "mcp server")
-    }
-}
-
-impl SkillSurface for ClineAgent {
-    fn id(&self) -> &'static str {
-        "cline"
-    }
-
-    fn supported_skill_scopes(&self) -> &'static [ScopeKind] {
-        &[ScopeKind::Global, ScopeKind::Local]
-    }
-
-    fn skill_status(
-        &self,
-        scope: &Scope,
-        name: &str,
-        expected_owner: &str,
-    ) -> Result<StatusReport, AgentConfigError> {
-        SkillSpec::validate_name(name)?;
-        let root = Self::skills_root(scope)?;
-        let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
-        let recorded = ownership::owner_of(&ledger, name)?;
-        Ok(StatusReport::for_skill(
-            name,
-            dir,
-            manifest,
-            ledger,
-            expected_owner,
-            recorded,
-        ))
-    }
-
-    fn plan_install_skill(
-        &self,
-        scope: &Scope,
-        spec: &SkillSpec,
-    ) -> Result<InstallPlan, AgentConfigError> {
-        agent_planning::skill_install(
-            SkillSurface::id(self),
-            scope,
-            spec,
-            Self::skills_root(scope),
-        )
-    }
-
-    fn plan_uninstall_skill(
-        &self,
-        scope: &Scope,
-        name: &str,
-        owner_tag: &str,
-    ) -> Result<UninstallPlan, AgentConfigError> {
-        agent_planning::skill_uninstall(
-            SkillSurface::id(self),
-            scope,
-            name,
-            owner_tag,
-            Self::skills_root(scope),
-        )
-    }
-
-    fn install_skill(
-        &self,
-        scope: &Scope,
-        spec: &SkillSpec,
-    ) -> Result<InstallReport, AgentConfigError> {
-        let root = Self::skills_root(scope)?;
-        scope.ensure_contained(&root)?;
-        skills_dir::install(&root, spec)
-    }
-
-    fn uninstall_skill(
-        &self,
-        scope: &Scope,
-        name: &str,
-        owner_tag: &str,
-    ) -> Result<UninstallReport, AgentConfigError> {
-        let root = Self::skills_root(scope)?;
-        scope.ensure_contained(&root)?;
-        skills_dir::uninstall(&root, name, owner_tag)
-    }
-}
-
-impl InstructionSurface for ClineAgent {
-    fn id(&self) -> &'static str {
-        "cline"
-    }
-
-    fn supported_instruction_scopes(&self) -> &'static [ScopeKind] {
-        &[ScopeKind::Local]
-    }
-
-    fn instruction_status(
-        &self,
-        scope: &Scope,
-        name: &str,
-        expected_owner: &str,
-    ) -> Result<StatusReport, AgentConfigError> {
-        InstructionSpec::validate_name(name)?;
-        let root = self.project_root(scope)?;
-        let rules_dir = root.join(RULES_DIR);
-        let (instr_path, led) = instructions_dir::paths_for_status(&rules_dir, &rules_dir, name);
-        let exists = instr_path.exists();
-        let presence = if exists {
-            crate::status::ConfigPresence::Single
-        } else {
-            crate::status::ConfigPresence::Absent
-        };
-        let recorded = ownership::owner_of(&led, name)?;
-        Ok(StatusReport::for_instruction(
-            name,
-            instr_path,
-            led,
-            presence,
-            expected_owner,
-            recorded,
-        ))
-    }
-
-    fn plan_install_instruction(
-        &self,
-        scope: &Scope,
-        spec: &InstructionSpec,
-    ) -> Result<InstallPlan, AgentConfigError> {
-        spec.validate()?;
-        let target = crate::plan::PlanTarget::Instruction {
-            integration_id: InstructionSurface::id(self),
-            scope: scope.clone(),
-            name: spec.name.clone(),
-            owner: spec.owner_tag.clone(),
-        };
-        let root = match self.project_root(scope) {
-            Ok(root) => root,
-            Err(AgentConfigError::UnsupportedScope { .. }) => {
-                return Ok(InstallPlan::refused(
-                    target,
-                    None,
-                    RefusalReason::UnsupportedScope,
-                ));
-            }
-            Err(e) => return Err(e),
-        };
-        let rules_dir = root.join(RULES_DIR);
-        let changes =
-            instructions_dir::plan_install(&rules_dir, spec, None, Some(&rules_dir), None)?;
-        Ok(InstallPlan::from_changes(target, changes))
-    }
-
-    fn plan_uninstall_instruction(
-        &self,
-        scope: &Scope,
-        name: &str,
-        owner_tag: &str,
-    ) -> Result<UninstallPlan, AgentConfigError> {
-        InstructionSpec::validate_name(name)?;
-        let target = crate::plan::PlanTarget::Instruction {
-            integration_id: InstructionSurface::id(self),
-            scope: scope.clone(),
-            name: name.to_string(),
-            owner: owner_tag.to_string(),
-        };
-        let root = match self.project_root(scope) {
-            Ok(root) => root,
-            Err(AgentConfigError::UnsupportedScope { .. }) => {
-                return Ok(UninstallPlan::refused(
-                    target,
-                    None,
-                    RefusalReason::UnsupportedScope,
-                ));
-            }
-            Err(e) => return Err(e),
-        };
-        let rules_dir = root.join(RULES_DIR);
-        let changes =
-            instructions_dir::plan_uninstall(&rules_dir, name, owner_tag, None, Some(&rules_dir))?;
-        Ok(UninstallPlan::from_changes(target, changes))
-    }
-
-    fn install_instruction(
-        &self,
-        scope: &Scope,
-        spec: &InstructionSpec,
-    ) -> Result<InstallReport, AgentConfigError> {
-        spec.validate()?;
-        let root = self.project_root(scope)?;
-        let rules_dir = root.join(RULES_DIR);
-        scope.ensure_contained(&rules_dir.join(&spec.name))?;
-        instructions_dir::install(&rules_dir, spec, None, Some(&rules_dir), None)
-    }
-
-    fn uninstall_instruction(
-        &self,
-        scope: &Scope,
-        name: &str,
-        owner_tag: &str,
-    ) -> Result<UninstallReport, AgentConfigError> {
-        InstructionSpec::validate_name(name)?;
-        let root = self.project_root(scope)?;
-        let rules_dir = root.join(RULES_DIR);
-        scope.ensure_contained(&rules_dir)?;
-        instructions_dir::uninstall(&rules_dir, name, owner_tag, None, Some(&rules_dir))
-    }
-}
-
 /// Map [`Event`] to Cline's filename convention. Custom names become
 /// file names, so they must be path-safe single components.
+#[cfg(not(windows))]
 fn event_to_filename(event: &Event) -> Result<String, AgentConfigError> {
     match event {
         Event::PreToolUse => Ok("PreToolUse".into()),
@@ -770,6 +506,7 @@ fn validate_custom_event_filename(name: &str) -> Result<(), AgentConfigError> {
     Ok(())
 }
 
+#[cfg(not(windows))]
 fn prefix_shebang(s: &str) -> String {
     if s.starts_with("#!") {
         s.to_string()
@@ -781,6 +518,7 @@ fn prefix_shebang(s: &str) -> String {
 /// Minimal default hook body: pipe stdin to the rendered command and forward
 /// exit code. Safe program commands are shell-quoted before they reach here;
 /// unchecked shell commands intentionally pass through as shell syntax.
+#[cfg(not(windows))]
 fn default_hook_body(command: &str) -> String {
     format!(
         "#!/usr/bin/env bash\n# Generated by agent-config.\n# Forwards Cline's JSON event payload to the consumer command.\n{command}\n"
@@ -790,6 +528,14 @@ fn default_hook_body(command: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::integration::McpSurface;
+    use crate::spec::McpSpec;
+    // `Event` is imported in the parent module behind `cfg(not(windows))` so
+    // the lib build on Windows stays warning-clean. The test mod still needs
+    // it because `#[cfg(windows)]` tests in this file construct `HookSpec`s
+    // with `Event::PreToolUse`. Re-importing here keeps the symbol in scope
+    // on every platform without producing a duplicate-import warning.
+    use crate::spec::Event;
     use std::fs;
     use tempfile::tempdir;
 
@@ -820,6 +566,7 @@ mod tests {
         assert_eq!(fs::read_to_string(&p).unwrap(), "rule body\n");
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn install_hook_default_writes_executable_script() {
         let dir = tempdir().unwrap();
@@ -844,6 +591,56 @@ mod tests {
         }
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn plan_install_hook_refuses_on_windows() {
+        let dir = tempdir().unwrap();
+        let agent = ClineAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let spec = hook_spec("alpha", Event::PreToolUse, "noop");
+        let plan = agent.plan_install(&scope, &spec).unwrap();
+        assert_eq!(plan.status, crate::plan::PlanStatus::Refused);
+        let refusal = plan
+            .changes
+            .iter()
+            .find_map(|c| match c {
+                PlannedChange::Refuse { reason, .. } => Some(*reason),
+                _ => None,
+            })
+            .expect("plan should contain a refusal");
+        assert!(matches!(refusal, RefusalReason::UnsupportedPlatform));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn install_hook_returns_unsupported_platform_on_windows() {
+        let dir = tempdir().unwrap();
+        let agent = ClineAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let spec = hook_spec("alpha", Event::PreToolUse, "noop");
+        let err = agent.install(&scope, &spec).unwrap_err();
+        assert!(matches!(
+            err,
+            AgentConfigError::UnsupportedPlatform { id: "cline", .. }
+        ));
+        assert!(!dir.path().join(".clinerules/hooks/PreToolUse").exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn install_rules_only_still_works_on_windows() {
+        let dir = tempdir().unwrap();
+        let agent = ClineAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        // Rules-only spec does not enter the script-writing branch, so it
+        // must still install on Windows.
+        agent
+            .install(&scope, &rules_spec("alpha", "rule body"))
+            .unwrap();
+        assert!(dir.path().join(".clinerules/alpha.md").exists());
+    }
+
+    #[cfg(not(windows))]
     #[test]
     fn install_hook_default_quotes_program_arguments() {
         let dir = tempdir().unwrap();
@@ -862,6 +659,7 @@ mod tests {
         assert!(body.contains("\n'my hook' 'repo path' 'semi;$(not run)' '`tick`' 'quote'\\''s'\n"));
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn install_hook_with_custom_script_body() {
         let dir = tempdir().unwrap();
@@ -879,6 +677,7 @@ mod tests {
         assert!(body.contains("echo started"));
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn install_hook_rejects_unsafe_custom_event_filename() {
         let dir = tempdir().unwrap();
@@ -905,6 +704,7 @@ mod tests {
         assert!(!dir.path().join(".clinerules/hooks").exists());
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn plan_hook_rejects_unsafe_custom_event_filename() {
         let dir = tempdir().unwrap();
@@ -919,6 +719,7 @@ mod tests {
         assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn install_hook_records_ownership() {
         let dir = tempdir().unwrap();
@@ -938,6 +739,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn install_hook_collision_with_other_owner_refused() {
         let dir = tempdir().unwrap();
@@ -955,6 +757,7 @@ mod tests {
         assert!(body.contains("a\n"));
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn install_idempotent_for_hook() {
         let dir = tempdir().unwrap();
@@ -966,6 +769,7 @@ mod tests {
         assert!(r2.already_installed);
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn install_typescript_script_rejected() {
         let dir = tempdir().unwrap();
@@ -989,6 +793,7 @@ mod tests {
         assert!(!dir.path().join(".clinerules/hooks").exists());
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn install_with_rules_and_script_creates_both() {
         let dir = tempdir().unwrap();
@@ -1005,6 +810,7 @@ mod tests {
         assert!(dir.path().join(".clinerules/hooks/PreToolUse").exists());
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn uninstall_removes_rules_and_owned_hooks() {
         let dir = tempdir().unwrap();
@@ -1024,6 +830,7 @@ mod tests {
         assert!(!dir.path().join(".clinerules").exists());
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn uninstall_keeps_other_consumers_hooks() {
         let dir = tempdir().unwrap();
@@ -1111,56 +918,5 @@ mod tests {
                 ..
             }
         ));
-    }
-}
-
-#[cfg(test)]
-mod instruction_tests {
-    use super::*;
-    use crate::integration::InstructionSurface;
-    use crate::spec::InstructionPlacement;
-    use tempfile::tempdir;
-
-    fn instruction_spec(name: &str, owner: &str) -> InstructionSpec {
-        InstructionSpec::builder(name)
-            .owner(owner)
-            .placement(InstructionPlacement::StandaloneFile)
-            .body("# Test instruction\n")
-            .build()
-    }
-
-    #[test]
-    fn instruction_writes_to_rules_dir() {
-        let dir = tempdir().unwrap();
-        let agent = ClineAgent::new();
-        let scope = Scope::Local(dir.path().to_path_buf());
-        agent
-            .install_instruction(&scope, &instruction_spec("test-rule", "myapp"))
-            .unwrap();
-        assert!(dir.path().join(".clinerules/test-rule.md").exists());
-    }
-
-    #[test]
-    fn instruction_uninstall_removes_file() {
-        let dir = tempdir().unwrap();
-        let agent = ClineAgent::new();
-        let scope = Scope::Local(dir.path().to_path_buf());
-        agent
-            .install_instruction(&scope, &instruction_spec("test-rule", "myapp"))
-            .unwrap();
-        agent
-            .uninstall_instruction(&scope, "test-rule", "myapp")
-            .unwrap();
-        assert!(!dir.path().join(".clinerules/test-rule.md").exists());
-    }
-
-    #[test]
-    fn instruction_rejects_global_scope() {
-        let agent = ClineAgent::new();
-        let spec = instruction_spec("test-rule", "myapp");
-        let plan = agent
-            .plan_install_instruction(&Scope::Global, &spec)
-            .unwrap();
-        assert!(matches!(plan.status, crate::plan::PlanStatus::Refused));
     }
 }

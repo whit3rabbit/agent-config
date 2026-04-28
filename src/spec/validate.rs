@@ -10,11 +10,12 @@ pub(super) enum IdentifierKind {
     OwnerTag,
     McpName,
     SkillName,
+    InstructionName,
 }
 
-/// Shared identifier validator. Hook tags, owner tags, and MCP names allow
-/// ASCII alphanumerics, `_`, and `-`; skill names follow the stricter Agent
-/// Skills kebab-case contract.
+/// Shared identifier validator. Hook tags, owner tags, MCP names, and
+/// instruction names allow ASCII alphanumerics, `_`, and `-`; skill names
+/// follow the stricter Agent Skills kebab-case contract.
 pub(super) fn validate_identifier(
     value: &str,
     kind: IdentifierKind,
@@ -35,6 +36,10 @@ pub(super) fn validate_identifier(
         IdentifierKind::SkillName => (
             "skill name must not be empty",
             "skill name must be lowercase ASCII letters/digits with single '-' separators",
+        ),
+        IdentifierKind::InstructionName => (
+            "instruction name must not be empty",
+            "instruction name may only contain ASCII letters, digits, '_' and '-'",
         ),
     };
     if value.is_empty() {

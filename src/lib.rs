@@ -125,6 +125,7 @@
 //! compile-time usage.
 
 #![warn(missing_docs)]
+#![warn(clippy::missing_errors_doc)]
 #![forbid(unsafe_code)]
 #![cfg_attr(test, allow(unused_must_use))]
 
@@ -133,6 +134,7 @@ pub mod integration;
 pub mod paths;
 pub mod plan;
 pub mod registry;
+pub mod schema;
 pub mod scope;
 pub mod spec;
 pub mod status;

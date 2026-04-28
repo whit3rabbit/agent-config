@@ -134,15 +134,42 @@ pub fn skill_by_id(id: &str) -> Option<Box<dyn SkillSurface>> {
 /// Returns a fresh `Box` per [`InstructionSurface`]-capable agent. Adding a
 /// new instruction integration means adding one line here.
 ///
-/// Currently: Claude, Cline, Roo, Kilo Code, Windsurf.
+/// Coverage: every prompt-capable harness in the registry. Three placement
+/// shapes are in use (see [`crate::spec::InstructionPlacement`]):
+///
+/// - **`ReferencedFile`** — Claude (writes `~/.claude/<NAME>.md` plus an
+///   `@<NAME>.md` include in `CLAUDE.md`).
+/// - **`StandaloneFile`** — Cline, Roo, Kilo Code, Windsurf, Antigravity
+///   (writes one file per instruction into the harness's per-tag rules
+///   directory; no host include needed).
+/// - **`InlineBlock`** — Codex, Gemini, Copilot, CodeBuddy, Amp, Forge,
+///   Qoder, Qwen, Junie, Trae, OpenClaw, Hermes (injects the body as a
+///   tagged HTML-comment fence inside the harness's existing memory file).
 pub fn instruction_capable() -> Vec<Box<dyn InstructionSurface>> {
-    use crate::agents::{ClaudeAgent, ClineAgent, KiloCodeAgent, RooAgent, WindsurfAgent};
+    use crate::agents::{
+        AmpAgent, AntigravityAgent, ClaudeAgent, ClineAgent, CodeBuddyAgent, CodexAgent,
+        CopilotAgent, ForgeAgent, GeminiAgent, HermesAgent, JunieAgent, KiloCodeAgent,
+        OpenClawAgent, QoderCliAgent, QwenAgent, RooAgent, TraeAgent, WindsurfAgent,
+    };
     vec![
         Box::new(ClaudeAgent::new()),
         Box::new(ClineAgent::new()),
         Box::new(RooAgent::new()),
         Box::new(KiloCodeAgent::new()),
         Box::new(WindsurfAgent::new()),
+        Box::new(AntigravityAgent::new()),
+        Box::new(GeminiAgent::new()),
+        Box::new(CodexAgent::new()),
+        Box::new(CopilotAgent::new()),
+        Box::new(CodeBuddyAgent::new()),
+        Box::new(AmpAgent::new()),
+        Box::new(ForgeAgent::new()),
+        Box::new(QoderCliAgent::new()),
+        Box::new(QwenAgent::new()),
+        Box::new(JunieAgent::new()),
+        Box::new(TraeAgent::new()),
+        Box::new(OpenClawAgent::new()),
+        Box::new(HermesAgent::new()),
     ]
 }
 

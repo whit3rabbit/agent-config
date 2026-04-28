@@ -16,16 +16,18 @@ ID: `<id>` — `agent_config::by_id("<id>")`
 
 ## Surfaces
 
-| Surface | Scope            | Notes                                  |
-| ------- | ---------------- | -------------------------------------- |
-| Hooks   | Global + Local   | JSON envelope under `hooks.<event>`    |
-| Prompt  | Global + Local   | `<id>` rules markdown                  |
-| MCP     | Global + Local   | `mcpServers` JSON object map           |
-| Skills  | Global + Local   | `SKILL.md` directories                 |
+| Surface       | Scope            | Notes                                          |
+| ------------- | ---------------- | ---------------------------------------------- |
+| Hooks         | Global + Local   | JSON envelope under `hooks.<event>`            |
+| Prompt        | Global + Local   | `<id>` rules markdown                          |
+| MCP           | Global + Local   | `mcpServers` JSON object map                   |
+| Skills        | Global + Local   | `SKILL.md` directories                         |
+| Instructions  | Global + Local   | `InstructionPlacement::<picked>` (see below)   |
 
 Every implemented surface exposes `status`, `validate`, `plan_install`,
-`plan_uninstall`, `install`, and `uninstall` (plus the `mcp_*` / `skill_*`
-variants for those surfaces). The plan methods are side-effect-free.
+`plan_uninstall`, `install`, and `uninstall` (plus the `mcp_*`, `skill_*`, or
+`instruction_*` variants for those surfaces). The plan methods are
+side-effect-free.
 
 <!-- DELETE THIS WHOLE SECTION IF YOUR HARNESS HAS NO HOOK SURFACE -->
 ## Hooks
@@ -165,6 +167,41 @@ description: When to activate this skill.
 ## Goal
 ...
 ```
+
+<!-- DELETE THIS WHOLE SECTION IF YOUR HARNESS HAS NO PROMPT/RULES SURFACE -->
+## Instructions
+
+Standalone instruction files installed via `InstructionSurface`. Pick exactly
+one default placement based on the harness's memory model — the surface
+supports all three modes per [`InstructionPlacement`](../../src/spec/instruction.rs):
+
+- **`ReferencedFile`** — write `<config_dir>/<NAME>.md` and add `@<NAME>.md`
+  inside a managed fenced block in the harness's memory file. Pick this if
+  the harness documents an `@import` syntax (Claude does; most others don't).
+- **`InlineBlock`** — inject the body as a tagged HTML-comment fenced block
+  inside the harness's existing memory file. The natural default for
+  single-memory-file harnesses without import support.
+- **`StandaloneFile`** — write `<rules-dir>/<NAME>.md` only, no host edit.
+  The natural default for harnesses whose memory model is a per-tag rules
+  directory (e.g. `.clinerules/`, `.roo/rules/`, `.kilocode/rules/`).
+
+### User scope (`Scope::Global`)  <!-- DELETE if your harness is local-only -->
+
+| | |
+| --- | --- |
+| Host file | `~/.<id>/<MEMORY>.md` |
+| Mechanism | Tagged HTML-comment fence (or `@<name>.md` include if `ReferencedFile`) |
+| Ledger | `~/.<id>/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::<picked>` |
+
+### Project scope (`Scope::Local(<root>)`)
+
+| | |
+| --- | --- |
+| Host file or instruction file | `<root>/<MEMORY>.md` (InlineBlock / ReferencedFile) **or** `<root>/.<id>/rules/<name>.md` (StandaloneFile) |
+| Mechanism | Tagged HTML-comment fence, `@`-include, or per-file rule |
+| Ledger | `<root>/.<id>/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::<picked>` |
 
 ## References
 

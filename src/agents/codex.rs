@@ -28,17 +28,19 @@ use toml_edit::{value, Array, InlineTable, Table};
 
 use crate::agents::planning as agent_planning;
 use crate::error::AgentConfigError;
-use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
+use crate::integration::{
+    InstallReport, InstructionSurface, Integration, McpSurface, SkillSurface, UninstallReport,
+};
 use crate::paths;
 use crate::plan::{
     has_refusal, InstallPlan, PlanTarget, PlannedChange, RefusalReason, UninstallPlan,
 };
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{Event, HookSpec, Matcher, McpSpec, McpTransport, SkillSpec};
+use crate::spec::{Event, HookSpec, InstructionSpec, Matcher, McpSpec, McpTransport, SkillSpec};
 use crate::status::StatusReport;
 use crate::util::{
-    file_lock, fs_atomic, json_patch, md_block, ownership, planning, safe_fs, skills_dir,
-    toml_patch,
+    file_lock, fs_atomic, instructions_dir, json_patch, md_block, ownership, planning, safe_fs,
+    skills_dir, toml_patch,
 };
 
 /// Codex CLI.
@@ -80,6 +82,15 @@ impl CodexAgent {
         Ok(match scope {
             Scope::Global => paths::home_dir()?.join(".agents").join("skills"),
             Scope::Local(p) => p.join(".agents").join("skills"),
+        })
+    }
+
+    /// Directory holding the instruction ownership ledger.
+    /// Global: `$CODEX_HOME` (defaults to `~/.codex`). Local: `<root>/.codex`.
+    fn instruction_config_dir(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
+        Ok(match scope {
+            Scope::Global => paths::codex_home()?,
+            Scope::Local(p) => p.join(".codex"),
         })
     }
 }
@@ -353,6 +364,7 @@ impl McpSurface for CodexAgent {
         };
         let in_config = toml_patch::contains_named_table(&doc, &["mcp_servers"], &spec.name);
         let prior_owner = ownership::owner_of(&ledger, &spec.name)?;
+        let adopting = spec.adopt_unowned && in_config && prior_owner.is_none();
         match (prior_owner.as_deref(), in_config) {
             (Some(owner), _) if owner != spec.owner_tag => {
                 changes.push(PlannedChange::Refuse {
@@ -361,7 +373,7 @@ impl McpSurface for CodexAgent {
                 });
                 return Ok(InstallPlan::from_changes(target, changes));
             }
-            (None, true) => {
+            (None, true) if !spec.adopt_unowned => {
                 changes.push(PlannedChange::Refuse {
                     path: Some(cfg),
                     reason: RefusalReason::UserInstalledEntry,
@@ -379,7 +391,7 @@ impl McpSurface for CodexAgent {
             let bytes = toml_patch::to_string(&doc);
             planning::plan_write_file(&mut changes, &cfg, &bytes, true)?;
         }
-        if !has_refusal(&changes) && (changed || owner_changed) {
+        if !has_refusal(&changes) && (changed || owner_changed || adopting) {
             planning::plan_write_ledger(&mut changes, &ledger, &spec.name, &spec.owner_tag);
         }
         if changes.is_empty() {
@@ -484,19 +496,21 @@ impl McpSurface for CodexAgent {
         file_lock::with_lock(&cfg, || {
             let mut doc = toml_patch::read_or_empty(&cfg)?;
             let in_config = toml_patch::contains_named_table(&doc, &["mcp_servers"], &spec.name);
-            ownership::require_owner(
+            let prior_owner = ownership::owner_of(&ledger, &spec.name)?;
+            let adopting = spec.adopt_unowned && in_config && prior_owner.is_none();
+            ownership::require_owner_with_policy(
                 &ledger,
                 &spec.name,
                 &spec.owner_tag,
                 "mcp server",
                 in_config,
+                spec.adopt_unowned,
             )?;
 
             let table = build_mcp_table(spec);
             let changed =
                 toml_patch::upsert_named_table(&mut doc, &["mcp_servers"], &spec.name, table)?;
 
-            let prior_owner = ownership::owner_of(&ledger, &spec.name)?;
             let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
 
             let written_bytes: Option<Vec<u8>> = if changed {
@@ -515,14 +529,14 @@ impl McpSurface for CodexAgent {
                 None
             };
 
-            if changed || owner_changed {
+            if changed || owner_changed || adopting {
                 let hash = match written_bytes.as_deref() {
                     Some(b) => Some(ownership::content_hash(b)),
                     None => ownership::file_content_hash(&cfg)?,
                 };
                 ownership::record_install(&ledger, &spec.name, &spec.owner_tag, hash.as_deref())?;
             }
-            if !changed && !owner_changed {
+            if !changed && !owner_changed && !adopting {
                 report.already_installed = true;
             }
             Ok::<(), AgentConfigError>(())
@@ -665,6 +679,82 @@ impl SkillSurface for CodexAgent {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
+    }
+}
+
+impl CodexAgent {
+    fn inline_layout(
+        &self,
+        scope: &Scope,
+    ) -> Result<instructions_dir::InlineLayout, AgentConfigError> {
+        Ok(instructions_dir::InlineLayout {
+            config_dir: Self::instruction_config_dir(scope)?,
+            host_file: Self::agents_path(scope)?,
+        })
+    }
+}
+
+impl InstructionSurface for CodexAgent {
+    fn id(&self) -> &'static str {
+        "codex"
+    }
+
+    fn supported_instruction_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Global, ScopeKind::Local]
+    }
+
+    fn instruction_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, AgentConfigError> {
+        instructions_dir::inline_status(self.inline_layout(scope)?, name, expected_owner)
+    }
+
+    fn plan_install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
+        instructions_dir::inline_plan_install(
+            InstructionSurface::id(self),
+            scope,
+            self.inline_layout(scope),
+            spec,
+        )
+    }
+
+    fn plan_uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, AgentConfigError> {
+        instructions_dir::inline_plan_uninstall(
+            InstructionSurface::id(self),
+            scope,
+            self.inline_layout(scope),
+            name,
+            owner_tag,
+        )
+    }
+
+    fn install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
+        instructions_dir::inline_install(scope, self.inline_layout(scope)?, spec)
+    }
+
+    fn uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, AgentConfigError> {
+        instructions_dir::inline_uninstall(scope, self.inline_layout(scope)?, name, owner_tag)
     }
 }
 

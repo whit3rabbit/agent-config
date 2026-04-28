@@ -109,7 +109,7 @@ impl Integration for PromptAgent {
         spec: &HookSpec,
     ) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
-        let root = self.require_local(spec_scope)?;
+        let _ = self.require_local(spec_scope)?;
         let rules = spec
             .rules
             .as_ref()
@@ -117,13 +117,13 @@ impl Integration for PromptAgent {
                 id: self.id,
                 field: "rules",
             })?;
-        rules_dir::install(root, self.rules_dir, &spec.tag, &rules.content)
+        rules_dir::install(spec_scope, self.rules_dir, &spec.tag, &rules.content)
     }
 
     fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
-        let root = self.require_local(scope)?;
-        rules_dir::uninstall(root, self.rules_dir, tag)
+        let _ = self.require_local(scope)?;
+        rules_dir::uninstall(scope, self.rules_dir, tag)
     }
 }
 

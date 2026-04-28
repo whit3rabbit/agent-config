@@ -16,6 +16,21 @@ back to other project instruction files. This crate writes `.hermes.md`.
 `agent-config` inserts a fenced markdown block keyed by the consumer tag. Global
 prompt install is unsupported, and this crate does not modify `SOUL.md`.
 
+## Instructions
+
+Standalone instruction files installed via `InstructionSurface`. Uses
+`InstructionPlacement::InlineBlock` (project-local only) because Hermes
+Agent's memory file does not expose a documented `@import` syntax; the body
+is injected as a tagged HTML-comment fenced block in the existing memory
+file.
+
+| | |
+| --- | --- |
+| Host file | `<root>/.hermes.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `<root>/.hermes/.agent-config-instructions.json` (new directory; created on demand to avoid cluttering project root) |
+| Placement | `InstructionPlacement::InlineBlock` |
+
 ## MCP
 
 Hermes reads MCP server config from `~/.hermes/config.yaml` under

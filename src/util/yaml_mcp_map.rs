@@ -62,12 +62,15 @@ pub(crate) fn install(
 
         let mut root = read_or_empty(config_path)?;
         let in_config = json_patch::contains_named(&root, servers_path, &spec.name);
-        ownership::require_owner(
+        let prior_owner = ownership::owner_of(ledger_path, &spec.name)?;
+        let adopting = spec.adopt_unowned && in_config && prior_owner.is_none();
+        ownership::require_owner_with_policy(
             ledger_path,
             &spec.name,
             &spec.owner_tag,
             "mcp server",
             in_config,
+            spec.adopt_unowned,
         )?;
 
         let value = build_server(spec);
@@ -75,7 +78,6 @@ pub(crate) fn install(
         let changed =
             json_patch::upsert_named_object_entry(&mut root, servers_path, &spec.name, value)?;
 
-        let prior_owner = ownership::owner_of(ledger_path, &spec.name)?;
         let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
 
         if changed {
@@ -91,7 +93,7 @@ pub(crate) fn install(
             }
         }
 
-        if changed || owner_changed {
+        if changed || owner_changed || adopting {
             ownership::record_install(
                 ledger_path,
                 &spec.name,
@@ -100,7 +102,7 @@ pub(crate) fn install(
             )?;
         }
 
-        if !changed && !owner_changed {
+        if !changed && !owner_changed && !adopting {
             report.already_installed = true;
         }
         Ok(report)
@@ -131,6 +133,7 @@ pub(crate) fn plan_install(
     let in_config = json_patch::contains_named(&root, servers_path, &spec.name);
     let prior_owner = ownership::owner_of(ledger_path, &spec.name)?;
 
+    let adopting = spec.adopt_unowned && in_config && prior_owner.is_none();
     match (prior_owner.as_deref(), in_config) {
         (Some(owner), _) if owner != spec.owner_tag => {
             changes.push(PlannedChange::Refuse {
@@ -139,7 +142,7 @@ pub(crate) fn plan_install(
             });
             return Ok(changes);
         }
-        (None, true) => {
+        (None, true) if !spec.adopt_unowned => {
             changes.push(PlannedChange::Refuse {
                 path: Some(config_path.to_path_buf()),
                 reason: RefusalReason::UserInstalledEntry,
@@ -159,7 +162,7 @@ pub(crate) fn plan_install(
         planning::plan_write_file(&mut changes, config_path, &bytes, true)?;
     }
 
-    if !has_refusal(&changes) && (changed || owner_changed) {
+    if !has_refusal(&changes) && (changed || owner_changed || adopting) {
         planning::plan_write_ledger(&mut changes, ledger_path, &spec.name, &spec.owner_tag);
     }
 

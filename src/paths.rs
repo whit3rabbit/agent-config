@@ -11,6 +11,11 @@ use crate::error::AgentConfigError;
 
 /// Returns the user's home directory or a [`AgentConfigError::PathResolution`] if
 /// the platform doesn't expose one.
+///
+/// # Errors
+///
+/// Returns [`AgentConfigError::PathResolution`] when neither `$HOME`
+/// (`%USERPROFILE%` on Windows) nor [`dirs::home_dir`] yields a value.
 pub fn home_dir() -> Result<PathBuf, AgentConfigError> {
     #[cfg(windows)]
     if let Some(home) = env_path("USERPROFILE") {
@@ -32,6 +37,12 @@ pub fn home_dir() -> Result<PathBuf, AgentConfigError> {
 /// On macOS this is `~/Library/Application Support`. OpenCode, however, uses
 /// `~/.config/opencode` even on macOS, so callers that need OpenCode's path
 /// should prefer [`opencode_plugins_dir`] which encodes that quirk.
+///
+/// # Errors
+///
+/// Returns [`AgentConfigError::PathResolution`] when neither
+/// `$XDG_CONFIG_HOME` (`%APPDATA%` on Windows) nor [`dirs::config_dir`]
+/// yields a value.
 pub fn config_dir() -> Result<PathBuf, AgentConfigError> {
     if let Some(config) = env_path("XDG_CONFIG_HOME") {
         return Ok(config);
@@ -54,21 +65,38 @@ fn env_path(key: &str) -> Option<PathBuf> {
 }
 
 /// `~/.claude` (all platforms).
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`].
 pub fn claude_home() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".claude"))
 }
 
 /// `~/.cursor` (all platforms).
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`].
 pub fn cursor_home() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".cursor"))
 }
 
 /// `~/.gemini` (all platforms).
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`].
 pub fn gemini_home() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".gemini"))
 }
 
 /// `$CODEX_HOME` if set, else `~/.codex`.
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`] when
+/// `CODEX_HOME` is unset and the home directory cannot be resolved.
 pub fn codex_home() -> Result<PathBuf, AgentConfigError> {
     if let Some(h) = std::env::var_os("CODEX_HOME") {
         return Ok(PathBuf::from(h));
@@ -77,23 +105,39 @@ pub fn codex_home() -> Result<PathBuf, AgentConfigError> {
 }
 
 /// `~/.openclaw` (all platforms).
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`].
 pub fn openclaw_home() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".openclaw"))
 }
 
 /// `~/.hermes` (all platforms).
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`].
 pub fn hermes_home() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".hermes"))
 }
 
 /// OpenCode forces its plugin directory under `~/.config/opencode/plugins`
 /// regardless of platform conventions. Returns that path.
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`].
 pub fn opencode_plugins_dir() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".config").join("opencode").join("plugins"))
 }
 
 /// `~/.config/opencode/opencode.json` — OpenCode's main config, where the
 /// object-based `mcp` map lives.
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`].
 pub fn opencode_config_file() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?
         .join(".config")
@@ -102,22 +146,40 @@ pub fn opencode_config_file() -> Result<PathBuf, AgentConfigError> {
 }
 
 /// `~/.config/kilo/kilo.jsonc` — Kilo Code's global JSONC config.
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`].
 pub fn kilo_config_file() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".config").join("kilo").join("kilo.jsonc"))
 }
 
 /// `~/.claude.json` — Claude Code's user/local MCP config file.
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`].
 pub fn claude_mcp_user_file() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".claude.json"))
 }
 
 /// `~/.cursor/mcp.json` — Cursor's MCP user-config file.
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`cursor_home`].
 pub fn cursor_mcp_user_file() -> Result<PathBuf, AgentConfigError> {
     Ok(cursor_home()?.join("mcp.json"))
 }
 
 /// VS Code globalStorage directory for an extension in the stable `Code`
-/// profile.
+/// profile. `extension_id` is appended verbatim and is not validated; pass the
+/// publisher.name string used in the VS Code marketplace
+/// (e.g. `"saoudrizwan.claude-dev"`).
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`config_dir`].
 pub fn vscode_global_storage(extension_id: &str) -> Result<PathBuf, AgentConfigError> {
     Ok(config_dir()?
         .join("Code")
@@ -127,6 +189,10 @@ pub fn vscode_global_storage(extension_id: &str) -> Result<PathBuf, AgentConfigE
 }
 
 /// Cline's global MCP settings file inside VS Code globalStorage.
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`vscode_global_storage`].
 pub fn cline_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
     Ok(vscode_global_storage("saoudrizwan.claude-dev")?
         .join("settings")
@@ -134,6 +200,10 @@ pub fn cline_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
 }
 
 /// Roo Code's global MCP settings file inside VS Code globalStorage.
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`vscode_global_storage`].
 pub fn roo_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
     Ok(vscode_global_storage("rooveterinaryinc.roo-cline")?
         .join("settings")
@@ -141,11 +211,19 @@ pub fn roo_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
 }
 
 /// `~/.gemini/antigravity/mcp_config.json` — Antigravity's global MCP config.
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`gemini_home`].
 pub fn antigravity_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
     Ok(gemini_home()?.join("antigravity").join("mcp_config.json"))
 }
 
 /// `~/.codeium/windsurf/mcp_config.json` — Windsurf's global MCP config.
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`].
 pub fn windsurf_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?
         .join(".codeium")
@@ -156,6 +234,17 @@ pub fn windsurf_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    // Serializes env-var mutations across the tests below. CODEX_HOME is the
+    // only var read by these tests, but other tests in the suite that share
+    // the process can mutate HOME / USERPROFILE / APPDATA, so any test that
+    // mutates env vars must hold this mutex to avoid cross-test interference
+    // under parallel execution.
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     #[test]
     fn home_dir_is_resolvable_in_tests() {
@@ -165,11 +254,17 @@ mod tests {
 
     #[test]
     fn codex_home_respects_env_var() {
-        // Mutating env vars races with parallel tests; CODEX_HOME has no other
-        // reader in this crate, so the race is benign here.
-        std::env::set_var("CODEX_HOME", "/tmp/codex-test-home");
-        assert_eq!(codex_home().unwrap(), PathBuf::from("/tmp/codex-test-home"));
-        std::env::remove_var("CODEX_HOME");
+        let _guard = env_lock().lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_path_buf();
+        let prev = std::env::var_os("CODEX_HOME");
+        std::env::set_var("CODEX_HOME", &path);
+        let resolved = codex_home().unwrap();
+        match prev {
+            Some(v) => std::env::set_var("CODEX_HOME", v),
+            None => std::env::remove_var("CODEX_HOME"),
+        }
+        assert_eq!(resolved, path);
     }
 
     #[test]

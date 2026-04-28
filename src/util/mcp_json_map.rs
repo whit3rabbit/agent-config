@@ -86,12 +86,15 @@ pub(crate) fn install(
 
         let mut root = read_or_empty(config_path, format)?;
         let in_config = json_patch::contains_named(&root, servers_path, &spec.name);
-        ownership::require_owner(
+        let prior_owner = ownership::owner_of(ledger_path, &spec.name)?;
+        let adopting = spec.adopt_unowned && in_config && prior_owner.is_none();
+        ownership::require_owner_with_policy(
             ledger_path,
             &spec.name,
             &spec.owner_tag,
             "mcp server",
             in_config,
+            spec.adopt_unowned,
         )?;
 
         let value = build_server(spec);
@@ -104,7 +107,6 @@ pub(crate) fn install(
         let changed =
             json_patch::upsert_named_object_entry(&mut root, servers_path, &spec.name, value)?;
 
-        let prior_owner = ownership::owner_of(ledger_path, &spec.name)?;
         let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
 
         if changed {
@@ -120,7 +122,9 @@ pub(crate) fn install(
             }
         }
 
-        if changed || owner_changed {
+        // `adopting` forces the ledger record even when content is byte-identical:
+        // the whole point of adoption is to write the missing ledger entry.
+        if changed || owner_changed || adopting {
             ownership::record_install(
                 ledger_path,
                 &spec.name,
@@ -129,7 +133,7 @@ pub(crate) fn install(
             )?;
         }
 
-        if !changed && !owner_changed {
+        if !changed && !owner_changed && !adopting {
             report.already_installed = true;
         }
         Ok(report)
@@ -161,6 +165,7 @@ pub(crate) fn plan_install(
     let in_config = json_patch::contains_named(&root, servers_path, &spec.name);
     let prior_owner = ownership::owner_of(ledger_path, &spec.name)?;
 
+    let adopting = spec.adopt_unowned && in_config && prior_owner.is_none();
     match (prior_owner.as_deref(), in_config) {
         (Some(owner), _) if owner != spec.owner_tag => {
             changes.push(PlannedChange::Refuse {
@@ -169,7 +174,7 @@ pub(crate) fn plan_install(
             });
             return Ok(changes);
         }
-        (None, true) => {
+        (None, true) if !spec.adopt_unowned => {
             changes.push(PlannedChange::Refuse {
                 path: Some(config_path.to_path_buf()),
                 reason: RefusalReason::UserInstalledEntry,
@@ -193,7 +198,7 @@ pub(crate) fn plan_install(
         planning::plan_write_file(&mut changes, config_path, &bytes, true)?;
     }
 
-    if !has_refusal(&changes) && (changed || owner_changed) {
+    if !has_refusal(&changes) && (changed || owner_changed || adopting) {
         planning::plan_write_ledger(&mut changes, ledger_path, &spec.name, &spec.owner_tag);
     }
 
@@ -597,6 +602,119 @@ mod tests {
         assert!(matches!(
             err,
             AgentConfigError::NotOwnedByCaller { actual: None, .. }
+        ));
+    }
+
+    #[test]
+    fn install_with_adopt_unowned_takes_over_existing_entry() {
+        // Simulates the crash window: a previous install wrote the harness
+        // config but never recorded the ledger entry. With `.adopt_unowned(true)`
+        // the next install records ownership and the existing config stays put
+        // (or is updated to the new spec).
+        let dir = tempdir().unwrap();
+        let (cfg, led) = paths(dir.path());
+
+        // Write the harness config exactly as a prior install would have, but
+        // leave the ledger empty.
+        let prior_value = mcp_servers_value(&stdio_spec("github", "myapp"));
+        let mut root = serde_json::Map::new();
+        let mut servers = serde_json::Map::new();
+        servers.insert("github".into(), prior_value);
+        root.insert("mcpServers".into(), Value::Object(servers));
+        std::fs::write(
+            &cfg,
+            serde_json::to_vec_pretty(&Value::Object(root)).unwrap(),
+        )
+        .unwrap();
+        assert!(!led.exists());
+
+        // Plain install must refuse — config present, ledger missing.
+        let plain_err = install(
+            &cfg,
+            &led,
+            &stdio_spec("github", "myapp"),
+            &["mcpServers"],
+            mcp_servers_value,
+            ConfigFormat::Json,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            plain_err,
+            AgentConfigError::NotOwnedByCaller { actual: None, .. }
+        ));
+
+        // Adoption succeeds: ledger entry written, owner recorded.
+        let adopt_spec = McpSpec::builder("github")
+            .owner("myapp")
+            .stdio("npx", ["-y", "@example/server"])
+            .env("FOO", "bar")
+            .adopt_unowned(true)
+            .build();
+        install(
+            &cfg,
+            &led,
+            &adopt_spec,
+            &["mcpServers"],
+            mcp_servers_value,
+            ConfigFormat::Json,
+        )
+        .unwrap();
+
+        assert_eq!(
+            ownership::owner_of(&led, "github").unwrap().as_deref(),
+            Some("myapp")
+        );
+
+        // Subsequent normal install (no adopt flag) is now idempotent.
+        let r = install(
+            &cfg,
+            &led,
+            &stdio_spec("github", "myapp"),
+            &["mcpServers"],
+            mcp_servers_value,
+            ConfigFormat::Json,
+        )
+        .unwrap();
+        assert!(r.already_installed);
+    }
+
+    #[test]
+    fn install_with_adopt_unowned_still_refuses_owner_mismatch() {
+        let dir = tempdir().unwrap();
+        let (cfg, led) = paths(dir.path());
+
+        // Pre-populate ledger with a different owner.
+        install(
+            &cfg,
+            &led,
+            &stdio_spec("github", "other-owner"),
+            &["mcpServers"],
+            mcp_servers_value,
+            ConfigFormat::Json,
+        )
+        .unwrap();
+
+        let adopt_spec = McpSpec::builder("github")
+            .owner("myapp")
+            .stdio("npx", ["-y", "@example/server"])
+            .env("FOO", "bar")
+            .adopt_unowned(true)
+            .build();
+        let err = install(
+            &cfg,
+            &led,
+            &adopt_spec,
+            &["mcpServers"],
+            mcp_servers_value,
+            ConfigFormat::Json,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            AgentConfigError::NotOwnedByCaller {
+                actual: Some(_),
+                ..
+            }
         ));
     }
 

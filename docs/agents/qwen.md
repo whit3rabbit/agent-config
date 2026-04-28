@@ -22,6 +22,31 @@ shape mirrors Gemini's.
 | Project scope file | `<root>/QWEN.md` |
 | Format | Tagged HTML-comment fence |
 
+## Instructions
+
+Standalone instruction files installed via `InstructionSurface`. Uses
+`InstructionPlacement::InlineBlock` because Qwen Code's memory file does not
+expose a documented `@import` syntax; the body is injected as a tagged
+HTML-comment fenced block in the existing memory file.
+
+### User scope (`Scope::Global`)
+
+| | |
+| --- | --- |
+| Host file | `~/.qwen/QWEN.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `~/.qwen/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
+
+### Project scope (`Scope::Local(<root>)`)
+
+| | |
+| --- | --- |
+| Host file | `<root>/QWEN.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `<root>/.qwen/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
+
 ## MCP servers
 
 | Scope | File |

@@ -2,16 +2,18 @@
 
 //! Public dry-run plan API coverage.
 
-use std::env;
-use std::ffi::OsString;
+mod common;
+
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use agent_config::{
-    all, mcp_by_id, mcp_capable, skill_by_id, skill_capable, Event, HookSpec, Matcher, McpSpec,
+    all, instruction_by_id, instruction_capable, mcp_by_id, mcp_capable, skill_by_id,
+    skill_capable, Event, HookSpec, InstructionPlacement, InstructionSpec, Matcher, McpSpec,
     PlanStatus, PlannedChange, RefusalReason, Scope, ScopeKind, SkillAsset, SkillSpec,
 };
+
+use common::IsolatedGlobalEnv;
 
 fn hook_spec(tag: &str) -> HookSpec {
     HookSpec::builder(tag)
@@ -130,68 +132,6 @@ fn global_mcp_inline_secret_is_allowed_by_default() {
 
     claude.install_mcp(&Scope::Global, &spec).unwrap();
     assert!(env.home_path().join(".claude.json").exists());
-}
-
-static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-
-struct IsolatedGlobalEnv {
-    _lock: MutexGuard<'static, ()>,
-    saved: Vec<(&'static str, Option<OsString>)>,
-    home: tempfile::TempDir,
-}
-
-impl IsolatedGlobalEnv {
-    fn new() -> Self {
-        let lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
-        let home = tempfile::tempdir().unwrap();
-        let appdata = home.path().join("AppData").join("Roaming");
-        let localappdata = home.path().join("AppData").join("Local");
-        let xdg_config = home.path().join(".config");
-        fs::create_dir_all(&appdata).unwrap();
-        fs::create_dir_all(&localappdata).unwrap();
-        fs::create_dir_all(&xdg_config).unwrap();
-
-        let vars = [
-            "HOME",
-            "USERPROFILE",
-            "APPDATA",
-            "LOCALAPPDATA",
-            "XDG_CONFIG_HOME",
-            "CODEX_HOME",
-        ];
-        let saved = vars
-            .into_iter()
-            .map(|key| (key, env::var_os(key)))
-            .collect();
-
-        env::set_var("HOME", home.path());
-        env::set_var("USERPROFILE", home.path());
-        env::set_var("APPDATA", &appdata);
-        env::set_var("LOCALAPPDATA", &localappdata);
-        env::set_var("XDG_CONFIG_HOME", &xdg_config);
-        env::set_var("CODEX_HOME", home.path().join(".codex"));
-
-        Self {
-            _lock: lock,
-            saved,
-            home,
-        }
-    }
-
-    fn home_path(&self) -> &Path {
-        self.home.path()
-    }
-}
-
-impl Drop for IsolatedGlobalEnv {
-    fn drop(&mut self) {
-        for (key, value) in &self.saved {
-            match value {
-                Some(value) => env::set_var(key, value),
-                None => env::remove_var(key),
-            }
-        }
-    }
 }
 
 fn scope_label(kind: ScopeKind) -> &'static str {
@@ -999,4 +939,114 @@ fn local_hook_install_rejects_symlinked_backup_target() {
         .join("plugins")
         .join("symlink-escape.ts.bak")
         .exists());
+}
+
+// -- Instruction surface plan-API coverage ---------------------------------
+
+fn instruction_placement_for(id: &str) -> InstructionPlacement {
+    match id {
+        "claude" => InstructionPlacement::ReferencedFile,
+        "cline" | "roo" | "kilocode" | "windsurf" | "antigravity" => {
+            InstructionPlacement::StandaloneFile
+        }
+        _ => InstructionPlacement::InlineBlock,
+    }
+}
+
+fn instruction_spec(name: &str, owner: &str, placement: InstructionPlacement) -> InstructionSpec {
+    InstructionSpec::builder(name)
+        .owner(owner)
+        .placement(placement)
+        .body("# plan-test\n\nA dry-run instruction body.\n")
+        .try_build()
+        .unwrap()
+}
+
+#[test]
+fn instruction_plan_methods_are_exposed_for_every_capable_agent() {
+    for agent in instruction_capable() {
+        let dir = tempfile::tempdir().unwrap();
+        let scope = temp_scope(&dir);
+        let placement = instruction_placement_for(agent.id());
+        let plan = agent
+            .plan_install_instruction(
+                &scope,
+                &instruction_spec("plan-instr", "plan-app", placement),
+            )
+            .unwrap();
+
+        if agent
+            .supported_instruction_scopes()
+            .contains(&ScopeKind::Local)
+        {
+            assert!(
+                !matches!(plan.status, PlanStatus::Refused),
+                "{} local instruction plan was refused: {:?}",
+                agent.id(),
+                plan.changes
+            );
+        } else {
+            assert!(matches!(plan.status, PlanStatus::Refused), "{}", agent.id());
+            assert!(has_refusal(&plan.changes, RefusalReason::UnsupportedScope));
+        }
+
+        let uninstall = agent
+            .plan_uninstall_instruction(&scope, "plan-instr", "plan-app")
+            .unwrap();
+        if agent
+            .supported_instruction_scopes()
+            .contains(&ScopeKind::Local)
+        {
+            assert!(
+                !matches!(uninstall.status, PlanStatus::Refused),
+                "{} local instruction uninstall plan was refused: {:?}",
+                agent.id(),
+                uninstall.changes
+            );
+        } else {
+            assert!(
+                matches!(uninstall.status, PlanStatus::Refused),
+                "{}",
+                agent.id()
+            );
+            assert!(has_refusal(
+                &uninstall.changes,
+                RefusalReason::UnsupportedScope
+            ));
+        }
+        assert_empty_dir(dir.path());
+    }
+}
+
+#[test]
+fn instruction_plan_install_does_not_mutate_disk() {
+    let dir = tempfile::tempdir().unwrap();
+    let scope = temp_scope(&dir);
+    let agent = instruction_by_id("claude").unwrap();
+    let plan = agent
+        .plan_install_instruction(
+            &scope,
+            &instruction_spec("MYAPP", "myapp", InstructionPlacement::ReferencedFile),
+        )
+        .unwrap();
+    assert!(!plan.changes.is_empty());
+    assert_empty_dir(dir.path());
+}
+
+#[test]
+fn instruction_plan_uninstall_owner_mismatch_refuses() {
+    let dir = tempfile::tempdir().unwrap();
+    let scope = temp_scope(&dir);
+    let agent = instruction_by_id("claude").unwrap();
+    agent
+        .install_instruction(
+            &scope,
+            &instruction_spec("MYAPP", "app-a", InstructionPlacement::ReferencedFile),
+        )
+        .unwrap();
+    let plan = agent
+        .plan_uninstall_instruction(&scope, "MYAPP", "app-b")
+        .unwrap();
+    assert!(matches!(plan.status, PlanStatus::Refused));
+    assert!(has_refusal(&plan.changes, RefusalReason::OwnerMismatch));
 }

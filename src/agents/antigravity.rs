@@ -20,13 +20,15 @@ use std::path::PathBuf;
 
 use crate::agents::planning as agent_planning;
 use crate::error::AgentConfigError;
-use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
+use crate::integration::{
+    InstallReport, InstructionSurface, Integration, McpSurface, SkillSurface, UninstallReport,
+};
 use crate::paths;
 use crate::plan::{InstallPlan, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{HookSpec, McpSpec, SkillSpec};
+use crate::spec::{HookSpec, InstructionSpec, McpSpec, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{mcp_json_object, ownership, rules_dir, skills_dir};
+use crate::util::{instructions_dir, mcp_json_object, ownership, rules_dir, skills_dir};
 
 const RULES_DIR: &str = ".agent/rules";
 
@@ -116,7 +118,7 @@ impl Integration for AntigravityAgent {
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
-        let root = self.project_root(scope)?;
+        let _ = self.project_root(scope)?;
         let rules = spec
             .rules
             .as_ref()
@@ -124,13 +126,13 @@ impl Integration for AntigravityAgent {
                 id: "antigravity",
                 field: "rules",
             })?;
-        rules_dir::install(root, RULES_DIR, &spec.tag, &rules.content)
+        rules_dir::install(scope, RULES_DIR, &spec.tag, &rules.content)
     }
 
     fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
-        let root = self.project_root(scope)?;
-        rules_dir::uninstall(root, RULES_DIR, tag)
+        let _ = self.project_root(scope)?;
+        rules_dir::uninstall(scope, RULES_DIR, tag)
     }
 }
 
@@ -298,6 +300,88 @@ impl SkillSurface for AntigravityAgent {
         HookSpec::validate_tag(owner_tag)?;
         let root = Self::skills_root(scope)?;
         skills_dir::uninstall(&root, name, owner_tag)
+    }
+}
+
+impl AntigravityAgent {
+    fn standalone_layout(
+        &self,
+        scope: &Scope,
+    ) -> Result<instructions_dir::StandaloneLayout, AgentConfigError> {
+        let root = self.project_root(scope)?;
+        Ok(instructions_dir::StandaloneLayout {
+            config_dir: root.join(".agent"),
+            instruction_dir: root.join(RULES_DIR),
+        })
+    }
+}
+
+impl InstructionSurface for AntigravityAgent {
+    fn id(&self) -> &'static str {
+        "antigravity"
+    }
+
+    fn supported_instruction_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Local]
+    }
+
+    fn instruction_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, AgentConfigError> {
+        instructions_dir::standalone_status(self.standalone_layout(scope)?, name, expected_owner)
+    }
+
+    fn plan_install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
+        instructions_dir::standalone_plan_install(
+            InstructionSurface::id(self),
+            scope,
+            self.standalone_layout(scope),
+            spec,
+        )
+    }
+
+    fn plan_uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, AgentConfigError> {
+        instructions_dir::standalone_plan_uninstall(
+            InstructionSurface::id(self),
+            scope,
+            self.standalone_layout(scope),
+            name,
+            owner_tag,
+        )
+    }
+
+    fn install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
+        instructions_dir::standalone_install(scope, self.standalone_layout(scope)?, spec)
+    }
+
+    fn uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, AgentConfigError> {
+        instructions_dir::standalone_uninstall(
+            scope,
+            self.standalone_layout(scope)?,
+            name,
+            owner_tag,
+        )
     }
 }
 

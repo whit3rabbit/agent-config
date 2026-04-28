@@ -21,6 +21,20 @@ ID: `trae` — `agent_config::by_id("trae")`
 Global prompt install is unsupported. Trae also reads `.trae/user_rules.md`;
 this crate writes the project-scoped file only.
 
+## Instructions
+
+Standalone instruction files installed via `InstructionSurface`. Uses
+`InstructionPlacement::InlineBlock` (project-local only) because Trae's
+memory file does not expose a documented `@import` syntax; the body is
+injected as a tagged HTML-comment fenced block in the existing memory file.
+
+| | |
+| --- | --- |
+| Host file | `<root>/.trae/project_rules.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `<root>/.trae/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
+
 ## Skills
 
 | Scope | Path |

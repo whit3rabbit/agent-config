@@ -379,7 +379,10 @@ fn deepest_existing_ancestor(path: &Path) -> Result<PathBuf, AgentConfigError> {
 /// Reject the path if it is a symlink.
 ///
 /// Uses `fs::symlink_metadata` to detect symlinks without following them.
-/// Returns [`AgentConfigError::PathResolution`] if `path` is a symlink.
+/// Returns [`AgentConfigError::PathResolution`] if `path` itself is a symlink.
+/// Does **not** inspect parent components — use
+/// [`reject_symlink_components`] for global writes where the entire path
+/// must be free of symlinks.
 #[allow(dead_code)]
 pub(crate) fn reject_symlink(path: &Path) -> Result<(), AgentConfigError> {
     match fs::symlink_metadata(path) {
@@ -390,6 +393,55 @@ pub(crate) fn reject_symlink(path: &Path) -> Result<(), AgentConfigError> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(AgentConfigError::io(path, e)),
     }
+}
+
+/// Reject `path` if any existing component along the way is a symlink.
+///
+/// Walks the lexically-absolute form of `path` from root toward leaf; for
+/// every existing prefix it calls `fs::symlink_metadata` and returns
+/// [`AgentConfigError::PathResolution`] if that component is a symlink.
+/// Missing tail components are allowed (write_atomic creates them); they
+/// cannot be symlinks because they don't exist yet.
+///
+/// Used for `Scope::Global` writes so a symlinked `~/.claude` or `~/.cursor`
+/// (or any ancestor) cannot redirect writes outside the user's intended
+/// config tree.
+pub(crate) fn reject_symlink_components(path: &Path) -> Result<(), AgentConfigError> {
+    let path_abs = lexical_absolute(path)?;
+    let mut current = PathBuf::new();
+    for component in path_abs.components() {
+        match component {
+            Component::RootDir => {
+                current.push(component.as_os_str());
+            }
+            Component::Prefix(prefix) => {
+                current.push(prefix.as_os_str());
+            }
+            Component::Normal(part) => {
+                current.push(part);
+            }
+            Component::CurDir => continue,
+            Component::ParentDir => {
+                return Err(AgentConfigError::PathResolution(format!(
+                    "refusing to resolve {} containing a parent-directory component",
+                    path.display()
+                )));
+            }
+        }
+
+        match fs::symlink_metadata(&current) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                return Err(AgentConfigError::PathResolution(format!(
+                    "refusing to write through symlink at {}",
+                    current.display()
+                )));
+            }
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => break,
+            Err(e) => return Err(AgentConfigError::io(&current, e)),
+        }
+    }
+    Ok(())
 }
 
 /// Like [`write_atomic`], but first verifies that `path` stays within `root`

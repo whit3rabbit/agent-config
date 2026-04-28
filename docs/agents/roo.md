@@ -37,6 +37,20 @@ writes project-local rules.
 | Format | Standard Markdown |
 | Enable/disable | `"roo-cline.useAgentRules": false` in settings |
 
+## Instructions
+
+Standalone instruction files installed via `InstructionSurface`. Uses
+`InstructionPlacement::StandaloneFile` because Roo Code already has a per-tag
+rules directory; each instruction is one file in that directory, with no host
+include needed.
+
+| | |
+| --- | --- |
+| Instruction file | `<root>/.roo/rules/<name>.md` |
+| Mechanism | One file per instruction — no host file needed |
+| Ledger | `<root>/.roo/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::StandaloneFile` |
+
 ## MCP servers
 
 ### User scope (`Scope::Global`)

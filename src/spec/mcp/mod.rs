@@ -1,12 +1,24 @@
 //! MCP server spec, builder, and transport enum.
-
-use std::collections::BTreeMap;
+//!
+//! Layout: this module is a directory split into `transport.rs` (the
+//! [`McpTransport`] enum, transport-shape validation, and secret-detection
+//! helpers) and `builder.rs` (the fluent [`McpSpecBuilder`]). The flat
+//! [`McpSpec`], [`SecretPolicy`], [`McpTransport`], and [`McpSpecBuilder`]
+//! re-exports below are the public surface; the parent `spec` module
+//! re-exports them again at `crate::spec::*`.
 
 use crate::error::AgentConfigError;
 use crate::scope::{Scope, ScopeKind};
-use fluent_uri::Uri;
 
 use super::validate::{validate_identifier, IdentifierKind};
+
+mod builder;
+mod transport;
+
+pub use builder::McpSpecBuilder;
+pub use transport::McpTransport;
+
+use transport::{is_inline_secret_env_value, is_inline_secret_header_value, validate_transport};
 
 /// Caller-supplied description of an MCP server to register with a harness.
 ///
@@ -40,6 +52,14 @@ pub struct McpSpec {
     /// Policy for inline env values that look secret-bearing when installing
     /// into project-local config files.
     pub secret_policy: SecretPolicy,
+
+    /// When true, an install that finds an entry already present in the
+    /// harness config but absent from the ownership ledger will adopt that
+    /// entry under this spec's `owner_tag` instead of refusing. Use after a
+    /// crash between config write and ledger record (`InstallStatus::PresentUnowned`).
+    /// Default `false`: adoption is opt-in to avoid silently taking over a
+    /// hand-installed entry the user may want to keep separate.
+    pub adopt_unowned: bool,
 }
 
 impl McpSpec {
@@ -51,6 +71,7 @@ impl McpSpec {
             transport: None,
             friendly_name: None,
             secret_policy: SecretPolicy::RefuseInlineSecretsInLocalScope,
+            adopt_unowned: false,
             builder_error: None,
         }
     }
@@ -82,68 +103,41 @@ impl McpSpec {
         Ok(())
     }
 
-    /// Returns the first env key that looks secret-bearing in local scope.
-    pub(crate) fn local_inline_secret_env_key(&self, scope: &Scope) -> Option<&str> {
+    /// Returns the first env var or HTTP/SSE header that looks secret-bearing
+    /// when the install scope is local.
+    pub(crate) fn local_inline_secret_key(&self, scope: &Scope) -> Option<&str> {
         if scope.kind() != ScopeKind::Local {
             return None;
         }
-        let McpTransport::Stdio { env, .. } = &self.transport else {
-            return None;
-        };
-        env.iter()
-            .find(|(key, value)| is_inline_secret_env_value(key, value))
-            .map(|(key, _)| key.as_str())
+        match &self.transport {
+            McpTransport::Stdio { env, .. } => env
+                .iter()
+                .find(|(key, value)| is_inline_secret_env_value(key, value))
+                .map(|(key, _)| key.as_str()),
+            McpTransport::Http { headers, .. } | McpTransport::Sse { headers, .. } => headers
+                .iter()
+                .find(|(key, value)| is_inline_secret_header_value(key, value))
+                .map(|(key, _)| key.as_str()),
+        }
     }
 
-    /// Returns the first env key refused by the current secret policy.
+    /// Returns the first env or header key refused by the current secret policy.
     pub(crate) fn refused_local_inline_secret_key(&self, scope: &Scope) -> Option<&str> {
         if self.secret_policy == SecretPolicy::RefuseInlineSecretsInLocalScope {
-            self.local_inline_secret_env_key(scope)
+            self.local_inline_secret_key(scope)
         } else {
             None
         }
     }
 
-    /// Returns the first env key allowed by explicit override.
+    /// Returns the first env or header key allowed by explicit override.
     pub(crate) fn allowed_local_inline_secret_key(&self, scope: &Scope) -> Option<&str> {
         if self.secret_policy == SecretPolicy::AllowInlineSecretsInLocalScope {
-            self.local_inline_secret_env_key(scope)
+            self.local_inline_secret_key(scope)
         } else {
             None
         }
     }
-}
-
-/// How an MCP server is reached.
-#[derive(Debug, Clone)]
-#[non_exhaustive]
-pub enum McpTransport {
-    /// Local subprocess launched via stdio (most common). The harness spawns
-    /// `command` with `args`, inheriting `env` overrides on top of the harness
-    /// environment.
-    Stdio {
-        /// Executable name or absolute path.
-        command: String,
-        /// Arguments passed to the command.
-        args: Vec<String>,
-        /// Environment variables set when launching the command. `BTreeMap`
-        /// for stable serialization order.
-        env: BTreeMap<String, String>,
-    },
-    /// HTTP endpoint (Cursor and Claude support; many harnesses do not).
-    Http {
-        /// Server URL.
-        url: String,
-        /// Additional headers (e.g. `Authorization`).
-        headers: BTreeMap<String, String>,
-    },
-    /// Server-sent-events endpoint.
-    Sse {
-        /// Server URL.
-        url: String,
-        /// Additional headers (e.g. `Authorization`).
-        headers: BTreeMap<String, String>,
-    },
 }
 
 /// Policy for env values that look secret-bearing in project-local MCP config.
@@ -157,350 +151,6 @@ pub enum SecretPolicy {
     /// Use this only when the caller has made an explicit trust decision about
     /// the target project config.
     AllowInlineSecretsInLocalScope,
-}
-
-/// Builder for [`McpSpec`].
-#[derive(Debug, Clone)]
-pub struct McpSpecBuilder {
-    name: String,
-    owner_tag: Option<String>,
-    transport: Option<McpTransport>,
-    friendly_name: Option<String>,
-    secret_policy: SecretPolicy,
-    builder_error: Option<String>,
-}
-
-impl McpSpecBuilder {
-    /// Set the consumer's owner tag (recorded in the sidecar ownership ledger).
-    pub fn owner(mut self, tag: impl Into<String>) -> Self {
-        self.owner_tag = Some(tag.into());
-        self
-    }
-
-    /// Configure a stdio launcher.
-    pub fn stdio<I, S>(mut self, command: impl Into<String>, args: I) -> Self
-    where
-        I: IntoIterator<Item = S>,
-        S: Into<String>,
-    {
-        self.transport = Some(McpTransport::Stdio {
-            command: command.into(),
-            args: args.into_iter().map(Into::into).collect(),
-            env: BTreeMap::new(),
-        });
-        self
-    }
-
-    /// Configure an HTTP transport.
-    pub fn http(mut self, url: impl Into<String>) -> Self {
-        self.transport = Some(McpTransport::Http {
-            url: url.into(),
-            headers: BTreeMap::new(),
-        });
-        self
-    }
-
-    /// Configure an SSE transport.
-    pub fn sse(mut self, url: impl Into<String>) -> Self {
-        self.transport = Some(McpTransport::Sse {
-            url: url.into(),
-            headers: BTreeMap::new(),
-        });
-        self
-    }
-
-    /// Set or replace one environment variable on a stdio transport.
-    ///
-    /// Calling this before configuring stdio, or after configuring a non-stdio
-    /// transport, records a builder error returned by
-    /// [`try_build`](Self::try_build).
-    pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        match &mut self.transport {
-            Some(McpTransport::Stdio { env, .. }) => {
-                env.insert(key.into(), value.into());
-            }
-            Some(McpTransport::Http { .. }) | Some(McpTransport::Sse { .. }) => {
-                self.record_builder_error("env() can only be used with stdio MCP transports");
-            }
-            None => {
-                self.record_builder_error("env() called before stdio transport was configured");
-            }
-        }
-        self
-    }
-
-    /// Set an env variable to a placeholder that references the host
-    /// environment, e.g. `GITHUB_TOKEN=${GITHUB_TOKEN}`.
-    ///
-    /// Placeholders are not treated as inline secrets by the local-scope
-    /// secret policy because the actual secret value is not written.
-    pub fn env_from_host(mut self, key: impl Into<String>) -> Self {
-        let key = key.into();
-        let placeholder = format!("${{{key}}}");
-        self = self.env(key, placeholder);
-        self
-    }
-
-    /// Set an env variable to a caller-provided placeholder.
-    ///
-    /// This is useful when a harness supports its own placeholder syntax. The
-    /// value is still validated as a normal MCP env value.
-    pub fn env_placeholder(
-        mut self,
-        key: impl Into<String>,
-        placeholder: impl Into<String>,
-    ) -> Self {
-        self = self.env(key, placeholder);
-        self
-    }
-
-    /// Set or replace one header on an HTTP/SSE transport.
-    ///
-    /// Calling this before configuring HTTP/SSE, or after configuring stdio,
-    /// records a builder error returned by [`try_build`](Self::try_build).
-    pub fn header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        match &mut self.transport {
-            Some(McpTransport::Http { headers, .. }) | Some(McpTransport::Sse { headers, .. }) => {
-                headers.insert(key.into(), value.into());
-            }
-            Some(McpTransport::Stdio { .. }) => {
-                self.record_builder_error("header() can only be used with HTTP/SSE MCP transports");
-            }
-            None => {
-                self.record_builder_error(
-                    "header() called before HTTP/SSE transport was configured",
-                );
-            }
-        }
-        self
-    }
-
-    /// Set a human-friendly display name.
-    pub fn friendly_name(mut self, name: impl Into<String>) -> Self {
-        self.friendly_name = Some(name.into());
-        self
-    }
-
-    /// Explicitly allow likely secret env values in project-local MCP configs.
-    ///
-    /// The default policy refuses this because local project config files are
-    /// easy to commit, sync, or share accidentally.
-    pub fn allow_local_inline_secrets(mut self) -> Self {
-        self.secret_policy = SecretPolicy::AllowInlineSecretsInLocalScope;
-        self
-    }
-
-    /// Finalize the spec, panicking on missing or invalid fields.
-    ///
-    /// Convenience wrapper around [`try_build()`](Self::try_build) for tests
-    /// and examples. Production code should prefer [`try_build()`](Self::try_build)
-    /// to propagate errors instead of panicking.
-    ///
-    /// # Panics
-    ///
-    /// Panics if required fields are missing or validation fails.
-    pub fn build(self) -> McpSpec {
-        self.try_build().expect("McpSpec missing required field")
-    }
-
-    /// Finalize the spec, returning [`Result`] on missing or invalid fields.
-    ///
-    /// This is the recommended way to build a spec in production code.
-    /// See [crate-level documentation](crate#production-usage) for a full example.
-    pub fn try_build(self) -> Result<McpSpec, AgentConfigError> {
-        if let Some(error) = self.builder_error {
-            return Err(AgentConfigError::Other(anyhow::anyhow!(error)));
-        }
-        let owner_tag = self.owner_tag.ok_or(AgentConfigError::MissingSpecField {
-            id: "<mcp builder>",
-            field: "owner",
-        })?;
-        let transport = self.transport.ok_or(AgentConfigError::MissingSpecField {
-            id: "<mcp builder>",
-            field: "transport",
-        })?;
-        let spec = McpSpec {
-            name: self.name,
-            owner_tag,
-            transport,
-            friendly_name: self.friendly_name,
-            secret_policy: self.secret_policy,
-        };
-        spec.validate()?;
-        Ok(spec)
-    }
-
-    fn record_builder_error(&mut self, message: &'static str) {
-        if self.builder_error.is_none() {
-            self.builder_error = Some(message.to_string());
-        }
-    }
-}
-
-fn validate_transport(transport: &McpTransport) -> Result<(), AgentConfigError> {
-    match transport {
-        McpTransport::Stdio { command, args, env } => {
-            if command.trim().is_empty() {
-                return Err(invalid_mcp_spec("stdio MCP command must not be empty"));
-            }
-            validate_no_control_chars("stdio MCP command", command)?;
-            for arg in args {
-                validate_no_control_chars("stdio MCP argument", arg)?;
-            }
-            for (name, value) in env {
-                validate_env_name(name)?;
-                validate_value("stdio MCP environment value", value)?;
-            }
-        }
-        McpTransport::Http { url, headers } => {
-            validate_remote_transport("HTTP", url, headers)?;
-        }
-        McpTransport::Sse { url, headers } => {
-            validate_remote_transport("SSE", url, headers)?;
-        }
-    }
-    Ok(())
-}
-
-fn validate_remote_transport(
-    kind: &str,
-    url: &str,
-    headers: &BTreeMap<String, String>,
-) -> Result<(), AgentConfigError> {
-    validate_http_url(kind, url)?;
-    for (name, value) in headers {
-        validate_header_name(name)?;
-        validate_value("MCP header value", value)?;
-    }
-    Ok(())
-}
-
-fn validate_http_url(kind: &str, url: &str) -> Result<(), AgentConfigError> {
-    if url.chars().any(char::is_control) {
-        return Err(invalid_mcp_spec(format!(
-            "{kind} MCP URL must not contain control characters"
-        )));
-    }
-
-    let parsed =
-        Uri::parse(url).map_err(|e| invalid_mcp_spec(format!("{kind} MCP URL is invalid: {e}")))?;
-    let scheme = parsed.scheme().as_str();
-    if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
-        return Err(invalid_mcp_spec(format!(
-            "{kind} MCP URL must use http or https"
-        )));
-    }
-    let Some(authority) = parsed.authority() else {
-        return Err(invalid_mcp_spec(format!(
-            "{kind} MCP URL must include a host"
-        )));
-    };
-    if authority.host().is_empty() {
-        return Err(invalid_mcp_spec(format!(
-            "{kind} MCP URL must include a host"
-        )));
-    }
-    Ok(())
-}
-
-fn validate_env_name(name: &str) -> Result<(), AgentConfigError> {
-    if name.is_empty() {
-        return Err(invalid_mcp_spec(
-            "MCP environment variable name must not be empty",
-        ));
-    }
-    if name.contains('=') {
-        return Err(invalid_mcp_spec(
-            "MCP environment variable name must not contain '='",
-        ));
-    }
-    validate_no_control_chars("MCP environment variable name", name)
-}
-
-fn validate_header_name(name: &str) -> Result<(), AgentConfigError> {
-    if name.is_empty() {
-        return Err(invalid_mcp_spec("MCP header name must not be empty"));
-    }
-    if !name.chars().all(is_header_token_char) {
-        return Err(invalid_mcp_spec(
-            "MCP header name must contain only HTTP token characters",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_value(kind: &str, value: &str) -> Result<(), AgentConfigError> {
-    validate_no_control_chars(kind, value)
-}
-
-fn validate_no_control_chars(kind: &str, value: &str) -> Result<(), AgentConfigError> {
-    if value.chars().any(char::is_control) {
-        return Err(invalid_mcp_spec(format!(
-            "{kind} must not contain control characters"
-        )));
-    }
-    Ok(())
-}
-
-fn is_header_token_char(c: char) -> bool {
-    matches!(
-        c,
-        'A'..='Z'
-            | 'a'..='z'
-            | '0'..='9'
-            | '!'
-            | '#'
-            | '$'
-            | '%'
-            | '&'
-            | '\''
-            | '*'
-            | '+'
-            | '-'
-            | '.'
-            | '^'
-            | '_'
-            | '`'
-            | '|'
-            | '~'
-    )
-}
-
-fn invalid_mcp_spec(message: impl Into<String>) -> AgentConfigError {
-    AgentConfigError::Other(anyhow::anyhow!(message.into()))
-}
-
-fn is_inline_secret_env_value(name: &str, value: &str) -> bool {
-    likely_secret_env_name(name) && !value.trim().is_empty() && !is_placeholder_value(value)
-}
-
-fn likely_secret_env_name(name: &str) -> bool {
-    let upper = name.to_ascii_uppercase();
-    [
-        "TOKEN",
-        "SECRET",
-        "KEY",
-        "PASSWORD",
-        "AUTH",
-        "BEARER",
-        "CREDENTIAL",
-    ]
-    .iter()
-    .any(|keyword| upper.contains(keyword))
-}
-
-fn is_placeholder_value(value: &str) -> bool {
-    let trimmed = value.trim();
-    if trimmed.starts_with("${") && trimmed.ends_with('}') && trimmed.len() > 3 {
-        return true;
-    }
-    trimmed
-        .strip_prefix('$')
-        .is_some_and(|name| !name.is_empty() && name.chars().all(is_env_name_char))
-}
-
-fn is_env_name_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || c == '_'
 }
 
 #[cfg(test)]
@@ -542,7 +192,7 @@ mod tests {
             SecretPolicy::RefuseInlineSecretsInLocalScope
         );
         assert!(spec
-            .local_inline_secret_env_key(&Scope::Local("/tmp/project".into()))
+            .local_inline_secret_key(&Scope::Local("/tmp/project".into()))
             .is_none());
         match spec.transport {
             McpTransport::Stdio { env, .. } => {
@@ -565,10 +215,7 @@ mod tests {
             .env("GITHUB_TOKEN", "abc")
             .build();
 
-        assert_eq!(
-            spec.local_inline_secret_env_key(&local),
-            Some("GITHUB_TOKEN")
-        );
+        assert_eq!(spec.local_inline_secret_key(&local), Some("GITHUB_TOKEN"));
         assert!(spec.validate_local_secret_policy(&global).is_ok());
         assert!(matches!(
             spec.validate_local_secret_policy(&local),
@@ -586,6 +233,80 @@ mod tests {
             allowed.allowed_local_inline_secret_key(&local),
             Some("GITHUB_TOKEN")
         );
+    }
+
+    #[test]
+    fn local_inline_secret_policy_detects_http_authorization_header() {
+        let local = Scope::Local("/tmp/project".into());
+        let global = Scope::Global;
+        let spec = McpSpec::builder("remote")
+            .owner("myapp")
+            .http("https://example.com/mcp")
+            .header("Authorization", "Bearer xyz")
+            .build();
+
+        assert_eq!(spec.local_inline_secret_key(&local), Some("Authorization"));
+        assert!(spec.validate_local_secret_policy(&global).is_ok());
+        assert!(matches!(
+            spec.validate_local_secret_policy(&local),
+            Err(AgentConfigError::InlineSecretInLocalScope { key, .. }) if key == "Authorization"
+        ));
+    }
+
+    #[test]
+    fn local_inline_secret_policy_detects_sse_x_api_key_header() {
+        let local = Scope::Local("/tmp/project".into());
+        let spec = McpSpec::builder("remote")
+            .owner("myapp")
+            .sse("https://example.com/sse")
+            .header("X-API-Key", "abc123")
+            .build();
+
+        assert_eq!(spec.local_inline_secret_key(&local), Some("X-API-Key"));
+        assert!(matches!(
+            spec.validate_local_secret_policy(&local),
+            Err(AgentConfigError::InlineSecretInLocalScope { key, .. }) if key == "X-API-Key"
+        ));
+    }
+
+    #[test]
+    fn local_inline_secret_policy_detects_cookie_header() {
+        let local = Scope::Local("/tmp/project".into());
+        let spec = McpSpec::builder("remote")
+            .owner("myapp")
+            .http("https://example.com/mcp")
+            .header("Cookie", "session=opaque")
+            .build();
+
+        assert_eq!(spec.local_inline_secret_key(&local), Some("Cookie"));
+        assert!(matches!(
+            spec.validate_local_secret_policy(&local),
+            Err(AgentConfigError::InlineSecretInLocalScope { key, .. }) if key == "Cookie"
+        ));
+    }
+
+    #[test]
+    fn local_inline_secret_policy_allows_placeholder_header() {
+        let local = Scope::Local("/tmp/project".into());
+        let spec = McpSpec::builder("remote")
+            .owner("myapp")
+            .http("https://example.com/mcp")
+            .header("Authorization", "${TOKEN}")
+            .build();
+        assert!(spec.local_inline_secret_key(&local).is_none());
+        assert!(spec.validate_local_secret_policy(&local).is_ok());
+    }
+
+    #[test]
+    fn local_inline_secret_policy_allows_innocuous_header() {
+        let local = Scope::Local("/tmp/project".into());
+        let spec = McpSpec::builder("remote")
+            .owner("myapp")
+            .http("https://example.com/mcp")
+            .header("Accept", "application/json")
+            .build();
+        assert!(spec.local_inline_secret_key(&local).is_none());
+        assert!(spec.validate_local_secret_policy(&local).is_ok());
     }
 
     #[test]

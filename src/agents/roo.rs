@@ -18,10 +18,10 @@ use crate::integration::{
     InstallReport, InstructionSurface, Integration, McpSurface, UninstallReport,
 };
 use crate::paths;
-use crate::plan::{InstallPlan, PlanTarget, UninstallPlan};
+use crate::plan::{InstallPlan, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{HookSpec, InstructionSpec, McpSpec};
-use crate::status::{ConfigPresence, StatusReport};
+use crate::status::StatusReport;
 use crate::util::{instructions_dir, mcp_json_object, ownership, rules_dir};
 
 const RULES_DIR: &str = ".roo/rules";
@@ -102,7 +102,7 @@ impl Integration for RooAgent {
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
-        let root = self.require_local(scope)?;
+        let _ = self.require_local(scope)?;
         let rules = spec
             .rules
             .as_ref()
@@ -110,13 +110,13 @@ impl Integration for RooAgent {
                 id: "roo",
                 field: "rules",
             })?;
-        rules_dir::install(root, RULES_DIR, &spec.tag, &rules.content)
+        rules_dir::install(scope, RULES_DIR, &spec.tag, &rules.content)
     }
 
     fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
-        let root = self.require_local(scope)?;
-        rules_dir::uninstall(root, RULES_DIR, tag)
+        let _ = self.require_local(scope)?;
+        rules_dir::uninstall(scope, RULES_DIR, tag)
     }
 }
 
@@ -206,6 +206,19 @@ impl McpSurface for RooAgent {
     }
 }
 
+impl RooAgent {
+    fn standalone_layout(
+        &self,
+        scope: &Scope,
+    ) -> Result<instructions_dir::StandaloneLayout, AgentConfigError> {
+        let root = self.require_local(scope)?;
+        Ok(instructions_dir::StandaloneLayout {
+            config_dir: root.join(".roo"),
+            instruction_dir: root.join(".roo/rules"),
+        })
+    }
+}
+
 impl InstructionSurface for RooAgent {
     fn id(&self) -> &'static str {
         "roo"
@@ -221,26 +234,7 @@ impl InstructionSurface for RooAgent {
         name: &str,
         expected_owner: &str,
     ) -> Result<StatusReport, AgentConfigError> {
-        InstructionSpec::validate_name(name)?;
-        let root = self.require_local(scope)?;
-        let config_dir = root.join(".roo");
-        let instruction_dir = root.join(".roo/rules");
-        let (instr_path, led) =
-            instructions_dir::paths_for_status(&config_dir, &instruction_dir, name);
-        let presence = if instr_path.exists() {
-            ConfigPresence::Single
-        } else {
-            ConfigPresence::Absent
-        };
-        let recorded = ownership::owner_of(&led, name)?;
-        Ok(StatusReport::for_instruction(
-            name,
-            instr_path,
-            led,
-            presence,
-            expected_owner,
-            recorded,
-        ))
+        instructions_dir::standalone_status(self.standalone_layout(scope)?, name, expected_owner)
     }
 
     fn plan_install_instruction(
@@ -248,18 +242,12 @@ impl InstructionSurface for RooAgent {
         scope: &Scope,
         spec: &InstructionSpec,
     ) -> Result<InstallPlan, AgentConfigError> {
-        let root = self.require_local(scope)?;
-        let config_dir = root.join(".roo");
-        let instruction_dir = root.join(".roo/rules");
-        let target = PlanTarget::Instruction {
-            integration_id: InstructionSurface::id(self),
-            scope: scope.clone(),
-            name: spec.name.clone(),
-            owner: spec.owner_tag.clone(),
-        };
-        let changes =
-            instructions_dir::plan_install(&config_dir, spec, None, Some(&instruction_dir), None)?;
-        Ok(InstallPlan::from_changes(target, changes))
+        instructions_dir::standalone_plan_install(
+            InstructionSurface::id(self),
+            scope,
+            self.standalone_layout(scope),
+            spec,
+        )
     }
 
     fn plan_uninstall_instruction(
@@ -268,24 +256,13 @@ impl InstructionSurface for RooAgent {
         name: &str,
         owner_tag: &str,
     ) -> Result<UninstallPlan, AgentConfigError> {
-        InstructionSpec::validate_name(name)?;
-        let root = self.require_local(scope)?;
-        let config_dir = root.join(".roo");
-        let instruction_dir = root.join(".roo/rules");
-        let target = PlanTarget::Instruction {
-            integration_id: InstructionSurface::id(self),
-            scope: scope.clone(),
-            name: name.to_string(),
-            owner: owner_tag.to_string(),
-        };
-        let changes = instructions_dir::plan_uninstall(
-            &config_dir,
+        instructions_dir::standalone_plan_uninstall(
+            InstructionSurface::id(self),
+            scope,
+            self.standalone_layout(scope),
             name,
             owner_tag,
-            None,
-            Some(&instruction_dir),
-        )?;
-        Ok(UninstallPlan::from_changes(target, changes))
+        )
     }
 
     fn install_instruction(
@@ -293,12 +270,7 @@ impl InstructionSurface for RooAgent {
         scope: &Scope,
         spec: &InstructionSpec,
     ) -> Result<InstallReport, AgentConfigError> {
-        let root = self.require_local(scope)?;
-        let config_dir = root.join(".roo");
-        let instruction_dir = root.join(".roo/rules");
-        let instr_path = instruction_dir.join(format!("{}.md", spec.name));
-        scope.ensure_contained(&instr_path)?;
-        instructions_dir::install(&config_dir, spec, None, Some(&instruction_dir), None)
+        instructions_dir::standalone_install(scope, self.standalone_layout(scope)?, spec)
     }
 
     fn uninstall_instruction(
@@ -307,11 +279,12 @@ impl InstructionSurface for RooAgent {
         name: &str,
         owner_tag: &str,
     ) -> Result<UninstallReport, AgentConfigError> {
-        InstructionSpec::validate_name(name)?;
-        let root = self.require_local(scope)?;
-        let config_dir = root.join(".roo");
-        let instruction_dir = root.join(".roo/rules");
-        instructions_dir::uninstall(&config_dir, name, owner_tag, None, Some(&instruction_dir))
+        instructions_dir::standalone_uninstall(
+            scope,
+            self.standalone_layout(scope)?,
+            name,
+            owner_tag,
+        )
     }
 }
 
@@ -429,7 +402,9 @@ mod instruction_tests {
     fn instruction_rejects_global_scope() {
         let agent = RooAgent::new();
         let spec = instruction_spec("test-rule", "myapp");
-        let result = agent.plan_install_instruction(&Scope::Global, &spec);
-        assert!(result.is_err());
+        let plan = agent
+            .plan_install_instruction(&Scope::Global, &spec)
+            .expect("plan should refuse, not error");
+        assert_eq!(plan.status, crate::plan::PlanStatus::Refused);
     }
 }

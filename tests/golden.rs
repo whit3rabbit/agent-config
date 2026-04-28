@@ -569,6 +569,10 @@ fn mcp_http(name: &str, owner: &str) -> McpSpec {
         .owner(owner)
         .http("https://example.test/mcp")
         .header("Authorization", "Bearer golden-token")
+        // Mirror mcp_stdio_env: this fixture preserves raw header serialization
+        // shape; policy tests in src/spec/mcp.rs cover default refusal of
+        // inline secrets in HTTP/SSE headers under local scope.
+        .allow_local_inline_secrets()
         .build()
 }
 
@@ -854,8 +858,13 @@ struct CaseEnv {
 impl CaseEnv {
     fn new() -> Self {
         let tmp = TempDir::new().unwrap();
-        let project = tmp.path().join("project");
-        let home = tmp.path().join("home");
+        // Canonicalize so the strict global-scope symlink policy does not
+        // trip on OS-level symlinks (e.g. macOS `/var` -> `/private/var`).
+        // Real user paths like `/Users/me/.claude` are already canonical, so
+        // the test paths should be too.
+        let tmp_canon = fs::canonicalize(tmp.path()).unwrap();
+        let project = tmp_canon.join("project");
+        let home = tmp_canon.join("home");
         let xdg = home.join("Library").join("Application Support");
         let codex_home = home.join(".codex");
         fs::create_dir_all(&project).unwrap();

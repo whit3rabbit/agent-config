@@ -41,6 +41,16 @@ pub enum AgentConfigError {
         scope: crate::scope::ScopeKind,
     },
 
+    /// The integration's surface requires a runtime not present on the
+    /// current host (for example, a POSIX shell for a `bash`-script hook).
+    #[error("integration {id} surface is not supported on this platform: {reason}")]
+    UnsupportedPlatform {
+        /// Integration id.
+        id: &'static str,
+        /// Why the platform is unsupported.
+        reason: &'static str,
+    },
+
     /// The caller-supplied [`HookSpec`](crate::HookSpec) is missing a field this
     /// integration requires (e.g., gemini needs `script`, prompt-only agents
     /// need `rules`).
@@ -228,6 +238,14 @@ mod tests {
             scope: crate::scope::ScopeKind::Global,
         };
         assert!(format!("{unsupported}").contains("test"));
+
+        let unsupported_platform = AgentConfigError::UnsupportedPlatform {
+            id: "cline",
+            reason: "POSIX shell required",
+        };
+        let msg = format!("{unsupported_platform}");
+        assert!(msg.contains("cline"));
+        assert!(msg.contains("POSIX shell required"));
 
         let missing = AgentConfigError::MissingSpecField {
             id: "agent",

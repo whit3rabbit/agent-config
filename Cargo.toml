@@ -3,7 +3,7 @@ name = "agent-config"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.95"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 description = "Install hooks/integrations into AI coding harnesses (Claude Code, Cursor, Gemini CLI, OpenCode, Codex CLI, Cline, Windsurf, ...) without learning each one's filesystem layout."
 repository = "https://github.com/whit3rabbit/agent-config"
 keywords = ["ai", "hooks", "claude", "cursor", "cli"]
@@ -38,6 +38,12 @@ sha2 = "0.10"
 [dev-dependencies]
 pretty_assertions = "1"
 tempfile = "3"
+ratatui = "0.30"
+crossterm = "0.29"
+
+[[example]]
+name = "tui_dry_run"
+path = "examples/tui_dry_run/main.rs"
 
 [lints.rust]
 unsafe_code = "forbid"

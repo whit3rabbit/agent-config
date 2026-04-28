@@ -331,6 +331,22 @@ pub(crate) fn require_owner(
     kind: &'static str,
     present_in_config: bool,
 ) -> Result<(), AgentConfigError> {
+    require_owner_with_policy(ledger_path, name, expected, kind, present_in_config, false)
+}
+
+/// Like [`require_owner`], but if `adopt_unowned` is true, the
+/// "config present, no ledger entry" case is allowed instead of refused.
+/// Used to recover from a crash between an install's config write and ledger
+/// record. Pass `false` for uninstall paths and any caller that has not opted
+/// into adoption.
+pub(crate) fn require_owner_with_policy(
+    ledger_path: &Path,
+    name: &str,
+    expected: &str,
+    kind: &'static str,
+    present_in_config: bool,
+    adopt_unowned: bool,
+) -> Result<(), AgentConfigError> {
     let actual = owner_of(ledger_path, name)?;
     match (actual.as_deref(), present_in_config) {
         // Standard case: ledger recorded owner; must match.
@@ -342,7 +358,9 @@ pub(crate) fn require_owner(
             expected: expected.into(),
             actual,
         }),
-        // No ledger entry but the harness config has it: user-installed.
+        // No ledger entry but the harness config has it: user-installed,
+        // unless the caller explicitly opted into adoption.
+        (None, true) if adopt_unowned => Ok(()),
         (None, true) => Err(AgentConfigError::NotOwnedByCaller {
             kind,
             name: name.into(),

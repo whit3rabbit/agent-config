@@ -17,6 +17,20 @@ OpenClaw project instructions use the workspace `AGENTS.md` file.
 `agent-config` inserts a fenced markdown block keyed by the consumer tag. Global
 prompt install is unsupported.
 
+## Instructions
+
+Standalone instruction files installed via `InstructionSurface`. Uses
+`InstructionPlacement::InlineBlock` (project-local only) because OpenClaw's
+memory file does not expose a documented `@import` syntax; the body is
+injected as a tagged HTML-comment fenced block in the existing memory file.
+
+| | |
+| --- | --- |
+| Host file | `<root>/AGENTS.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `<root>/.agents/.agent-config-instructions.json` (reuses the existing `.agents/` skills directory) |
+| Placement | `InstructionPlacement::InlineBlock` |
+
 ## MCP
 
 OpenClaw stores outbound MCP server definitions in its JSON5 config under

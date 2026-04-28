@@ -249,7 +249,7 @@ impl Integration for WindsurfAgent {
 
         if let Some(rules) = &spec.rules {
             scope.ensure_contained(&rules_dir::target_path(root, RULES_DIR, &spec.tag))?;
-            let r = rules_dir::install(root, RULES_DIR, &spec.tag, &rules.content)?;
+            let r = rules_dir::install(scope, RULES_DIR, &spec.tag, &rules.content)?;
             report.merge(r);
         }
 
@@ -298,7 +298,7 @@ impl Integration for WindsurfAgent {
         let mut report = UninstallReport::default();
 
         scope.ensure_contained(&rules_dir::target_path(root, RULES_DIR, tag))?;
-        let r = rules_dir::uninstall(root, RULES_DIR, tag)?;
+        let r = rules_dir::uninstall(scope, RULES_DIR, tag)?;
         report.merge(r);
 
         let p = self.hooks_path(scope)?;
@@ -498,6 +498,19 @@ impl SkillSurface for WindsurfAgent {
     }
 }
 
+impl WindsurfAgent {
+    fn standalone_layout(
+        &self,
+        scope: &Scope,
+    ) -> Result<instructions_dir::StandaloneLayout, AgentConfigError> {
+        let root = self.project_root(scope)?;
+        Ok(instructions_dir::StandaloneLayout {
+            config_dir: root.join(".windsurf"),
+            instruction_dir: root.join(".windsurf/rules"),
+        })
+    }
+}
+
 impl InstructionSurface for WindsurfAgent {
     fn id(&self) -> &'static str {
         "windsurf"
@@ -513,26 +526,7 @@ impl InstructionSurface for WindsurfAgent {
         name: &str,
         expected_owner: &str,
     ) -> Result<StatusReport, AgentConfigError> {
-        InstructionSpec::validate_name(name)?;
-        let root = self.project_root(scope)?;
-        let config_dir = root.join(".windsurf");
-        let instruction_dir = root.join(".windsurf/rules");
-        let (instr_path, led) =
-            instructions_dir::paths_for_status(&config_dir, &instruction_dir, name);
-        let presence = if instr_path.exists() {
-            ConfigPresence::Single
-        } else {
-            ConfigPresence::Absent
-        };
-        let recorded = ownership::owner_of(&led, name)?;
-        Ok(StatusReport::for_instruction(
-            name,
-            instr_path,
-            led,
-            presence,
-            expected_owner,
-            recorded,
-        ))
+        instructions_dir::standalone_status(self.standalone_layout(scope)?, name, expected_owner)
     }
 
     fn plan_install_instruction(
@@ -540,19 +534,12 @@ impl InstructionSurface for WindsurfAgent {
         scope: &Scope,
         spec: &InstructionSpec,
     ) -> Result<InstallPlan, AgentConfigError> {
-        spec.validate()?;
-        let target = DryPlanTarget::Instruction {
-            integration_id: InstructionSurface::id(self),
-            scope: scope.clone(),
-            name: spec.name.clone(),
-            owner: spec.owner_tag.clone(),
-        };
-        let root = self.project_root(scope)?;
-        let config_dir = root.join(".windsurf");
-        let instruction_dir = root.join(".windsurf/rules");
-        let changes =
-            instructions_dir::plan_install(&config_dir, spec, None, Some(&instruction_dir), None)?;
-        Ok(InstallPlan::from_changes(target, changes))
+        instructions_dir::standalone_plan_install(
+            InstructionSurface::id(self),
+            scope,
+            self.standalone_layout(scope),
+            spec,
+        )
     }
 
     fn plan_uninstall_instruction(
@@ -561,25 +548,13 @@ impl InstructionSurface for WindsurfAgent {
         name: &str,
         owner_tag: &str,
     ) -> Result<UninstallPlan, AgentConfigError> {
-        InstructionSpec::validate_name(name)?;
-        HookSpec::validate_tag(owner_tag)?;
-        let target = DryPlanTarget::Instruction {
-            integration_id: InstructionSurface::id(self),
-            scope: scope.clone(),
-            name: name.to_string(),
-            owner: owner_tag.to_string(),
-        };
-        let root = self.project_root(scope)?;
-        let config_dir = root.join(".windsurf");
-        let instruction_dir = root.join(".windsurf/rules");
-        let changes = instructions_dir::plan_uninstall(
-            &config_dir,
+        instructions_dir::standalone_plan_uninstall(
+            InstructionSurface::id(self),
+            scope,
+            self.standalone_layout(scope),
             name,
             owner_tag,
-            None,
-            Some(&instruction_dir),
-        )?;
-        Ok(UninstallPlan::from_changes(target, changes))
+        )
     }
 
     fn install_instruction(
@@ -587,13 +562,7 @@ impl InstructionSurface for WindsurfAgent {
         scope: &Scope,
         spec: &InstructionSpec,
     ) -> Result<InstallReport, AgentConfigError> {
-        spec.validate()?;
-        let root = self.project_root(scope)?;
-        let config_dir = root.join(".windsurf");
-        let instruction_dir = root.join(".windsurf/rules");
-        let instr_path = instruction_dir.join(format!("{}.md", spec.name));
-        scope.ensure_contained(&instr_path)?;
-        instructions_dir::install(&config_dir, spec, None, Some(&instruction_dir), None)
+        instructions_dir::standalone_install(scope, self.standalone_layout(scope)?, spec)
     }
 
     fn uninstall_instruction(
@@ -602,13 +571,12 @@ impl InstructionSurface for WindsurfAgent {
         name: &str,
         owner_tag: &str,
     ) -> Result<UninstallReport, AgentConfigError> {
-        InstructionSpec::validate_name(name)?;
-        HookSpec::validate_tag(owner_tag)?;
-        let root = self.project_root(scope)?;
-        let config_dir = root.join(".windsurf");
-        let instruction_dir = root.join(".windsurf/rules");
-        scope.ensure_contained(&instruction_dir.join(format!("{name}.md")))?;
-        instructions_dir::uninstall(&config_dir, name, owner_tag, None, Some(&instruction_dir))
+        instructions_dir::standalone_uninstall(
+            scope,
+            self.standalone_layout(scope)?,
+            name,
+            owner_tag,
+        )
     }
 }
 
@@ -855,11 +823,11 @@ mod tests {
         let agent = WindsurfAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         agent
-            .install_instruction(&scope, &instruction_spec("RTK", "myapp", "# Use RTK\n"))
+            .install_instruction(&scope, &instruction_spec("MYAPP", "myapp", "# Use MyApp\n"))
             .unwrap();
-        let instr = dir.path().join(".windsurf/rules/RTK.md");
+        let instr = dir.path().join(".windsurf/rules/MYAPP.md");
         assert!(instr.exists());
-        assert!(fs::read_to_string(&instr).unwrap().contains("# Use RTK"));
+        assert!(fs::read_to_string(&instr).unwrap().contains("# Use MyApp"));
     }
 
     #[test]
@@ -868,17 +836,22 @@ mod tests {
         let agent = WindsurfAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         agent
-            .install_instruction(&scope, &instruction_spec("RTK", "myapp", "# Use RTK\n"))
+            .install_instruction(&scope, &instruction_spec("MYAPP", "myapp", "# Use MyApp\n"))
             .unwrap();
-        agent.uninstall_instruction(&scope, "RTK", "myapp").unwrap();
-        assert!(!dir.path().join(".windsurf/rules/RTK.md").exists());
+        agent
+            .uninstall_instruction(&scope, "MYAPP", "myapp")
+            .unwrap();
+        assert!(!dir.path().join(".windsurf/rules/MYAPP.md").exists());
     }
 
     #[test]
     fn instruction_rejects_global_scope() {
         let agent = WindsurfAgent::new();
         let err = agent
-            .install_instruction(&Scope::Global, &instruction_spec("RTK", "myapp", "body\n"))
+            .install_instruction(
+                &Scope::Global,
+                &instruction_spec("MYAPP", "myapp", "body\n"),
+            )
             .unwrap_err();
         assert!(matches!(err, AgentConfigError::UnsupportedScope { .. }));
     }

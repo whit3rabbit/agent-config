@@ -19,13 +19,17 @@ use serde_json::{Map, Value};
 
 use crate::agents::planning as agent_planning;
 use crate::error::AgentConfigError;
-use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
+use crate::integration::{
+    InstallReport, InstructionSurface, Integration, McpSurface, SkillSurface, UninstallReport,
+};
 use crate::paths;
 use crate::plan::{InstallPlan, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{HookSpec, McpSpec, McpTransport, SkillSpec};
+use crate::spec::{HookSpec, InstructionSpec, McpSpec, McpTransport, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{file_lock, fs_atomic, mcp_json_map, md_block, ownership, safe_fs, skills_dir};
+use crate::util::{
+    file_lock, fs_atomic, instructions_dir, mcp_json_map, md_block, ownership, safe_fs, skills_dir,
+};
 
 /// OpenClaw file-backed installer.
 #[derive(Debug, Clone, Copy, Default)]
@@ -80,6 +84,13 @@ impl OpenClawAgent {
             Scope::Global => Self::skills_root_from_home(&paths::home_dir()?),
             Scope::Local(p) => p.join(".agents").join("skills"),
         })
+    }
+
+    /// Directory holding the instruction ownership ledger. Local-only;
+    /// reuses the existing `<root>/.agents/` skills directory so the
+    /// sidecar lives next to other agent-config artifacts.
+    fn instruction_config_dir(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
+        Ok(Self::require_local(scope)?.join(".agents"))
     }
 
     fn install_mcp_config(
@@ -401,6 +412,82 @@ impl SkillSurface for OpenClawAgent {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
+    }
+}
+
+impl OpenClawAgent {
+    fn inline_layout(
+        &self,
+        scope: &Scope,
+    ) -> Result<instructions_dir::InlineLayout, AgentConfigError> {
+        Ok(instructions_dir::InlineLayout {
+            config_dir: Self::instruction_config_dir(scope)?,
+            host_file: Self::prompt_path(scope)?,
+        })
+    }
+}
+
+impl InstructionSurface for OpenClawAgent {
+    fn id(&self) -> &'static str {
+        "openclaw"
+    }
+
+    fn supported_instruction_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Local]
+    }
+
+    fn instruction_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, AgentConfigError> {
+        instructions_dir::inline_status(self.inline_layout(scope)?, name, expected_owner)
+    }
+
+    fn plan_install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
+        instructions_dir::inline_plan_install(
+            InstructionSurface::id(self),
+            scope,
+            self.inline_layout(scope),
+            spec,
+        )
+    }
+
+    fn plan_uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, AgentConfigError> {
+        instructions_dir::inline_plan_uninstall(
+            InstructionSurface::id(self),
+            scope,
+            self.inline_layout(scope),
+            name,
+            owner_tag,
+        )
+    }
+
+    fn install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
+        instructions_dir::inline_install(scope, self.inline_layout(scope)?, spec)
+    }
+
+    fn uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, AgentConfigError> {
+        instructions_dir::inline_uninstall(scope, self.inline_layout(scope)?, name, owner_tag)
     }
 }
 

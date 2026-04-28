@@ -70,7 +70,17 @@ pub(crate) fn install(
         let dir = skill_dir(skills_root, &spec.name);
         let led = ledger_path(skills_root);
 
-        ownership::require_owner(&led, &spec.name, &spec.owner_tag, KIND, dir.exists())?;
+        let prior = ownership::owner_of(&led, &spec.name)?;
+        let dir_exists = dir.exists();
+        let adopting = spec.adopt_unowned && dir_exists && prior.is_none();
+        ownership::require_owner_with_policy(
+            &led,
+            &spec.name,
+            &spec.owner_tag,
+            KIND,
+            dir_exists,
+            spec.adopt_unowned,
+        )?;
         fs::create_dir_all(skills_root).map_err(|e| AgentConfigError::io(skills_root, e))?;
 
         let skill_md_path = dir.join(SKILL_MD);
@@ -92,15 +102,14 @@ pub(crate) fn install(
             record_outcome(&mut report, outcome);
         }
 
-        let prior = ownership::owner_of(&led, &spec.name)?;
         let owner_changed = prior.as_deref() != Some(spec.owner_tag.as_str());
 
-        if owner_changed || !report.created.is_empty() || !report.patched.is_empty() {
+        if owner_changed || !report.created.is_empty() || !report.patched.is_empty() || adopting {
             let hash = ownership::file_content_hash(&skill_md_path)?;
             ownership::record_install(&led, &spec.name, &spec.owner_tag, hash.as_deref())?;
         }
 
-        if report.created.is_empty() && report.patched.is_empty() && !owner_changed {
+        if report.created.is_empty() && report.patched.is_empty() && !owner_changed && !adopting {
             report.already_installed = true;
         }
         Ok(report)
@@ -121,8 +130,10 @@ pub(crate) fn plan_install(
     let dir = skill_dir(skills_root, &spec.name);
     let led = ledger_path(skills_root);
     let actual_owner = ownership::owner_of(&led, &spec.name)?;
+    let dir_exists = dir.exists();
+    let adopting = spec.adopt_unowned && dir_exists && actual_owner.is_none();
 
-    match (actual_owner.as_deref(), dir.exists()) {
+    match (actual_owner.as_deref(), dir_exists) {
         (Some(owner), _) if owner != spec.owner_tag => {
             changes.push(PlannedChange::Refuse {
                 path: Some(led),
@@ -130,7 +141,7 @@ pub(crate) fn plan_install(
             });
             return Ok(changes);
         }
-        (None, true) => {
+        (None, true) if !spec.adopt_unowned => {
             changes.push(PlannedChange::Refuse {
                 path: Some(dir),
                 reason: RefusalReason::UserInstalledEntry,
@@ -161,7 +172,7 @@ pub(crate) fn plan_install(
                 | PlannedChange::SetPermissions { .. }
         )
     });
-    if !has_refusal(&changes) && (owner_changed || file_would_change) {
+    if !has_refusal(&changes) && (owner_changed || file_would_change || adopting) {
         planning::plan_write_ledger(&mut changes, &led, &spec.name, &spec.owner_tag);
     }
 
@@ -584,6 +595,29 @@ mod tests {
             err,
             AgentConfigError::NotOwnedByCaller { actual: None, .. }
         ));
+    }
+
+    #[test]
+    fn adopt_unowned_takes_over_orphan_skill_dir() {
+        let dir = tempdir().unwrap();
+        // Simulate the crash window: skill directory written, ledger missing.
+        let orphan = dir.path().join("alpha");
+        fs::create_dir_all(&orphan).unwrap();
+        fs::write(orphan.join("SKILL.md"), "---\nname: alpha\n---\nbody\n").unwrap();
+
+        let adopt = SkillSpec::builder("alpha")
+            .owner("myapp")
+            .description("Format Git commit messages.")
+            .body("## Goal\nDo the thing.\n")
+            .adopt_unowned(true)
+            .build();
+        install(dir.path(), &adopt).unwrap();
+
+        assert!(ownership::contains(&ledger_path(dir.path()), "alpha").unwrap());
+
+        // Plain install with same content is now idempotent.
+        let r = install(dir.path(), &basic_spec("alpha", "myapp")).unwrap();
+        assert!(r.already_installed);
     }
 
     #[test]

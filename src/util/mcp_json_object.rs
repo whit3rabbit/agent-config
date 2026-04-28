@@ -179,6 +179,7 @@ mod tests {
             },
             friendly_name: None,
             secret_policy: crate::spec::SecretPolicy::RefuseInlineSecretsInLocalScope,
+            adopt_unowned: false,
         }
     }
 

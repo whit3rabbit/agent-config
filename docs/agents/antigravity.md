@@ -30,6 +30,20 @@ Not supported in v0.1. Antigravity's user rules are configured via the
 editor settings UI rather than a documented file path. Calling with
 `Scope::Global` returns `AgentConfigError::UnsupportedScope`.
 
+## Instructions
+
+Standalone instruction files installed via `InstructionSurface`. Uses
+`InstructionPlacement::StandaloneFile` because Antigravity already has a
+per-tag rules directory; each instruction is one file in that directory, with
+no host include needed.
+
+| | |
+| --- | --- |
+| Instruction file | `<root>/.agent/rules/<name>.md` |
+| Mechanism | One file per instruction — no host file needed |
+| Ledger | `<root>/.agent/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::StandaloneFile` |
+
 ## Skills
 
 ### Path

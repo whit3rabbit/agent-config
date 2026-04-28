@@ -27,3 +27,4 @@ synrepo-context/
 .synrepo/
 .syntext/
 .mcp.json
+artifacts/

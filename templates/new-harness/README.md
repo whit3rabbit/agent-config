@@ -24,6 +24,7 @@ harness exposes up to four surfaces:
 | Prompt/rules  | `HookSpec::rules` field          | Optional  | harness has no `<NAME>.md`-style file       |
 | MCP servers   | `McpSurface`                     | Optional  | MCP is CLI-managed (e.g., OpenClaw plugins) |
 | Skills        | `SkillSurface`                   | Optional  | harness has no skills concept               |
+| Instructions  | `InstructionSurface`             | Optional  | harness has no prompt or rules-dir surface  |
 
 Each implemented surface has six methods to wire up:
 
@@ -194,6 +195,101 @@ template's hooks-aware body with the openclaw/qwen/junie shape:
 If the prompt is project-only (Junie, OpenClaw, Hermes, Trae), declare
 `supported_scopes()` as `&[ScopeKind::Local]` and gate `rules_path` with a
 `require_local` helper (see `agents::openclaw` and `agents::junie`).
+
+## Instructions
+
+Standalone, named instruction files installed via `InstructionSurface`. This
+surface targets the long-lived instruction use case: write
+`<config_dir>/<NAME>.md` and optionally add a managed include reference into
+the harness's memory file. Independent of `HookSpec::rules` — instructions
+have their own lifecycle and ownership ledger.
+
+### Pick a placement
+
+Each registered agent picks one default `InstructionPlacement` based on the
+harness's documented memory model. Three modes:
+
+- **`ReferencedFile`** — write `<config_dir>/<NAME>.md` and inject a managed
+  `@<NAME>.md` include block into the harness's memory file. Pick this only
+  if the harness has a documented `@import` syntax. Currently used by
+  Claude (which documents `@<file>` imports in `CLAUDE.md`).
+
+- **`InlineBlock`** — inject the body as a tagged HTML-comment fenced block
+  inside the harness's existing memory file. The natural default for any
+  harness that uses one memory file (`AGENTS.md`, `<id>.md`, etc.) and does
+  not document `@import`. Used by Codex, Gemini, Amp, Forge, Qoder, Qwen,
+  CodeBuddy, Copilot, Junie, Trae, OpenClaw, Hermes.
+
+- **`StandaloneFile`** — write `<rules-dir>/<NAME>.md` only, no host edit.
+  The natural default for harnesses whose memory model is a per-tag rules
+  directory. Used by Cline (`.clinerules/`), Roo (`.roo/rules/`),
+  Kilo Code (`.kilocode/rules/`), Windsurf (`.windsurf/rules/`),
+  Antigravity (`.agent/rules/`).
+
+### What you implement
+
+For **InlineBlock** and **StandaloneFile** placements, add a small layout
+helper to your agent that resolves the per-scope paths once, then call the
+matching `inline_*` / `standalone_*` shim helpers in
+[`util::instructions_dir`](../../src/util/instructions_dir.rs). The shim
+handles spec validation, scope containment, status detection, and converts
+`UnsupportedScope` from layout resolution into `RefusalReason::UnsupportedScope`
+for plan methods (mutating methods still propagate the error).
+
+```rust
+impl MyAgent {
+    fn inline_layout(&self, scope: &Scope)
+        -> Result<instructions_dir::InlineLayout, AgentConfigError>
+    {
+        Ok(instructions_dir::InlineLayout {
+            config_dir: Self::instruction_config_dir(scope)?,
+            host_file: Self::rules_path(scope)?,
+        })
+    }
+}
+
+impl InstructionSurface for MyAgent {
+    fn id(&self) -> &'static str { "myagent" }
+    fn supported_instruction_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Global, ScopeKind::Local]
+    }
+
+    fn install_instruction(&self, scope: &Scope, spec: &InstructionSpec)
+        -> Result<InstallReport, AgentConfigError>
+    {
+        instructions_dir::inline_install(scope, self.inline_layout(scope)?, spec)
+    }
+    // status / plan_install_instruction / plan_uninstall_instruction /
+    // uninstall_instruction follow the same one-line delegation pattern.
+    // See `src/agents/codex.rs` (InlineBlock) and `src/agents/cline.rs`
+    // (StandaloneFile, with `standalone_layout` and `standalone_*` shims).
+}
+```
+
+For **ReferencedFile** (only Claude uses this today, with its dual-file
+write — standalone instruction file *plus* an `@import` reference in the
+host memory file) there is no shim; call
+`instructions_dir::{install, uninstall, plan_install, plan_uninstall}`
+directly. See `src/agents/claude.rs`.
+
+### Ownership ledger
+
+Lives at `<config_dir>/.agent-config-instructions.json` (sidecar, schema v2
+with SHA-256 content hash). The standard helper records ownership via
+`ownership::record_install`; install / uninstall / plan return
+`AgentConfigError::NotOwnedByCaller` on owner mismatch or hand-installed
+files.
+
+### Naming caveat
+
+For `ReferencedFile` and `InlineBlock`, the instruction's `name` is reused as
+the markdown fence tag. If a consumer installs both a hook with `tag = T` and
+an instruction with `name = T` into the same memory file, the second upsert
+silently replaces the first. Document this in your agent's per-agent doc and
+recommend `StandaloneFile` if your harness has a per-tag rules directory.
+
+Delete the `impl InstructionSurface` block (and the helpers it imports) if
+your harness has neither a memory file nor a per-tag rules directory.
 
 ## MCP servers
 
@@ -381,6 +477,9 @@ pub fn mcp_capable() -> Vec<Box<dyn McpSurface>> { /* same shape */ }
 
 // Add only if you implemented SkillSurface:
 pub fn skill_capable() -> Vec<Box<dyn SkillSurface>> { /* same shape */ }
+
+// Add only if you implemented InstructionSurface:
+pub fn instruction_capable() -> Vec<Box<dyn InstructionSurface>> { /* same shape */ }
 ```
 
 ## Testing
@@ -393,13 +492,13 @@ Four layers, in order:
    them out as you go.
 2. **Public smoke** in `tests/registry.rs`: add your id to the `for id in
    [...]` loops. Round-trip in a tempdir for the public API.
-3. **MCP / skill smoke** in `tests/mcp_registry.rs` /
-   `tests/skill_registry.rs`: same, only if you implemented the matching
-   surface. Includes idempotency and an `UnsupportedScope` check if your
-   agent is single-scope.
+3. **MCP / skill / instruction smoke** in `tests/mcp_registry.rs` /
+   `tests/skill_registry.rs` / `tests/instruction_registry.rs`: same,
+   only if you implemented the matching surface. Includes idempotency
+   and an `UnsupportedScope` check if your agent is single-scope.
 4. **Plan-API smoke** in `tests/plan_api.rs`: every registered id must show
-   up in the plan-API loops so the no-op/refusal/missing-config previews
-   are exercised.
+   up in the plan-API loops (hooks, MCP, skills, instructions) so the
+   no-op/refusal/missing-config previews are exercised.
 
 The contract every test enforces:
 

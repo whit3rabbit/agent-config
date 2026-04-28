@@ -75,7 +75,33 @@ Codex events also include `SessionStart`, `PermissionRequest`, `UserPromptSubmit
 > Codex walks from git root down to cwd, reading `AGENTS.override.md` first,
 > then `AGENTS.md`, in each directory. There is **no `@import` directive**
 > (an open feature request as of April 2026), so we inject the rules body
-> inline rather than emitting an `@RTK.md`-style include.
+> inline rather than emitting an `@<name>.md`-style include.
+
+## Instructions
+
+Standalone instruction files installed via `InstructionSurface`. Uses
+`InstructionPlacement::InlineBlock` because Codex CLI's memory file does not
+expose a documented `@import` syntax; the body is injected as a tagged
+HTML-comment fenced block in the existing memory file. Codex does not yet
+support `@import`, so the only available placement is InlineBlock.
+
+### User scope (`Scope::Global`)
+
+| | |
+| --- | --- |
+| Host file | `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `$CODEX_HOME/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
+
+### Project scope (`Scope::Local(<root>)`)
+
+| | |
+| --- | --- |
+| Host file | `<root>/AGENTS.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `<root>/.codex/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
 
 ## MCP servers
 

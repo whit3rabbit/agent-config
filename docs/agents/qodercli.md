@@ -19,6 +19,31 @@ ID: `qodercli` — `agent_config::by_id("qodercli")`
 | Project scope file | `<root>/AGENTS.md` |
 | Format | Tagged HTML-comment fence |
 
+## Instructions
+
+Standalone instruction files installed via `InstructionSurface`. Uses
+`InstructionPlacement::InlineBlock` because Qoder CLI's memory file does not
+expose a documented `@import` syntax; the body is injected as a tagged
+HTML-comment fenced block in the existing memory file.
+
+### User scope (`Scope::Global`)
+
+| | |
+| --- | --- |
+| Host file | `~/.qoder/AGENTS.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `~/.qoder/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
+
+### Project scope (`Scope::Local(<root>)`)
+
+| | |
+| --- | --- |
+| Host file | `<root>/AGENTS.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `<root>/.qoder/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
+
 ## MCP servers
 
 | Scope | File |

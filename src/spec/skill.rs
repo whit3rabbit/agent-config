@@ -65,6 +65,11 @@ pub struct SkillSpec {
     /// The `relative_path` is interpreted under the skill directory; any
     /// leading `scripts/`/`references/`/`assets/` prefix is honoured as-is.
     pub assets: Vec<SkillAsset>,
+
+    /// When true, install adopts a skill directory that exists on disk but
+    /// has no recorded owner instead of refusing. Use after a crash between
+    /// skill-directory write and ledger record. Default `false`.
+    pub adopt_unowned: bool,
 }
 
 impl SkillSpec {
@@ -81,6 +86,7 @@ impl SkillSpec {
             },
             body: String::new(),
             assets: Vec::new(),
+            adopt_unowned: false,
         }
     }
 
@@ -91,6 +97,12 @@ impl SkillSpec {
             return Err(AgentConfigError::MissingSpecField {
                 id: "<skill spec>",
                 field: "frontmatter.description",
+            });
+        }
+        if self.body.trim().is_empty() {
+            return Err(AgentConfigError::MissingSpecField {
+                id: "<skill spec>",
+                field: "body",
             });
         }
         validate_frontmatter_scalar(&self.frontmatter.name)?;
@@ -152,12 +164,20 @@ pub struct SkillSpecBuilder {
     frontmatter: SkillFrontmatter,
     body: String,
     assets: Vec<SkillAsset>,
+    adopt_unowned: bool,
 }
 
 impl SkillSpecBuilder {
     /// Set the consumer's owner tag.
     pub fn owner(mut self, tag: impl Into<String>) -> Self {
         self.owner_tag = Some(tag.into());
+        self
+    }
+
+    /// Adopt a skill directory that exists on disk but has no recorded owner.
+    /// See [`SkillSpec::adopt_unowned`].
+    pub fn adopt_unowned(mut self, adopt: bool) -> Self {
+        self.adopt_unowned = adopt;
         self
     }
 
@@ -206,6 +226,16 @@ impl SkillSpecBuilder {
     ///
     /// This is the recommended way to build a spec in production code.
     /// See [crate-level documentation](crate#production-usage) for a full example.
+    ///
+    /// # Errors
+    ///
+    /// - [`AgentConfigError::MissingSpecField`] with `field = "owner"` when
+    ///   [`SkillSpecBuilder::owner`] was never called,
+    ///   `field = "frontmatter.description"` when the skill frontmatter
+    ///   description is empty, or `field = "body"` when the body is empty.
+    /// - [`AgentConfigError::InvalidTag`] when `name` violates the kebab-case
+    ///   skill-name contract or `owner_tag` is malformed, or when a
+    ///   frontmatter scalar contains a control character.
     pub fn try_build(self) -> Result<SkillSpec, AgentConfigError> {
         let owner_tag = self.owner_tag.ok_or(AgentConfigError::MissingSpecField {
             id: "<skill builder>",
@@ -217,6 +247,7 @@ impl SkillSpecBuilder {
             frontmatter: self.frontmatter,
             body: self.body,
             assets: self.assets,
+            adopt_unowned: self.adopt_unowned,
         };
         spec.validate()?;
         Ok(spec)
@@ -286,5 +317,50 @@ mod tests {
             .body("body")
             .try_build()
             .expect("valid");
+    }
+
+    #[test]
+    fn validate_rejects_empty_body() {
+        let err = SkillSpec::builder("alpha")
+            .owner("appA")
+            .description("Use this skill")
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            AgentConfigError::MissingSpecField { field: "body", .. }
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_whitespace_only_body() {
+        let err = SkillSpec::builder("alpha")
+            .owner("appA")
+            .description("Use this skill")
+            .body("   \n\t  \n")
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            AgentConfigError::MissingSpecField { field: "body", .. }
+        ));
+    }
+
+    #[test]
+    fn adopt_unowned_defaults_false_and_round_trips() {
+        let default_spec = SkillSpec::builder("alpha")
+            .owner("appA")
+            .description("Use this skill")
+            .body("body")
+            .build();
+        assert!(!default_spec.adopt_unowned);
+
+        let opted = SkillSpec::builder("alpha")
+            .owner("appA")
+            .description("Use this skill")
+            .body("body")
+            .adopt_unowned(true)
+            .build();
+        assert!(opted.adopt_unowned);
     }
 }

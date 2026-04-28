@@ -5,18 +5,26 @@
 //! Each consumer owns one file outright (`<dir>/<tag>.md`), so multiple
 //! callers coexist without fence markers or shared arrays.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::error::AgentConfigError;
 use crate::integration::{InstallReport, UninstallReport};
 use crate::plan::PlannedChange;
+use crate::scope::Scope;
 use crate::util::planning;
-use crate::util::{file_lock, fs_atomic};
+use crate::util::{file_lock, fs_atomic, safe_fs};
 
 /// Compute the per-tag rule-file path inside `<root>/<rules_dir>/`.
 pub(crate) fn target_path(root: &Path, rules_dir: &str, tag: &str) -> PathBuf {
     root.join(rules_dir).join(format!("{tag}.md"))
+}
+
+fn require_local_root(scope: &Scope) -> Result<&Path, AgentConfigError> {
+    scope.local_root().ok_or_else(|| {
+        AgentConfigError::PathResolution(
+            "rules_dir requires a local-scope project root; caller must enforce this".into(),
+        )
+    })
 }
 
 /// Returns true if a per-tag rule file already exists.
@@ -29,17 +37,20 @@ pub(crate) fn is_installed(
 }
 
 /// Atomically write the rules markdown file. Idempotent on identical content.
+/// Routes through `safe_fs::write` so symlink components under the project
+/// root are rejected even when the caller did not pre-check the path.
 pub(crate) fn install(
-    root: &Path,
+    scope: &Scope,
     rules_dir: &str,
     tag: &str,
     body: &str,
 ) -> Result<InstallReport, AgentConfigError> {
+    let root = require_local_root(scope)?;
     let lock_target = lock_target(root);
     file_lock::with_lock(&lock_target, || {
         let path = target_path(root, rules_dir, tag);
         let body = fs_atomic::ensure_trailing_newline(body);
-        let outcome = fs_atomic::write_atomic(&path, body.as_bytes(), true)?;
+        let outcome = safe_fs::write(scope, &path, body.as_bytes(), true)?;
 
         let mut report = InstallReport::default();
         if outcome.no_change {
@@ -71,12 +82,13 @@ pub(crate) fn plan_install(
 }
 
 /// Remove the per-tag rule file, then walk parent directories upward, pruning
-/// any that became empty. Stops at `root`.
+/// any that became empty. Stops at the local-scope root.
 pub(crate) fn uninstall(
-    root: &Path,
+    scope: &Scope,
     rules_dir: &str,
     tag: &str,
 ) -> Result<UninstallReport, AgentConfigError> {
+    let root = require_local_root(scope)?;
     let lock_target = lock_target(root);
     file_lock::with_lock(&lock_target, || {
         let path = target_path(root, rules_dir, tag);
@@ -85,7 +97,7 @@ pub(crate) fn uninstall(
             report.not_installed = true;
             return Ok(report);
         }
-        fs_atomic::remove_if_exists(&path)?;
+        safe_fs::remove_file(scope, &path)?;
         report.removed.push(path.clone());
 
         let mut parent = path.parent();
@@ -93,7 +105,7 @@ pub(crate) fn uninstall(
             if p == root {
                 break;
             }
-            match fs::read_dir(p) {
+            match std::fs::read_dir(p) {
                 Ok(mut entries) => {
                     if entries.next().is_some() {
                         break;
@@ -101,8 +113,13 @@ pub(crate) fn uninstall(
                 }
                 Err(_) => break,
             }
-            if fs::remove_dir(p).is_err() {
-                break;
+            // remove_empty_dir routes through the same scope/symlink checks as
+            // every other mutation in this helper. Stop pruning on first error
+            // (race with a concurrent writer or permission issue) — leftover
+            // empty directories are harmless.
+            match safe_fs::remove_empty_dir(scope, p) {
+                Ok(true) => {}
+                _ => break,
             }
             parent = p.parent();
         }
@@ -137,12 +154,17 @@ pub(crate) fn plan_uninstall(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use tempfile::tempdir;
+
+    fn local(root: &Path) -> Scope {
+        Scope::Local(root.to_path_buf())
+    }
 
     #[test]
     fn install_writes_under_rules_dir() {
         let dir = tempdir().unwrap();
-        let r = install(dir.path(), ".clinerules", "alpha", "rule body").unwrap();
+        let r = install(&local(dir.path()), ".clinerules", "alpha", "rule body").unwrap();
         let expected = dir.path().join(".clinerules/alpha.md");
         assert_eq!(r.created, vec![expected.clone()]);
         assert_eq!(fs::read_to_string(&expected).unwrap(), "rule body\n");
@@ -151,25 +173,25 @@ mod tests {
     #[test]
     fn install_is_idempotent_on_same_body() {
         let dir = tempdir().unwrap();
-        install(dir.path(), ".clinerules", "alpha", "x").unwrap();
-        let r = install(dir.path(), ".clinerules", "alpha", "x").unwrap();
+        install(&local(dir.path()), ".clinerules", "alpha", "x").unwrap();
+        let r = install(&local(dir.path()), ".clinerules", "alpha", "x").unwrap();
         assert!(r.already_installed);
     }
 
     #[test]
     fn uninstall_removes_file_and_empty_parents() {
         let dir = tempdir().unwrap();
-        install(dir.path(), ".kilocode/rules", "alpha", "x").unwrap();
-        uninstall(dir.path(), ".kilocode/rules", "alpha").unwrap();
+        install(&local(dir.path()), ".kilocode/rules", "alpha", "x").unwrap();
+        uninstall(&local(dir.path()), ".kilocode/rules", "alpha").unwrap();
         assert!(!dir.path().join(".kilocode").exists());
     }
 
     #[test]
     fn uninstall_keeps_other_consumers_files() {
         let dir = tempdir().unwrap();
-        install(dir.path(), ".clinerules", "alpha", "a").unwrap();
-        install(dir.path(), ".clinerules", "beta", "b").unwrap();
-        uninstall(dir.path(), ".clinerules", "alpha").unwrap();
+        install(&local(dir.path()), ".clinerules", "alpha", "a").unwrap();
+        install(&local(dir.path()), ".clinerules", "beta", "b").unwrap();
+        uninstall(&local(dir.path()), ".clinerules", "alpha").unwrap();
         assert!(!dir.path().join(".clinerules/alpha.md").exists());
         assert!(dir.path().join(".clinerules/beta.md").exists());
     }
@@ -177,15 +199,56 @@ mod tests {
     #[test]
     fn uninstall_unknown_is_noop() {
         let dir = tempdir().unwrap();
-        let r = uninstall(dir.path(), ".clinerules", "ghost").unwrap();
+        let r = uninstall(&local(dir.path()), ".clinerules", "ghost").unwrap();
         assert!(r.not_installed);
+    }
+
+    #[test]
+    fn install_rejects_global_scope() {
+        let err = install(&Scope::Global, ".clinerules", "alpha", "x").unwrap_err();
+        assert!(matches!(err, AgentConfigError::PathResolution(_)));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn install_rejects_symlinked_target() {
+        use std::os::unix::fs::symlink;
+        let dir = tempdir().unwrap();
+        let outside_dir = tempdir().unwrap();
+        let outside_target = outside_dir.path().join("escape.md");
+        fs::write(&outside_target, "user content").unwrap();
+
+        let rules_subdir = dir.path().join(".clinerules");
+        fs::create_dir_all(&rules_subdir).unwrap();
+        let alpha = rules_subdir.join("alpha.md");
+        symlink(&outside_target, &alpha).unwrap();
+
+        let err = install(&local(dir.path()), ".clinerules", "alpha", "body").unwrap_err();
+        assert!(matches!(err, AgentConfigError::PathResolution(_)));
+        // Symlinked target must remain untouched.
+        assert_eq!(fs::read_to_string(&outside_target).unwrap(), "user content");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn install_rejects_symlinked_rules_subdir() {
+        use std::os::unix::fs::symlink;
+        let dir = tempdir().unwrap();
+        let outside_dir = tempdir().unwrap();
+        // Symlink the entire rules subdir to an outside location.
+        symlink(outside_dir.path(), dir.path().join(".clinerules")).unwrap();
+
+        let err = install(&local(dir.path()), ".clinerules", "alpha", "body").unwrap_err();
+        assert!(matches!(err, AgentConfigError::PathResolution(_)));
+        // Must not have written into the symlinked-out directory.
+        assert!(!outside_dir.path().join("alpha.md").exists());
     }
 
     #[test]
     fn is_installed_reflects_state() {
         let dir = tempdir().unwrap();
         assert!(!is_installed(dir.path(), ".clinerules", "alpha").unwrap());
-        install(dir.path(), ".clinerules", "alpha", "x").unwrap();
+        install(&local(dir.path()), ".clinerules", "alpha", "x").unwrap();
         assert!(is_installed(dir.path(), ".clinerules", "alpha").unwrap());
     }
 }

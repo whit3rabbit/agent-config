@@ -15,14 +15,17 @@ use std::path::{Path, PathBuf};
 
 use crate::agents::planning as agent_planning;
 use crate::error::AgentConfigError;
-use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
+use crate::integration::{
+    InstallReport, InstructionSurface, Integration, McpSurface, SkillSurface, UninstallReport,
+};
 use crate::paths;
 use crate::plan::{InstallPlan, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{HookSpec, McpSpec, SkillSpec};
+use crate::spec::{HookSpec, InstructionSpec, McpSpec, SkillSpec};
 use crate::status::StatusReport;
 use crate::util::{
-    file_lock, fs_atomic, mcp_json_object, md_block, ownership, safe_fs, skills_dir,
+    file_lock, fs_atomic, instructions_dir, mcp_json_object, md_block, ownership, safe_fs,
+    skills_dir,
 };
 
 /// Forge CLI installer.
@@ -59,6 +62,15 @@ impl ForgeAgent {
         Ok(match scope {
             Scope::Global => Self::forge_home_from_home(&paths::home_dir()?).join("skills"),
             Scope::Local(p) => p.join(".forge").join("skills"),
+        })
+    }
+
+    /// Directory holding the instruction ownership ledger.
+    /// Global: `~/.forge/`. Local: `<root>/.forge/`.
+    fn instruction_config_dir(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
+        Ok(match scope {
+            Scope::Global => Self::forge_home_from_home(&paths::home_dir()?),
+            Scope::Local(p) => p.join(".forge"),
         })
     }
 }
@@ -329,6 +341,82 @@ impl SkillSurface for ForgeAgent {
         let root = Self::skills_root(scope)?;
         scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
+    }
+}
+
+impl ForgeAgent {
+    fn inline_layout(
+        &self,
+        scope: &Scope,
+    ) -> Result<instructions_dir::InlineLayout, AgentConfigError> {
+        Ok(instructions_dir::InlineLayout {
+            config_dir: Self::instruction_config_dir(scope)?,
+            host_file: Self::rules_path(scope)?,
+        })
+    }
+}
+
+impl InstructionSurface for ForgeAgent {
+    fn id(&self) -> &'static str {
+        "forge"
+    }
+
+    fn supported_instruction_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Global, ScopeKind::Local]
+    }
+
+    fn instruction_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, AgentConfigError> {
+        instructions_dir::inline_status(self.inline_layout(scope)?, name, expected_owner)
+    }
+
+    fn plan_install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
+        instructions_dir::inline_plan_install(
+            InstructionSurface::id(self),
+            scope,
+            self.inline_layout(scope),
+            spec,
+        )
+    }
+
+    fn plan_uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, AgentConfigError> {
+        instructions_dir::inline_plan_uninstall(
+            InstructionSurface::id(self),
+            scope,
+            self.inline_layout(scope),
+            name,
+            owner_tag,
+        )
+    }
+
+    fn install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
+        instructions_dir::inline_install(scope, self.inline_layout(scope)?, spec)
+    }
+
+    fn uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, AgentConfigError> {
+        instructions_dir::inline_uninstall(scope, self.inline_layout(scope)?, name, owner_tag)
     }
 }
 

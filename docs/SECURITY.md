@@ -104,9 +104,13 @@ a symlinked root or a root containing `..`, the canonical destination is treated
 as the project root. Consumers should pass a project root they have already
 chosen intentionally.
 
-`Scope::Global` writes are not project-contained, but they still reject a
-symlinked target file before locking or mutating a config target. Global paths
-target the user's home or config directories by design.
+`Scope::Global` writes are not project-contained, but the library walks the
+target path component by component and rejects any existing component that is
+a symlink. A symlinked `~/.claude`, `~/.cursor`, etc. (e.g. pointing at synced
+storage) will fail with `AgentConfigError::PathResolution` rather than have the
+library follow the symlink. Users who need to relocate harness config
+directories should bind-mount, sync the resolved path directly, or wait for
+an opt-in compatibility flag in a future release.
 
 ## Atomic Writes
 
@@ -148,3 +152,20 @@ user changes.
    skills are installed and whether any drift has occurred.
 6. **Pin MCP transports.** Prefer `Stdio` with explicit command paths over
    `Http`/`Sse` with user-supplied URLs.
+
+## Platform notes
+
+Path resolution and the symlink-rejection policy in `safe_fs::write` apply
+to whichever environment the binary actually runs in:
+
+- A binary launched on native Windows resolves `%USERPROFILE%` and
+  `%APPDATA%` and writes under those.
+- A binary launched inside WSL resolves `$HOME` to the WSL user profile and
+  writes there. It does not reach the Windows host profile under `/mnt/c/`.
+- Cline's hook surface writes a `bash`-shebanged executable script and is
+  refused before any mutation on native Windows
+  (`RefusalReason::UnsupportedPlatform` / `AgentConfigError::UnsupportedPlatform`),
+  because Windows lacks the required runtime; the chmod is a no-op there
+  too.
+
+See the README's "Supported platforms" section for the user-facing model.

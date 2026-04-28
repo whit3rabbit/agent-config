@@ -86,6 +86,31 @@ Gemini walks ancestor directories and concatenates `GEMINI.md` files. The
 filename is overridable via `context.fileName` in `settings.json` (e.g., to
 read `AGENTS.md` for cross-tool compatibility).
 
+## Instructions
+
+Standalone instruction files installed via `InstructionSurface`. Uses
+`InstructionPlacement::InlineBlock` because Gemini CLI's memory file does not
+expose a documented `@import` syntax; the body is injected as a tagged
+HTML-comment fenced block in the existing memory file.
+
+### User scope (`Scope::Global`)
+
+| | |
+| --- | --- |
+| Host file | `~/.gemini/GEMINI.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `~/.gemini/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
+
+### Project scope (`Scope::Local(<root>)`)
+
+| | |
+| --- | --- |
+| Host file | `<root>/GEMINI.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `<root>/.gemini/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
+
 ## MCP servers
 
 ### User scope (`Scope::Global`)

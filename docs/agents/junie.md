@@ -25,6 +25,21 @@ Global prompt install is unsupported. Junie also reads a custom filename via
 the `JUNIE_GUIDELINES_FILENAME` env var; this crate writes the documented
 default `AGENTS.md`.
 
+## Instructions
+
+Standalone instruction files installed via `InstructionSurface`. Uses
+`InstructionPlacement::InlineBlock` (project-local only) because JetBrains
+Junie's memory file does not expose a documented `@import` syntax; the body
+is injected as a tagged HTML-comment fenced block in the existing memory
+file.
+
+| | |
+| --- | --- |
+| Host file | `<root>/.junie/AGENTS.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<name> -->`) |
+| Ledger | `<root>/.junie/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
+
 ## MCP servers
 
 | Scope | File |

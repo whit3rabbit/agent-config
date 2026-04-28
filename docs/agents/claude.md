@@ -74,6 +74,34 @@ Claude supports many additional events (`SessionStart`, `UserPromptSubmit`,
 Set `HookSpec::rules` to inject a `RulesBlock`. Repeated installs replace the
 fenced span in place.
 
+## Instructions
+
+Standalone instruction files installed via `InstructionSurface`. Claude is
+the only registered agent that uses `InstructionPlacement::ReferencedFile` by
+default — it writes a separate `<name>.md` and adds an `@<name>.md` include
+to `CLAUDE.md`. Other placements (`InlineBlock`, `StandaloneFile`) work too if
+the consumer overrides `placement`.
+
+### User scope (`Scope::Global`)
+
+| | |
+| --- | --- |
+| Instruction file | `~/.claude/<name>.md` |
+| Host include in | `~/.claude/CLAUDE.md` |
+| Reference syntax | `@<name>.md` (inside a managed `<!-- BEGIN AGENT-CONFIG:<name> --> ... <!-- END AGENT-CONFIG:<name> -->` fence) |
+| Ledger | `~/.claude/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::ReferencedFile` |
+
+### Project scope (`Scope::Local(<root>)`)
+
+| | |
+| --- | --- |
+| Instruction file | `<root>/.claude/instructions/<name>.md` |
+| Host include in | `<root>/CLAUDE.md` |
+| Reference syntax | `@.claude/instructions/<name>.md` |
+| Ledger | `<root>/.claude/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::ReferencedFile` |
+
 ## MCP servers
 
 ### User scope (`Scope::Global`)
