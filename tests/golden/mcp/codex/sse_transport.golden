@@ -3,14 +3,11 @@ agent: codex
 scenario: sse_transport
 
 install_result:
-Ok(
-    InstallReport {
-        created: [
-            "[ROOT]/.codex/config.toml",
-        ],
-        patched: [],
-        backed_up: [],
-        already_installed: false,
+Err(
+    UnsupportedTransport {
+        id: "codex",
+        transport: "sse",
+        reason: "Codex MCP config supports stdio and streamable HTTP servers, not SSE",
     },
 )
 status:
@@ -19,9 +16,7 @@ Ok(
         target: Mcp {
             name: "golden-server",
         },
-        status: InstalledOwned {
-            owner: "golden-owner",
-        },
+        status: Absent,
         config_path: Some(
             "[ROOT]/.codex/config.toml",
         ),
@@ -29,10 +24,10 @@ Ok(
             "[ROOT]/.codex/.agent-config-mcp.json",
         ),
         files: [
-            Exists {
+            Missing {
                 path: "[ROOT]/.codex/config.toml",
             },
-            Exists {
+            Missing {
                 path: "[ROOT]/.codex/.agent-config-mcp.json",
             },
         ],
@@ -59,30 +54,7 @@ Ok(
 )
 
 ROOT tree:
-directories:
-- .codex
-files:
-- .codex/.agent-config-mcp.json
-  content:
-```text
-{
-  "entries": {
-    "golden-server": {
-      "content_hash": "c1db9d199c232861f4728f36e6c61f5a157281813677c9384f09bb54fa1c0672",
-      "owner": "golden-owner"
-    }
-  },
-  "version": 2
-}
-```
-- .codex/config.toml
-  content:
-```text
-[mcp_servers.golden-server]
-type = "sse"
-url = "https://example.test/sse"
-headers = { X-Golden = "true" }
-```
+<empty>
 
 HOME tree:
 <empty>

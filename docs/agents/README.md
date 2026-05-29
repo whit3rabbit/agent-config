@@ -24,7 +24,7 @@ the current file-backed locations implemented by this crate.
 | [Hermes Agent](hermes.md)        | - | ✓ (Local) | ✓ (Global, YAML) | ✓ (Global) | ✓ (Local, InlineBlock) |
 | [Codex CLI](codex.md)            | ✓ (Global + Local) | ✓ | ✓ (Global + Local, TOML) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
 | [GitHub Copilot](copilot.md)     | ✓ (Local)          | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Local, InlineBlock) |
-| [OpenCode](opencode.md)          | ✓ (Global + Local) | - | ✓ (Global + Local, object) | ✓ (Global + Local) | - |
+| [OpenCode](opencode.md)          | ✓ (Global + Local) | ✓ | ✓ (Global + Local, object) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
 | [Cline](cline.md)                | ✓ (Local, v3.36+ scripts) | ✓ | ✓ (Global) | ✓ (Global + Local) | ✓ (Local, StandaloneFile) |
 | [Roo Code](roo.md)               | -                    | ✓ | ✓ (Global + Local) | -    | ✓ (Local, StandaloneFile) |
 | [Windsurf](windsurf.md)          | ✓ (Local) | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Local, StandaloneFile) |

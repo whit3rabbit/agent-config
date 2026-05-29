@@ -5,22 +5,29 @@
 //! file per consumer (`<tag>.ts`) whose body is supplied by the caller via
 //! [`ScriptTemplate::TypeScript`].
 //!
-//! If the caller does not supply a script, this integration falls back to a
-//! generic plugin that intercepts `tool.execute.before` for the `bash` tool
-//! and execs the rendered hook command, passing the call's args via stdin
-//! (JSON). Safe program commands are shell-quoted before rendering.
+//! Optional prompt surface: `~/.config/opencode/AGENTS.md` (Global) or
+//! `<project>/AGENTS.md` (Local). If the caller does not supply a script,
+//! this integration falls back to a generic plugin that intercepts
+//! `tool.execute.before` for the `bash` tool and execs the rendered hook
+//! command, passing the call's args via stdin (JSON). Safe program commands
+//! are shell-quoted before rendering.
 
 use std::path::PathBuf;
 
 use crate::agents::planning as agent_planning;
 use crate::error::AgentConfigError;
-use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, UninstallReport};
+use crate::integration::{
+    InstallReport, InstructionSurface, Integration, McpSurface, SkillSurface, UninstallReport,
+};
 use crate::paths;
 use crate::plan::{InstallPlan, PlanTarget, RefusalReason, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{HookSpec, McpSpec, ScriptTemplate, SkillSpec};
+use crate::spec::{HookSpec, InstructionSpec, McpSpec, ScriptTemplate, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{fs_atomic, mcp_json_map, ownership, planning, safe_fs, skills_dir};
+use crate::util::{
+    file_lock, fs_atomic, instructions_dir, mcp_json_map, md_block, ownership, planning, safe_fs,
+    skills_dir,
+};
 
 /// OpenCode plugin installer.
 #[derive(Debug, Clone, Copy, Default)]
@@ -44,6 +51,16 @@ impl OpenCodeAgent {
         })
     }
 
+    fn agents_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
+        Ok(match scope {
+            Scope::Global => paths::home_dir()?
+                .join(".config")
+                .join("opencode")
+                .join("AGENTS.md"),
+            Scope::Local(p) => p.join("AGENTS.md"),
+        })
+    }
+
     /// `~/.config/opencode/opencode.json` (Global) or
     /// `<root>/opencode.json` (Local). MCP servers live in the object-based
     /// `mcp` key.
@@ -61,6 +78,23 @@ impl OpenCodeAgent {
                 .join("opencode")
                 .join("skills"),
             Scope::Local(p) => p.join(".opencode").join("skills"),
+        })
+    }
+
+    fn instruction_config_dir(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
+        Ok(match scope {
+            Scope::Global => paths::home_dir()?.join(".config").join("opencode"),
+            Scope::Local(p) => p.join(".opencode"),
+        })
+    }
+
+    fn inline_layout(
+        &self,
+        scope: &Scope,
+    ) -> Result<instructions_dir::InlineLayout, AgentConfigError> {
+        Ok(instructions_dir::InlineLayout {
+            config_dir: Self::instruction_config_dir(scope)?,
+            host_file: Self::agents_path(scope)?,
         })
     }
 }
@@ -110,6 +144,14 @@ impl Integration for OpenCodeAgent {
         let body = fs_atomic::ensure_trailing_newline(&body);
         let mut changes = Vec::new();
         planning::plan_write_file(&mut changes, &p, body.as_bytes(), true)?;
+        if let Some(rules) = &spec.rules {
+            planning::plan_markdown_upsert(
+                &mut changes,
+                &Self::agents_path(scope)?,
+                &spec.tag,
+                &rules.content,
+            )?;
+        }
         Ok(InstallPlan::from_changes(target, changes))
     }
 
@@ -123,6 +165,7 @@ impl Integration for OpenCodeAgent {
         let p = Self::plugin_path(scope, tag)?;
         let mut changes = Vec::new();
         planning::plan_remove_file(&mut changes, &p);
+        planning::plan_markdown_remove(&mut changes, &Self::agents_path(scope)?, tag)?;
         Ok(UninstallPlan::from_changes(target, changes))
     }
 
@@ -155,6 +198,26 @@ impl Integration for OpenCodeAgent {
         if let Some(b) = outcome.backup {
             report.backed_up.push(b);
         }
+        if let Some(rules) = &spec.rules {
+            let agents = Self::agents_path(scope)?;
+            scope.ensure_contained(&agents)?;
+            file_lock::with_lock(&agents, || {
+                let host = fs_atomic::read_to_string_or_empty(&agents)?;
+                let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
+                let outcome = safe_fs::write(scope, &agents, new_host.as_bytes(), true)?;
+                if outcome.existed && !outcome.no_change {
+                    report.patched.push(outcome.path.clone());
+                    report.already_installed = false;
+                } else if !outcome.existed {
+                    report.created.push(outcome.path.clone());
+                    report.already_installed = false;
+                }
+                if let Some(b) = outcome.backup {
+                    report.backed_up.push(b);
+                }
+                Ok::<(), AgentConfigError>(())
+            })?;
+        }
         Ok(report)
     }
 
@@ -163,22 +226,47 @@ impl Integration for OpenCodeAgent {
         let mut report = UninstallReport::default();
         let p = Self::plugin_path(scope, tag)?;
         scope.ensure_contained(&p)?;
-        if !p.exists() {
-            report.not_installed = true;
-            return Ok(report);
-        }
-        safe_fs::remove_file(scope, &p)?;
-        report.removed.push(p.clone());
+        let mut removed_any = false;
+        if p.exists() {
+            safe_fs::remove_file(scope, &p)?;
+            report.removed.push(p.clone());
+            removed_any = true;
 
-        // Tidy: prune empty plugins dir.
-        if let Some(parent) = p.parent() {
-            if std::fs::read_dir(parent)
-                .map(|mut it| it.next().is_none())
-                .unwrap_or(false)
-            {
-                let _ = safe_fs::remove_empty_dir(scope, parent);
+            // Tidy: prune empty plugins dir.
+            if let Some(parent) = p.parent() {
+                if std::fs::read_dir(parent)
+                    .map(|mut it| it.next().is_none())
+                    .unwrap_or(false)
+                {
+                    let _ = safe_fs::remove_empty_dir(scope, parent);
+                }
             }
         }
+
+        let agents = Self::agents_path(scope)?;
+        scope.ensure_contained(&agents)?;
+        file_lock::with_lock(&agents, || {
+            let host = fs_atomic::read_to_string_or_empty(&agents)?;
+            let (stripped, removed) = md_block::remove(&host, tag);
+            if removed {
+                if stripped.trim().is_empty() {
+                    if safe_fs::restore_backup_if_matches(scope, &agents, stripped.as_bytes())? {
+                        report.restored.push(agents.clone());
+                        removed_any = true;
+                    } else {
+                        safe_fs::remove_file(scope, &agents)?;
+                        report.removed.push(agents.clone());
+                        removed_any = true;
+                    }
+                } else {
+                    safe_fs::write(scope, &agents, stripped.as_bytes(), false)?;
+                    report.patched.push(agents.clone());
+                    removed_any = true;
+                }
+            }
+            Ok::<(), AgentConfigError>(())
+        })?;
+        report.not_installed = !removed_any;
         Ok(report)
     }
 }
@@ -369,6 +457,70 @@ impl SkillSurface for OpenCodeAgent {
     }
 }
 
+impl InstructionSurface for OpenCodeAgent {
+    fn id(&self) -> &'static str {
+        "opencode"
+    }
+
+    fn supported_instruction_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Global, ScopeKind::Local]
+    }
+
+    fn instruction_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, AgentConfigError> {
+        instructions_dir::inline_status(self.inline_layout(scope)?, name, expected_owner)
+    }
+
+    fn plan_install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
+        instructions_dir::inline_plan_install(
+            InstructionSurface::id(self),
+            scope,
+            self.inline_layout(scope),
+            spec,
+        )
+    }
+
+    fn plan_uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, AgentConfigError> {
+        instructions_dir::inline_plan_uninstall(
+            InstructionSurface::id(self),
+            scope,
+            self.inline_layout(scope),
+            name,
+            owner_tag,
+        )
+    }
+
+    fn install_instruction(
+        &self,
+        scope: &Scope,
+        spec: &InstructionSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
+        instructions_dir::inline_install(scope, self.inline_layout(scope)?, spec)
+    }
+
+    fn uninstall_instruction(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, AgentConfigError> {
+        instructions_dir::inline_uninstall(scope, self.inline_layout(scope)?, name, owner_tag)
+    }
+}
+
 /// A minimal TS plugin body that runs `command` before every `bash`-tool call,
 /// piping the call's args (JSON) on stdin.
 ///
@@ -382,9 +534,9 @@ fn default_plugin_body(command: &str) -> String {
 import type {{ Plugin }} from "@opencode-ai/plugin";
 
 export const Hook: Plugin = async ({{ $ }}) => ({{
-  "tool.execute.before": async ({{ tool }}, {{ args }}) => {{
-    if (tool !== "bash") return;
-    const payload = JSON.stringify({{ tool, args }});
+  "tool.execute.before": async (input, output) => {{
+    if (input.tool !== "bash") return;
+    const payload = JSON.stringify({{ tool: input.tool, args: output.args }});
     await $`echo ${{payload}} | {escaped}`;
   }},
 }});
@@ -439,6 +591,9 @@ mod tests {
         let body = std::fs::read_to_string(dir.path().join(".opencode/plugins/alpha.ts")).unwrap();
         assert!(body.contains("myapp hook opencode"));
         assert!(body.contains("tool.execute.before"));
+        assert!(body.contains("async (input, output)"));
+        assert!(body.contains("input.tool"));
+        assert!(body.contains("output.args"));
     }
 
     #[test]
@@ -459,6 +614,64 @@ mod tests {
         assert!(body.contains("'my hook' 'repo path' 'semi;$(not run)'"));
         assert!(body.contains("'\\`tick\\`'"));
         assert!(body.contains("tool.execute.before"));
+    }
+
+    #[test]
+    fn install_with_rules_writes_agents_md() {
+        let dir = tempdir().unwrap();
+        let agent = OpenCodeAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let s = HookSpec::builder("alpha")
+            .command_program("myapp", ["hook"])
+            .rules("Use OpenCode project rules.")
+            .build();
+
+        agent.install(&scope, &s).unwrap();
+
+        let agents = std::fs::read_to_string(dir.path().join("AGENTS.md")).unwrap();
+        assert!(agents.contains("BEGIN AGENT-CONFIG:alpha"));
+        assert!(agents.contains("Use OpenCode project rules."));
+    }
+
+    #[test]
+    fn uninstall_removes_rules_even_when_plugin_file_missing() {
+        let dir = tempdir().unwrap();
+        let agent = OpenCodeAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let s = HookSpec::builder("alpha")
+            .command_program("myapp", ["hook"])
+            .rules("Use OpenCode project rules.")
+            .build();
+
+        agent.install(&scope, &s).unwrap();
+        std::fs::remove_file(dir.path().join(".opencode/plugins/alpha.ts")).unwrap();
+        let report = agent.uninstall(&scope, "alpha").unwrap();
+
+        assert!(!report.not_installed);
+        assert!(!dir.path().join("AGENTS.md").exists());
+    }
+
+    #[test]
+    fn instruction_surface_round_trip_uses_agents_md() {
+        let dir = tempdir().unwrap();
+        let agent = OpenCodeAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let spec = InstructionSpec::builder("guide")
+            .owner("myapp")
+            .placement(crate::spec::InstructionPlacement::InlineBlock)
+            .body("# Guide\n\nUse OpenCode instructions.\n")
+            .try_build()
+            .unwrap();
+
+        agent.install_instruction(&scope, &spec).unwrap();
+        let agents = std::fs::read_to_string(dir.path().join("AGENTS.md")).unwrap();
+        assert!(agents.contains("BEGIN AGENT-CONFIG-INSTR:guide"));
+        assert!(agent.is_instruction_installed(&scope, "guide").unwrap());
+
+        agent
+            .uninstall_instruction(&scope, "guide", "myapp")
+            .unwrap();
+        assert!(!agent.is_instruction_installed(&scope, "guide").unwrap());
     }
 
     #[test]

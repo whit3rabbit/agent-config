@@ -152,15 +152,15 @@ pub fn skill_by_id(id: &str) -> Option<Box<dyn SkillSurface>> {
 ///   (writes one file per instruction into the harness's per-tag rules
 ///   directory; no host include needed).
 /// - **`InlineBlock`** — Codex, Gemini, Antigravity CLI, Copilot, CodeBuddy,
-///   Amp, Crush, Forge, Qoder, Qwen, Junie, Trae, OpenClaw, Hermes (injects
-///   the body as a tagged HTML-comment fence inside the harness's existing
-///   memory file).
+///   OpenCode, Amp, Crush, Forge, Qoder, Qwen, Junie, Trae, OpenClaw, Hermes
+///   (injects the body as a tagged HTML-comment fence inside the harness's
+///   existing memory file).
 pub fn instruction_capable() -> Vec<Box<dyn InstructionSurface>> {
     use crate::agents::{
         AmpAgent, AntigravityAgent, AntigravityCliAgent, ClaudeAgent, ClineAgent, CodeBuddyAgent,
         CodexAgent, CopilotAgent, CrushAgent, ForgeAgent, GeminiAgent, HermesAgent, JunieAgent,
-        KiloCodeAgent, OpenClawAgent, PiAgent, QoderCliAgent, QwenAgent, RooAgent, TraeAgent,
-        WindsurfAgent,
+        KiloCodeAgent, OpenClawAgent, OpenCodeAgent, PiAgent, QoderCliAgent, QwenAgent, RooAgent,
+        TraeAgent, WindsurfAgent,
     };
     vec![
         Box::new(ClaudeAgent::new()),
@@ -173,6 +173,7 @@ pub fn instruction_capable() -> Vec<Box<dyn InstructionSurface>> {
         Box::new(GeminiAgent::new()),
         Box::new(CodexAgent::new()),
         Box::new(CopilotAgent::new()),
+        Box::new(OpenCodeAgent::new()),
         Box::new(CodeBuddyAgent::new()),
         Box::new(AmpAgent::new()),
         Box::new(CrushAgent::new()),

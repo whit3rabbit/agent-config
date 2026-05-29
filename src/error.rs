@@ -71,6 +71,17 @@ pub enum AgentConfigError {
         reason: &'static str,
     },
 
+    /// The integration does not support this transport kind on this surface.
+    #[error("integration {id} does not support {transport} transport: {reason}")]
+    UnsupportedTransport {
+        /// Integration id.
+        id: &'static str,
+        /// Transport kind, for example `"sse"`.
+        transport: &'static str,
+        /// Why it was rejected.
+        reason: &'static str,
+    },
+
     /// The caller supplied an invalid hook command.
     #[error("invalid hook command: {reason}")]
     InvalidCommand {
@@ -246,6 +257,16 @@ mod tests {
         let msg = format!("{unsupported_platform}");
         assert!(msg.contains("cline"));
         assert!(msg.contains("POSIX shell required"));
+
+        let unsupported_transport = AgentConfigError::UnsupportedTransport {
+            id: "codex",
+            transport: "sse",
+            reason: "not supported",
+        };
+        let msg = format!("{unsupported_transport}");
+        assert!(msg.contains("codex"));
+        assert!(msg.contains("sse"));
+        assert!(msg.contains("not supported"));
 
         let missing = AgentConfigError::MissingSpecField {
             id: "agent",

@@ -7,6 +7,7 @@ Ok(
     InstallReport {
         created: [
             "[ROOT]/.opencode/plugins/golden-hook.ts",
+            "[ROOT]/AGENTS.md",
         ],
         patched: [],
         backed_up: [],
@@ -66,12 +67,19 @@ files:
 import type { Plugin } from "@opencode-ai/plugin";
 
 export const Hook: Plugin = async ({ $ }) => ({
-  "tool.execute.before": async ({ tool }, { args }) => {
-    if (tool !== "bash") return;
-    const payload = JSON.stringify({ tool, args });
+  "tool.execute.before": async (input, output) => {
+    if (input.tool !== "bash") return;
+    const payload = JSON.stringify({ tool: input.tool, args: output.args });
     await $`echo ${payload} | golden hook`;
   },
 });
+```
+- AGENTS.md
+  content:
+```text
+<!-- BEGIN AGENT-CONFIG:golden-hook -->
+Use golden hook rules.
+<!-- END AGENT-CONFIG:golden-hook -->
 ```
 
 HOME tree:

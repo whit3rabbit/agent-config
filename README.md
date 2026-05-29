@@ -44,7 +44,7 @@ Safety guarantees that apply to every integration:
 | [Gemini CLI]           | `gemini`      | Global + Local     | yes          | Global + Local   | Global + Local   | Global + Local   |
 | [Codex CLI]            | `codex`       | Global + Local     | yes          | Global + Local   | Global + Local   | Global + Local   |
 | [GitHub Copilot]       | `copilot`     | Local              | yes          | Global + Local   | Global + Local   | Local            |
-| [OpenCode]             | `opencode`    | Global + Local     | -            | Global + Local   | Global + Local   | -                |
+| [OpenCode]             | `opencode`    | Global + Local     | yes          | Global + Local   | Global + Local   | Global + Local   |
 | [Cline]                | `cline`       | Local              | yes          | Global           | Global + Local   | Local            |
 | [Roo Code]             | `roo`         | -                  | yes          | Global + Local   | -                | Local            |
 | [Windsurf]             | `windsurf`    | Local              | yes          | Global + Local   | Global + Local   | Local            |

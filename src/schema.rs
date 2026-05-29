@@ -371,6 +371,7 @@ fn refusal_label(reason: RefusalReason) -> &'static str {
         RefusalReason::UnsupportedScope => "unsupported_scope",
         RefusalReason::MissingRequiredSpecField => "missing_required_spec_field",
         RefusalReason::InlineSecretInLocalScope => "inline_secret_in_local_scope",
+        RefusalReason::UnsupportedTransport => "unsupported_transport",
         RefusalReason::UnsupportedPlatform => "unsupported_platform",
     }
 }

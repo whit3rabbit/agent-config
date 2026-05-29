@@ -68,7 +68,7 @@ files:
 {
   "entries": {
     "golden-server": {
-      "content_hash": "36e9b58fb72ddf82e27a4d614ea6f1315f315118a169a6751ebc0066f2c088a9",
+      "content_hash": "0162cf97078d39eeabda882f92aa183088f5f7b2d28bf6939c18b46245bc6469",
       "owner": "golden-owner"
     }
   },
@@ -79,9 +79,8 @@ files:
   content:
 ```text
 [mcp_servers.golden-server]
-type = "http"
 url = "https://example.test/mcp"
-headers = { Authorization = "Bearer golden-token" }
+http_headers = { Authorization = "Bearer golden-token" }
 ```
 
 HOME tree:

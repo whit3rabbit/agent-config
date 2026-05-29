@@ -243,6 +243,8 @@ pub enum RefusalReason {
     MissingRequiredSpecField,
     /// Local-scope MCP install would write likely secret material inline.
     InlineSecretInLocalScope,
+    /// The integration does not support this transport kind on this surface.
+    UnsupportedTransport,
     /// The integration's surface requires a runtime not present on the
     /// current host (for example, a POSIX shell for a `bash`-script hook).
     /// Refused before any mutation.

@@ -74,6 +74,13 @@ impl McpSurface for CodexAgent {
             owner: spec.owner_tag.clone(),
         };
         let cfg = Self::config_toml_path(scope)?;
+        if !codex_supports_transport(&spec.transport) {
+            return Ok(InstallPlan::refused(
+                target,
+                Some(cfg),
+                RefusalReason::UnsupportedTransport,
+            ));
+        }
         if let Some(plan) = agent_planning::mcp_local_inline_secret_refusal(
             target.clone(),
             scope,
@@ -116,7 +123,7 @@ impl McpSurface for CodexAgent {
             _ => {}
         }
 
-        let table = build_mcp_table(spec);
+        let table = build_mcp_table(spec)?;
         let changed =
             toml_patch::upsert_named_table(&mut doc, &["mcp_servers"], &spec.name, table)?;
         let owner_changed = prior_owner.as_deref() != Some(spec.owner_tag.as_str());
@@ -222,6 +229,7 @@ impl McpSurface for CodexAgent {
         spec.validate()?;
         let mut report = InstallReport::default();
         let cfg = Self::config_toml_path(scope)?;
+        validate_codex_transport(&spec.transport)?;
         spec.validate_local_secret_policy(scope)?;
         scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -240,7 +248,7 @@ impl McpSurface for CodexAgent {
                 spec.adopt_unowned,
             )?;
 
-            let table = build_mcp_table(spec);
+            let table = build_mcp_table(spec)?;
             let changed =
                 toml_patch::upsert_named_table(&mut doc, &["mcp_servers"], &spec.name, table)?;
 
@@ -337,7 +345,7 @@ impl McpSurface for CodexAgent {
 }
 
 /// Translate an [`McpSpec`] into a TOML `[mcp_servers.<name>]` sub-table.
-fn build_mcp_table(spec: &McpSpec) -> Table {
+fn build_mcp_table(spec: &McpSpec) -> Result<Table, AgentConfigError> {
     let mut t = Table::new();
     match &spec.transport {
         McpTransport::Stdio { command, args, env } => {
@@ -356,35 +364,40 @@ fn build_mcp_table(spec: &McpSpec) -> Table {
             }
         }
         McpTransport::Http { url, headers } => {
-            t["type"] = value("http");
             t["url"] = value(url.clone());
             if !headers.is_empty() {
                 let mut h = InlineTable::new();
                 for (k, v) in headers {
                     h.insert(k, v.clone().into());
                 }
-                t["headers"] = value(h);
+                t["http_headers"] = value(h);
             }
         }
-        McpTransport::Sse { url, headers } => {
-            t["type"] = value("sse");
-            t["url"] = value(url.clone());
-            if !headers.is_empty() {
-                let mut h = InlineTable::new();
-                for (k, v) in headers {
-                    h.insert(k, v.clone().into());
-                }
-                t["headers"] = value(h);
-            }
-        }
+        McpTransport::Sse { .. } => validate_codex_transport(&spec.transport)?,
     }
-    t
+    Ok(t)
+}
+
+fn codex_supports_transport(transport: &McpTransport) -> bool {
+    !matches!(transport, McpTransport::Sse { .. })
+}
+
+fn validate_codex_transport(transport: &McpTransport) -> Result<(), AgentConfigError> {
+    if codex_supports_transport(transport) {
+        return Ok(());
+    }
+    Err(AgentConfigError::UnsupportedTransport {
+        id: "codex",
+        transport: "sse",
+        reason: "Codex MCP config supports stdio and streamable HTTP servers, not SSE",
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::integration::Integration;
+    use crate::plan::{PlanStatus, PlannedChange, RefusalReason};
     use tempfile::tempdir;
 
     fn local_mcp_spec(name: &str, owner: &str) -> McpSpec {
@@ -413,6 +426,81 @@ mod tests {
         assert!(s.contains("[mcp_servers.github]"), "got:\n{s}");
         assert!(s.contains(r#"command = "npx""#), "got:\n{s}");
         assert!(s.contains(r#"FOO = "bar""#), "got:\n{s}");
+    }
+
+    #[test]
+    fn install_mcp_http_uses_codex_http_headers_shape() {
+        let dir = tempdir().unwrap();
+        let agent = CodexAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let spec = McpSpec::builder("remote")
+            .owner("myapp")
+            .http("https://example.test/mcp")
+            .header("Authorization", "Bearer token")
+            .allow_local_inline_secrets()
+            .build();
+
+        agent.install_mcp(&scope, &spec).unwrap();
+
+        let cfg = dir.path().join(".codex/config.toml");
+        let s = read_toml(&cfg);
+        assert!(s.contains("[mcp_servers.remote]"), "got:\n{s}");
+        assert!(
+            s.contains(r#"url = "https://example.test/mcp""#),
+            "got:\n{s}"
+        );
+        assert!(
+            s.contains(r#"http_headers = { Authorization = "Bearer token" }"#),
+            "got:\n{s}"
+        );
+        assert!(!s.contains(r#"type = "http""#), "got:\n{s}");
+        assert!(!s.contains("\nheaders ="), "got:\n{s}");
+    }
+
+    #[test]
+    fn install_mcp_refuses_sse_transport() {
+        let dir = tempdir().unwrap();
+        let agent = CodexAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let spec = McpSpec::builder("events")
+            .owner("myapp")
+            .sse("https://example.test/sse")
+            .build();
+
+        let err = agent.install_mcp(&scope, &spec).unwrap_err();
+
+        assert!(matches!(
+            err,
+            AgentConfigError::UnsupportedTransport {
+                id: "codex",
+                transport: "sse",
+                ..
+            }
+        ));
+        assert!(!dir.path().join(".codex/config.toml").exists());
+    }
+
+    #[test]
+    fn plan_install_mcp_refuses_sse_transport() {
+        let dir = tempdir().unwrap();
+        let agent = CodexAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let spec = McpSpec::builder("events")
+            .owner("myapp")
+            .sse("https://example.test/sse")
+            .build();
+
+        let plan = agent.plan_install_mcp(&scope, &spec).unwrap();
+
+        assert_eq!(plan.status, PlanStatus::Refused);
+        assert!(matches!(
+            plan.changes.as_slice(),
+            [PlannedChange::Refuse {
+                reason: RefusalReason::UnsupportedTransport,
+                ..
+            }]
+        ));
+        assert!(!dir.path().join(".codex/config.toml").exists());
     }
 
     #[test]

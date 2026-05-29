@@ -318,8 +318,9 @@ pub trait McpSurface: Send + Sync {
     /// - [`AgentConfigError::InlineSecretInLocalScope`] when `spec` carries an
     ///   inline secret (`SecretPolicy::Inline`) under `Scope::Local`.
     ///
-    /// Predictable refusals (unsupported scope, owner mismatch, parse
-    /// failure) are encoded as [`crate::plan::PlanStatus::Refused`].
+    /// Predictable refusals (unsupported scope, unsupported transport, owner
+    /// mismatch, parse failure) are encoded as
+    /// [`crate::plan::PlanStatus::Refused`].
     fn plan_install_mcp(
         &self,
         scope: &Scope,
@@ -358,6 +359,8 @@ pub trait McpSurface: Send + Sync {
     ///   is false).
     /// - [`AgentConfigError::InlineSecretInLocalScope`] under `Scope::Local`
     ///   when the spec carries an inline secret.
+    /// - [`AgentConfigError::UnsupportedTransport`] when the integration does
+    ///   not support the requested MCP transport.
     /// - [`AgentConfigError::MissingSpecField`] /
     ///   [`AgentConfigError::InvalidTag`] from spec re-validation.
     fn install_mcp(&self, scope: &Scope, spec: &McpSpec)

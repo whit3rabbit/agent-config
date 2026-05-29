@@ -21,8 +21,8 @@ ID: `codex` — `agent_config::by_id("codex")`
 | Backup | `<root>/.codex/hooks.json.bak` (first patch only) |
 
 > Project-scope hooks only load when the project is trusted by Codex.
-> Codex also accepts a TOML form (`config.toml` with `[features] codex_hooks = true`);
-> v0.1 always writes JSON.
+> Codex also accepts inline `[hooks]` tables in `config.toml`; this crate
+> writes `hooks.json`.
 
 ### Format
 
@@ -31,7 +31,7 @@ ID: `codex` — `agent_config::by_id("codex")`
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "shell",
+        "matcher": "Bash",
         "hooks": [
           { "type": "command", "command": "myapp hook codex" }
         ],
@@ -59,7 +59,7 @@ Codex events also include `SessionStart`, `PermissionRequest`, `UserPromptSubmit
 | `Matcher::*`        | Codex string |
 | ------------------- | ------------ |
 | `All`               | `*`          |
-| `Bash`              | `shell`      |
+| `Bash`              | `Bash`       |
 | `Exact(s)`          | `s`          |
 | `AnyOf([a, b])`     | `a\|b`       |
 | `Regex(s)`          | `s`          |
@@ -135,6 +135,8 @@ API_KEY = "${API_KEY}"
 ```
 
 Supports both stdio (command/args) and http (url/bearer_token_env_var) transports.
+HTTP headers are serialized as `http_headers`. SSE is not a documented Codex
+MCP config transport and is refused by this surface.
 
 ## Skills
 

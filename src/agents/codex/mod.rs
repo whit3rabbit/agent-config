@@ -1,7 +1,8 @@
 //! Codex CLI integration (OpenAI's official Codex CLI).
 //!
 //! Hook surface: `<scope>/.codex/hooks.json` using PascalCase event names
-//! (`PreToolUse`/`PostToolUse`), JSON shape mirrors Gemini's:
+//! (`PreToolUse`/`PostToolUse`), with tool-name matchers such as `Bash`.
+//! JSON shape mirrors Gemini's:
 //!
 //! ```json
 //! {
@@ -446,7 +447,7 @@ impl InstructionSurface for CodexAgent {
 fn matcher_to_codex(m: &Matcher) -> String {
     match m {
         Matcher::All => "*".to_string(),
-        Matcher::Bash => "shell".to_string(),
+        Matcher::Bash => "Bash".to_string(),
         Matcher::Exact(s) => s.clone(),
         Matcher::AnyOf(names) => names.join("|"),
         Matcher::Regex(s) => s.clone(),
@@ -487,7 +488,7 @@ mod tests {
         agent.install(&scope, &local_spec("alpha")).unwrap();
 
         let v = read_json(&dir.path().join(".codex/hooks.json"));
-        assert_eq!(v["hooks"]["PreToolUse"][0]["matcher"], json!("shell"));
+        assert_eq!(v["hooks"]["PreToolUse"][0]["matcher"], json!("Bash"));
         assert_eq!(
             v["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
             json!("myapp hook")
@@ -507,7 +508,7 @@ mod tests {
     #[test]
     fn matcher_mapping() {
         assert_eq!(matcher_to_codex(&Matcher::All), "*");
-        assert_eq!(matcher_to_codex(&Matcher::Bash), "shell");
+        assert_eq!(matcher_to_codex(&Matcher::Bash), "Bash");
         assert_eq!(matcher_to_codex(&Matcher::Exact("Edit".into())), "Edit");
         assert_eq!(
             matcher_to_codex(&Matcher::AnyOf(vec!["Read".into(), "Write".into()])),

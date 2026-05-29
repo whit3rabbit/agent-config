@@ -8,8 +8,12 @@ Ok(
         created: [
             "[ROOT]/.opencode/plugins/golden-hook.ts",
         ],
-        patched: [],
-        backed_up: [],
+        patched: [
+            "[ROOT]/AGENTS.md",
+        ],
+        backed_up: [
+            "[ROOT]/AGENTS.md.bak",
+        ],
         already_installed: false,
     },
 )
@@ -66,9 +70,9 @@ files:
 import type { Plugin } from "@opencode-ai/plugin";
 
 export const Hook: Plugin = async ({ $ }) => ({
-  "tool.execute.before": async ({ tool }, { args }) => {
-    if (tool !== "bash") return;
-    const payload = JSON.stringify({ tool, args });
+  "tool.execute.before": async (input, output) => {
+    if (input.tool !== "bash") return;
+    const payload = JSON.stringify({ tool: input.tool, args: output.args });
     await $`echo ${payload} | golden hook`;
   },
 });
@@ -82,12 +86,30 @@ export const Hook: Plugin = async ({ $ }) => ({
 import type { Plugin } from "@opencode-ai/plugin";
 
 export const Hook: Plugin = async ({ $ }) => ({
-  "tool.execute.before": async ({ tool }, { args }) => {
-    if (tool !== "bash") return;
-    const payload = JSON.stringify({ tool, args });
+  "tool.execute.before": async (input, output) => {
+    if (input.tool !== "bash") return;
+    const payload = JSON.stringify({ tool: input.tool, args: output.args });
     await $`echo ${payload} | golden hook`;
   },
 });
+```
+- AGENTS.md
+  content:
+```text
+<!-- BEGIN AGENT-CONFIG:sibling-hook -->
+Use sibling hook rules.
+<!-- END AGENT-CONFIG:sibling-hook -->
+
+<!-- BEGIN AGENT-CONFIG:golden-hook -->
+Use golden hook rules.
+<!-- END AGENT-CONFIG:golden-hook -->
+```
+- AGENTS.md.bak
+  content:
+```text
+<!-- BEGIN AGENT-CONFIG:sibling-hook -->
+Use sibling hook rules.
+<!-- END AGENT-CONFIG:sibling-hook -->
 ```
 
 HOME tree:

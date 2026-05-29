@@ -37,9 +37,9 @@ The default plugin (when `HookSpec::script` is `None`):
 import type { Plugin } from "@opencode-ai/plugin";
 
 export const Hook: Plugin = async ({ $ }) => ({
-  "tool.execute.before": async ({ tool }, { args }) => {
-    if (tool !== "bash") return;
-    const payload = JSON.stringify({ tool, args });
+  "tool.execute.before": async (input, output) => {
+    if (input.tool !== "bash") return;
+    const payload = JSON.stringify({ tool: input.tool, args: output.args });
     await $`echo ${payload} | myapp hook opencode`;
   },
 });
@@ -61,13 +61,45 @@ message/shell/command/LSP/permission/server/todo/TUI families.
 ### Matcher mapping
 
 The `Matcher` enum is currently unused by this integration — the default
-plugin guards on `tool === "bash"` inside the TS body. Use a custom script
+plugin guards on `input.tool === "bash"` inside the TS body. Use a custom script
 to filter differently.
 
 ## Prompt instructions
 
-OpenCode reads system instructions from `AGENTS.md`. Use the Codex
-integration to write that file.
+OpenCode reads system instructions from `AGENTS.md`.
+
+| Scope | Host file |
+| --- | --- |
+| User | `~/.config/opencode/AGENTS.md` |
+| Project | `<root>/AGENTS.md` |
+
+When `HookSpec::rules` is present, this integration injects the rules body as a
+tagged `AGENT-CONFIG:<tag>` HTML-comment fenced block in that host file.
+
+## Instructions
+
+Standalone instruction bodies installed via `InstructionSurface` use
+`InstructionPlacement::InlineBlock`. The body is injected as a tagged
+`AGENT-CONFIG-INSTR:<name>` HTML-comment fenced block in OpenCode's `AGENTS.md`
+file.
+
+### User scope (`Scope::Global`)
+
+| | |
+| --- | --- |
+| Host file | `~/.config/opencode/AGENTS.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
+| Ledger | `~/.config/opencode/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
+
+### Project scope (`Scope::Local(<root>)`)
+
+| | |
+| --- | --- |
+| Host file | `<root>/AGENTS.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
+| Ledger | `<root>/.opencode/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
 
 ## MCP servers
 
@@ -116,6 +148,7 @@ OpenCode also scans Claude-compatible and `.agents/skills` locations, but
 ## References
 
 - <https://opencode.ai/docs/plugins/>
+- <https://opencode.ai/docs/rules/>
 - <https://opencode.ai/docs/config/>
 - <https://opencode.ai/docs/mcp-servers/>
 - <https://opencode.ai/docs/skills>

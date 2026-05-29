@@ -71,7 +71,7 @@ files:
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "shell",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
@@ -81,7 +81,7 @@ files:
         "_agent_config_tag": "sibling-hook"
       },
       {
-        "matcher": "shell",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
@@ -101,7 +101,7 @@ files:
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "shell",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",

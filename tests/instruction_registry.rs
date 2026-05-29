@@ -29,6 +29,7 @@ const INSTRUCTION_CAPABLE: &[&str] = &[
     "gemini",
     "codex",
     "copilot",
+    "opencode",
     "codebuddy",
     "amp",
     "crush",
@@ -48,6 +49,7 @@ const GLOBAL_AND_LOCAL: &[&str] = &[
     "antigravitycli",
     "gemini",
     "codex",
+    "opencode",
     "codebuddy",
     "amp",
     "crush",
@@ -126,11 +128,10 @@ fn instruction_by_id_returns_each_agent() {
 
 #[test]
 fn instruction_by_id_returns_none_for_non_instruction_agents() {
-    // Cursor, OpenCode, iFlow, Tabnine have no prompt surface so they do not
-    // implement `InstructionSurface`. (Pi *does* implement it via inline
-    // blocks in AGENTS.md, so it is intentionally absent from this list.)
+    // Cursor, iFlow, Tabnine have no prompt surface so they do not implement
+    // `InstructionSurface`. (Pi and OpenCode implement it via inline blocks
+    // in AGENTS.md, so they are intentionally absent from this list.)
     assert!(instruction_by_id("cursor").is_none());
-    assert!(instruction_by_id("opencode").is_none());
     assert!(instruction_by_id("iflow").is_none());
     assert!(instruction_by_id("tabnine").is_none());
     assert!(instruction_by_id("does-not-exist").is_none());
