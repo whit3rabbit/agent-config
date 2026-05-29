@@ -6,12 +6,16 @@ follows [SemVer](https://semver.org/) once 1.0 ships.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-29
+
 ### Added
 
 - Added `antigravitycli` as a distinct Antigravity CLI integration with prompt
   context, instructions, and MCP support. CLI skills are intentionally deferred
   because Antigravity CLI uses flat `.md` skill files while this crate's
   `SkillSurface` models directory-scoped `SKILL.md` packages.
+- Added OpenCode prompt rules and instruction-surface support through
+  documented `AGENTS.md` files.
 
 ### Fixed
 
@@ -19,12 +23,19 @@ follows [SemVer](https://semver.org/) once 1.0 ships.
   `~/.gemini/antigravity/mcp_config.json` leaf symlink when it points to a
   shared config file under `~/.gemini`, matching Antigravity's app-created
   layout without weakening the generic global symlink safety policy.
+- Codex hook `Matcher::Bash` now emits Codex's documented `Bash` matcher.
+- Codex streamable HTTP MCP entries now write `http_headers` and omit the
+  unsupported `type = "http"` field. SSE transport is refused for Codex MCP.
+- OpenCode's generated default plugin now uses the current
+  `tool.execute.before` plugin callback signature.
 
 ### Changed
 
 - Antigravity app/IDE local prompt rules, instructions, and skills now write
   to `.agents/*` paths. Existing `.agent/*` installs are still detected for
   status and uninstall, but are not auto-migrated.
+- OpenCode `HookSpec::rules` now injects into OpenCode's documented
+  `AGENTS.md` prompt file instead of only writing the plugin file.
 
 ### Changed (breaking, instruction surface)
 

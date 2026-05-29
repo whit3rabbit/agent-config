@@ -1,6 +1,6 @@
 # Support matrix
 
-This is the release-facing support matrix for `agent-config` v0.1. It lists
+This is the release-facing support matrix for `agent-config` v0.2. It lists
 the files and directories this crate writes, not every path a harness may read.
 Per-agent detail remains in [`docs/agents/`](agents/README.md). Source review
 details live in [`path-contract-audit.md`](path-contract-audit.md).
