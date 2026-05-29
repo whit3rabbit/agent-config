@@ -140,6 +140,75 @@ fn global_mcp_inline_secret_is_allowed_by_default() {
     assert!(env.home_path().join(".claude.json").exists());
 }
 
+#[test]
+#[cfg(unix)]
+fn antigravity_global_mcp_install_resolves_documented_leaf_symlink() {
+    use std::os::unix::fs::symlink;
+
+    let env = IsolatedGlobalEnv::new();
+    let gemini = env.home_path().join(".gemini");
+    let documented = gemini.join("antigravity").join("mcp_config.json");
+    let target = gemini.join("config").join("mcp_config.json");
+    fs::create_dir_all(documented.parent().unwrap()).unwrap();
+    fs::create_dir_all(target.parent().unwrap()).unwrap();
+    fs::write(&target, b"{}").unwrap();
+    symlink(&target, &documented).unwrap();
+
+    let antigravity = mcp_by_id("antigravity").unwrap();
+    antigravity
+        .install_mcp(&Scope::Global, &mcp_spec("github", "plan-app"))
+        .unwrap();
+
+    assert!(fs::symlink_metadata(&documented)
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    let parsed: serde_json::Value = serde_json::from_slice(&fs::read(&target).unwrap()).unwrap();
+    assert_eq!(parsed["mcpServers"]["github"]["command"], "npx");
+
+    let status = antigravity
+        .mcp_status(&Scope::Global, "github", "plan-app")
+        .unwrap();
+    let expected_config = fs::canonicalize(&target).unwrap();
+    let expected_ledger = target.parent().unwrap().join(".agent-config-mcp.json");
+    assert_eq!(status.config_path.as_ref(), Some(&expected_config));
+    assert_eq!(status.ledger_path.as_ref(), Some(&expected_ledger));
+    assert!(expected_ledger.exists());
+    assert!(!documented
+        .parent()
+        .unwrap()
+        .join(".agent-config-mcp.json")
+        .exists());
+}
+
+#[test]
+#[cfg(unix)]
+fn antigravity_global_mcp_install_rejects_leaf_symlink_outside_gemini_home() {
+    use std::os::unix::fs::symlink;
+
+    let env = IsolatedGlobalEnv::new();
+    let gemini = env.home_path().join(".gemini");
+    let documented = gemini.join("antigravity").join("mcp_config.json");
+    let outside_dir = env.home_path().join("outside");
+    let outside_target = outside_dir.join("mcp_config.json");
+    fs::create_dir_all(documented.parent().unwrap()).unwrap();
+    fs::create_dir_all(&outside_dir).unwrap();
+    fs::write(&outside_target, b"{\"mcpServers\":{}}").unwrap();
+    symlink(&outside_target, &documented).unwrap();
+
+    let err = mcp_by_id("antigravity")
+        .unwrap()
+        .install_mcp(&Scope::Global, &mcp_spec("github", "plan-app"))
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        agent_config::AgentConfigError::PathResolution(_)
+    ));
+    assert_eq!(fs::read(&outside_target).unwrap(), b"{\"mcpServers\":{}}");
+    assert!(!outside_dir.join(".agent-config-mcp.json").exists());
+}
+
 fn scope_label(kind: ScopeKind) -> &'static str {
     if kind == ScopeKind::Global {
         "global"

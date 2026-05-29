@@ -2,46 +2,47 @@
 
 ID: `antigravity` — `agent_config::by_id("antigravity")`
 
-(Google's agent-first IDE, Gemini-backed.)
+Google's Antigravity desktop app / IDE. Antigravity CLI is separate:
+[`antigravitycli`](antigravitycli.md).
 
 ## Hooks
 
-Not supported. Prompt-level integration only.
+Not supported. This integration is prompt-rules, MCP, skills, and
+instructions only.
 
-## Prompt instructions
+## Prompt Instructions
 
 ### Project scope (`Scope::Local(<root>)`)
 
 | | |
 | --- | --- |
-| File | `<root>/.agent/rules/<tag>.md` |
+| File | `<root>/.agents/rules/<tag>.md` |
+| Legacy fallback | `<root>/.agent/rules/<tag>.md` for status and uninstall |
 | Mechanism | One markdown file per consumer |
-| Format | Markdown (frontmatter `trigger: always_on \| model_decision` is optional) |
+| Format | Markdown |
 
-> Note the directory is **`.agent/`** (singular), not `.agents/`. Sibling
-> dirs `.agent/skills/` and `.agent/workflows/` exist for those surfaces.
->
-> Antigravity also reads project-root `GEMINI.md` (highest priority) and
-> `AGENTS.md` (cross-tool, since v1.20.3).
+New installs write `.agents/rules`. Existing `.agent/rules` content is not
+migrated or removed unless the caller explicitly uninstalls the matching tag.
 
 ### User scope (`Scope::Global`)
 
-Not supported in v0.1. Antigravity's user rules are configured via the
-editor settings UI rather than a documented file path. Calling with
-`Scope::Global` returns `AgentConfigError::UnsupportedScope`.
+Not supported for this integration. Antigravity global rules live in
+`~/.gemini/GEMINI.md`, but this crate keeps that file with Gemini CLI and
+Antigravity CLI rather than mixing it into the app/IDE integration. Calling
+with `Scope::Global` returns `AgentConfigError::UnsupportedScope`.
 
 ## Instructions
 
 Standalone instruction files installed via `InstructionSurface`. Uses
-`InstructionPlacement::StandaloneFile` because Antigravity already has a
-per-tag rules directory; each instruction is one file in that directory, with
-no host include needed.
+`InstructionPlacement::StandaloneFile` because Antigravity has a per-file
+rules directory; no host include is needed.
 
 | | |
 | --- | --- |
-| Instruction file | `<root>/.agent/rules/<name>.md` |
-| Mechanism | One file per instruction — no host file needed |
-| Ledger | `<root>/.agent/.agent-config-instructions.json` |
+| Instruction file | `<root>/.agents/rules/<name>.md` |
+| Legacy fallback | `<root>/.agent/rules/<name>.md` for status and uninstall |
+| Ledger | `<root>/.agents/.agent-config-instructions.json` |
+| Legacy ledger fallback | `<root>/.agent/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::StandaloneFile` |
 
 ## Skills
@@ -50,19 +51,21 @@ no host include needed.
 
 | | |
 | --- | --- |
-| Workspace | `<root>/.agent/skills/<name>/` |
+| Workspace | `<root>/.agents/skills/<name>/` |
+| Workspace legacy fallback | `<root>/.agent/skills/<name>/` for status and uninstall |
 | Global | `~/.gemini/antigravity/skills/<name>/` |
 
 ### Format
 
-Skills are directory-scoped. Each skill must contain:
+Skills are directory-scoped. Each skill contains a required `SKILL.md` file
+plus optional supporting files.
 
-```
+```text
 my-skill/
-├── SKILL.md              (required: frontmatter + body)
-├── scripts/              (optional: Python, Bash, Node scripts)
-├── references/           (optional: documentation, templates)
-└── assets/               (optional: static assets)
+├── SKILL.md
+├── scripts/
+├── examples/
+└── resources/
 ```
 
 ### SKILL.md format
@@ -75,34 +78,17 @@ description: Executes automated formatting and generates semantic commit message
 
 ## Goal
 Describe what the skill does.
-
-## Instructions
-Step-by-step guidance.
-
-## Examples
-Usage examples.
-
-## Constraints
-Limitations or edge cases.
 ```
 
-**Key fields:**
+`description` is required. `name` is optional and defaults to the folder name
+when omitted by the host.
 
-- `description` (required): Specific trigger phrase for semantic relevance. This
-  determines when Antigravity activates the skill.
-- `name` (optional): Lowercase with hyphens.
+## Workflows
 
-### Automatic activation
+Not implemented. Antigravity documents workflows as markdown files, but this
+crate has no workflow surface yet.
 
-Skills are loaded and automatically activated based on semantic description matching
-against the current task.
-
-## Workflows — TODO
-
-Antigravity has a dedicated `<root>/.agent/workflows/` directory. Not yet
-wired up. See [`CLAUDE.md`](../../CLAUDE.md).
-
-## MCP servers
+## MCP Servers
 
 ### User scope (`Scope::Global`)
 
@@ -112,6 +98,12 @@ wired up. See [`CLAUDE.md`](../../CLAUDE.md).
 | Format | JSON |
 | Key | `mcpServers` |
 
+If that documented compatibility path is a symlink into `~/.gemini`, the
+implementation resolves the symlink target before writing. Antigravity's
+current app/IDE docs also mention `~/.gemini/config/mcp_config.json`; this row
+keeps the existing crate path for compatibility with installed Antigravity
+profiles.
+
 ### Project scope (`Scope::Local(<root>)`)
 
 | | |
@@ -119,11 +111,16 @@ wired up. See [`CLAUDE.md`](../../CLAUDE.md).
 | File | `<root>/.agent/mcp_config.json` |
 | Format | JSON |
 | Key | `mcpServers` |
+| Support level | Observed |
+
+Local app MCP remains `.agent/mcp_config.json` until Google documents an exact
+app-local replacement.
 
 ## References
 
-- <https://antigravity.codes/blog/user-rules>
+- <https://antigravity.google/docs/rules-workflows>
 - <https://antigravity.google/docs/skills>
-- <https://codelabs.developers.google.com/getting-started-with-antigravity-skills>
-- <https://codelabs.developers.google.com/getting-started-google-antigravity>
-- <https://www.devopness.com/docsmcp/antigravity/>
+- <https://antigravity.google/docs/mcp>
+- <https://antigravity.google/assets/docs/antigravity-2-0/rules-workflows.md>
+- <https://antigravity.google/assets/docs/editor/ide-skills.md>
+- <https://antigravity.google/assets/docs/editor/ide-mcp.md>

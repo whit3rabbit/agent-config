@@ -1,12 +1,12 @@
-surface: skills
-agent: antigravity
-scenario: minimal_skill_md
+surface: mcp
+agent: antigravitycli
+scenario: sse_transport
 
 install_result:
 Ok(
     InstallReport {
         created: [
-            "[ROOT]/.agents/skills/golden-skill/SKILL.md",
+            "[ROOT]/.agents/mcp_config.json",
         ],
         patched: [],
         backed_up: [],
@@ -16,24 +16,24 @@ Ok(
 status:
 Ok(
     StatusReport {
-        target: Skill {
-            name: "golden-skill",
+        target: Mcp {
+            name: "golden-server",
         },
         status: InstalledOwned {
             owner: "golden-owner",
         },
         config_path: Some(
-            "[ROOT]/.agents/skills/golden-skill",
+            "[ROOT]/.agents/mcp_config.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.agents/skills/.agent-config-skills.json",
+            "[ROOT]/.agents/.agent-config-mcp.json",
         ),
         files: [
             Exists {
-                path: "[ROOT]/.agents/skills/golden-skill",
+                path: "[ROOT]/.agents/mcp_config.json",
             },
             Exists {
-                path: "[ROOT]/.agents/skills/golden-skill/SKILL.md",
+                path: "[ROOT]/.agents/.agent-config-mcp.json",
             },
         ],
         warnings: [],
@@ -42,12 +42,12 @@ Ok(
 validation:
 Ok(
     ValidationReport {
-        target: Skill {
-            integration_id: "antigravity",
+        target: Mcp {
+            integration_id: "antigravitycli",
             scope: Local(
                 "[ROOT]",
             ),
-            name: "golden-skill",
+            name: "golden-server",
             owner: "golden-owner",
         },
         ok: true,
@@ -61,32 +61,33 @@ Ok(
 ROOT tree:
 directories:
 - .agents
-- .agents/skills
-- .agents/skills/golden-skill
 files:
-- .agents/skills/.agent-config-skills.json
+- .agents/.agent-config-mcp.json
   content:
 ```text
 {
   "entries": {
-    "golden-skill": {
-      "content_hash": "514bf376c8c933a19c837c64f505f5c3b186b7bbe8386edb3ad939b36ad058d9",
+    "golden-server": {
+      "content_hash": "521b336635e7d740a77071cab91bfad0cb9b643e676f96747d0e2170f0df72c7",
       "owner": "golden-owner"
     }
   },
   "version": 2
 }
 ```
-- .agents/skills/golden-skill/SKILL.md
+- .agents/mcp_config.json
   content:
 ```text
----
-name: golden-skill
-description: Use during golden snapshot tests.
----
-
-## Goal
-Preserve the config shape.
+{
+  "mcpServers": {
+    "golden-server": {
+      "serverUrl": "https://example.test/sse",
+      "headers": {
+        "X-Golden": "true"
+      }
+    }
+  }
+}
 ```
 
 HOME tree:

@@ -6,6 +6,7 @@
 
 pub(crate) mod amp;
 pub(crate) mod antigravity;
+pub(crate) mod antigravitycli;
 pub(crate) mod claude;
 pub(crate) mod cline;
 pub(crate) mod codebuddy;
@@ -34,6 +35,7 @@ pub(crate) mod windsurf;
 
 pub use amp::AmpAgent;
 pub use antigravity::AntigravityAgent;
+pub use antigravitycli::AntigravityCliAgent;
 pub use claude::ClaudeAgent;
 pub use cline::ClineAgent;
 pub use codebuddy::CodeBuddyAgent;

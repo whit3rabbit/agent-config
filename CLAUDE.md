@@ -269,6 +269,7 @@ release-facing path contract is in
 | windsurf             | done  | done   | done  | done   | done (Local, StandaloneFile) |
 | kilocode             | -     | done   | done  | done   | done (Local, StandaloneFile) |
 | antigravity          | -     | done   | done  | done   | done (Local, StandaloneFile) |
+| antigravitycli       | -     | done   | done  | -      | done (InlineBlock) |
 | openclaw             | -     | done   | done  | done   | done (Local, InlineBlock) |
 | hermes               | -     | done   | done  | done   | done (Local, InlineBlock) |
 | amp                  | -     | done   | done  | done   | done (InlineBlock) |
@@ -291,9 +292,9 @@ Three placement modes ([`InstructionPlacement`](src/spec/instruction.rs)):
   `@<NAME>.md` include into the harness's memory file (Claude only — has a
   documented `@import` syntax).
 - **`InlineBlock`** — inject the body as a tagged HTML-comment fenced block
-  inside the harness's existing memory file (Codex, Gemini, Copilot,
-  CodeBuddy, Amp, Crush, Forge, Pi, Qoder, Qwen, Junie, Trae, OpenClaw,
-  Hermes).
+  inside the harness's existing memory file (Codex, Gemini, Antigravity CLI,
+  Copilot, CodeBuddy, Amp, Crush, Forge, Pi, Qoder, Qwen, Junie, Trae,
+  OpenClaw, Hermes).
 - **`StandaloneFile`** — write `<rules-dir>/<NAME>.md` only, no host edit
   (Cline, Roo, Kilo Code, Windsurf, Antigravity — agents whose memory model
   is a per-file rules dir).

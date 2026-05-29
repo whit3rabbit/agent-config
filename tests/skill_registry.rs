@@ -63,11 +63,12 @@ fn skill_capable_lists_all_native_skill_agents() {
 #[test]
 fn skill_capable_excludes_non_skill_agents() {
     let ids: HashSet<_> = skill_capable().into_iter().map(|i| i.id()).collect();
-    let not_expected = "roo";
-    assert!(
-        !ids.contains(not_expected),
-        "{not_expected} unexpectedly appears in skill_capable"
-    );
+    for not_expected in ["roo", "antigravitycli"] {
+        assert!(
+            !ids.contains(not_expected),
+            "{not_expected} unexpectedly appears in skill_capable"
+        );
+    }
 }
 
 #[test]
@@ -93,6 +94,7 @@ fn skill_by_id_returns_each_agent() {
 #[test]
 fn skill_by_id_returns_none_for_unsupported() {
     assert!(skill_by_id("roo").is_none());
+    assert!(skill_by_id("antigravitycli").is_none());
     assert!(skill_by_id("does-not-exist").is_none());
 }
 

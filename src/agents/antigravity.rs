@@ -2,12 +2,13 @@
 //!
 //! Two surfaces:
 //!
-//! 1. **Rules** — project-local markdown files at `.agent/rules/<tag>.md`.
-//!    Note the directory is singular `.agent/`, not `.agents/`.
+//! 1. **Rules** — project-local markdown files at `.agents/rules/<tag>.md`.
+//!    Legacy `.agent/rules/<tag>.md` installs are still detected and removed.
 //!
-//! 2. **Skills** — directory-scoped skills at `.agent/skills/<name>/` (Local)
+//! 2. **Skills** — directory-scoped skills at `.agents/skills/<name>/` (Local)
 //!    or `~/.gemini/antigravity/skills/<name>/` (Global). Each skill is a
 //!    folder with `SKILL.md` plus optional `scripts/`/`references/`/`assets/`.
+//!    Legacy `.agent/skills/<name>/` installs are still detected and removed.
 //!
 //! 3. **MCP servers** — JSON config at `.agent/mcp_config.json` (Local) or
 //!    `~/.gemini/antigravity/mcp_config.json` (Global), keyed by server name
@@ -30,7 +31,8 @@ use crate::spec::{HookSpec, InstructionSpec, McpSpec, SkillSpec};
 use crate::status::StatusReport;
 use crate::util::{instructions_dir, mcp_json_object, ownership, rules_dir, skills_dir};
 
-const RULES_DIR: &str = ".agent/rules";
+const RULES_DIR: &str = ".agents/rules";
+const LEGACY_RULES_DIR: &str = ".agent/rules";
 
 /// Google Antigravity integration.
 #[derive(Debug, Clone, Copy, Default)]
@@ -54,14 +56,39 @@ impl AntigravityAgent {
         }
     }
 
-    /// Skills root: `<root>/.agent/skills/` (Local) or
+    /// Skills root: `<root>/.agents/skills/` (Local) or
     /// `~/.gemini/antigravity/skills/` (Global). Both scopes are supported
     /// for skills.
     fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::gemini_home()?.join("antigravity").join("skills"),
-            Scope::Local(p) => p.join(".agent").join("skills"),
+            Scope::Local(p) => p.join(".agents").join("skills"),
         })
+    }
+
+    fn legacy_skills_root(scope: &Scope) -> Option<PathBuf> {
+        match scope {
+            Scope::Global => None,
+            Scope::Local(p) => Some(p.join(".agent").join("skills")),
+        }
+    }
+
+    fn existing_skills_root(scope: &Scope, name: &str) -> Result<PathBuf, AgentConfigError> {
+        SkillSpec::validate_name(name)?;
+        let root = Self::skills_root(scope)?;
+        let (dir, _, ledger) = skills_dir::paths_for_status(&root, name);
+        if dir.exists() || ownership::owner_of(&ledger, name)?.is_some() {
+            return Ok(root);
+        }
+
+        if let Some(legacy) = Self::legacy_skills_root(scope) {
+            let (dir, _, ledger) = skills_dir::paths_for_status(&legacy, name);
+            if dir.exists() || ownership::owner_of(&ledger, name)?.is_some() {
+                return Ok(legacy);
+            }
+        }
+
+        Ok(root)
     }
 
     fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
@@ -89,6 +116,12 @@ impl Integration for AntigravityAgent {
         HookSpec::validate_tag(tag)?;
         let root = self.project_root(scope)?;
         let path = rules_dir::target_path(root, RULES_DIR, tag);
+        if !path.exists() {
+            let legacy = rules_dir::target_path(root, LEGACY_RULES_DIR, tag);
+            if legacy.exists() {
+                return Ok(StatusReport::for_file_hook(tag, legacy));
+            }
+        }
         Ok(StatusReport::for_file_hook(tag, path))
     }
 
@@ -107,12 +140,25 @@ impl Integration for AntigravityAgent {
     }
 
     fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError> {
+        HookSpec::validate_tag(tag)?;
+        let root = self.project_root(scope);
+        let rules_dir = if let Ok(root) = root {
+            let current = rules_dir::target_path(root, RULES_DIR, tag);
+            let legacy = rules_dir::target_path(root, LEGACY_RULES_DIR, tag);
+            if !current.exists() && legacy.exists() {
+                LEGACY_RULES_DIR
+            } else {
+                RULES_DIR
+            }
+        } else {
+            RULES_DIR
+        };
         agent_planning::rules_uninstall(
             Integration::id(self),
             scope,
             tag,
             self.project_root(scope),
-            RULES_DIR,
+            rules_dir,
         )
     }
 
@@ -131,8 +177,15 @@ impl Integration for AntigravityAgent {
 
     fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
-        let _ = self.project_root(scope)?;
-        rules_dir::uninstall(scope, RULES_DIR, tag)
+        let root = self.project_root(scope)?;
+        let current = rules_dir::target_path(root, RULES_DIR, tag);
+        let legacy = rules_dir::target_path(root, LEGACY_RULES_DIR, tag);
+        let rules_dir = if !current.exists() && legacy.exists() {
+            LEGACY_RULES_DIR
+        } else {
+            RULES_DIR
+        };
+        rules_dir::uninstall(scope, rules_dir, tag)
     }
 }
 
@@ -240,6 +293,23 @@ impl SkillSurface for AntigravityAgent {
         SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
         let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
+        if !dir.exists() && ownership::owner_of(&ledger, name)?.is_none() {
+            if let Some(legacy) = Self::legacy_skills_root(scope) {
+                let (legacy_dir, legacy_manifest, legacy_ledger) =
+                    skills_dir::paths_for_status(&legacy, name);
+                if legacy_dir.exists() || ownership::owner_of(&legacy_ledger, name)?.is_some() {
+                    let recorded = ownership::owner_of(&legacy_ledger, name)?;
+                    return Ok(StatusReport::for_skill(
+                        name,
+                        legacy_dir,
+                        legacy_manifest,
+                        legacy_ledger,
+                        expected_owner,
+                        recorded,
+                    ));
+                }
+            }
+        }
         let recorded = ownership::owner_of(&ledger, name)?;
         Ok(StatusReport::for_skill(
             name,
@@ -275,7 +345,7 @@ impl SkillSurface for AntigravityAgent {
             scope,
             name,
             owner_tag,
-            Self::skills_root(scope),
+            Self::existing_skills_root(scope, name),
         )
     }
 
@@ -298,7 +368,8 @@ impl SkillSurface for AntigravityAgent {
     ) -> Result<UninstallReport, AgentConfigError> {
         SkillSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
-        let root = Self::skills_root(scope)?;
+        let root = Self::existing_skills_root(scope, name)?;
+        scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
     }
 }
@@ -310,9 +381,43 @@ impl AntigravityAgent {
     ) -> Result<instructions_dir::StandaloneLayout, AgentConfigError> {
         let root = self.project_root(scope)?;
         Ok(instructions_dir::StandaloneLayout {
-            config_dir: root.join(".agent"),
+            config_dir: root.join(".agents"),
             instruction_dir: root.join(RULES_DIR),
         })
+    }
+
+    fn legacy_standalone_layout(
+        &self,
+        scope: &Scope,
+    ) -> Result<instructions_dir::StandaloneLayout, AgentConfigError> {
+        let root = self.project_root(scope)?;
+        Ok(instructions_dir::StandaloneLayout {
+            config_dir: root.join(".agent"),
+            instruction_dir: root.join(LEGACY_RULES_DIR),
+        })
+    }
+
+    fn existing_standalone_layout(
+        &self,
+        scope: &Scope,
+        name: &str,
+    ) -> Result<instructions_dir::StandaloneLayout, AgentConfigError> {
+        InstructionSpec::validate_name(name)?;
+        let primary = self.standalone_layout(scope)?;
+        let primary_file = primary.instruction_dir.join(format!("{name}.md"));
+        let primary_ledger = instructions_dir::ledger_path(&primary.config_dir);
+        if primary_file.exists() || ownership::owner_of(&primary_ledger, name)?.is_some() {
+            return Ok(primary);
+        }
+
+        let legacy = self.legacy_standalone_layout(scope)?;
+        let legacy_file = legacy.instruction_dir.join(format!("{name}.md"));
+        let legacy_ledger = instructions_dir::ledger_path(&legacy.config_dir);
+        if legacy_file.exists() || ownership::owner_of(&legacy_ledger, name)?.is_some() {
+            return Ok(legacy);
+        }
+
+        Ok(primary)
     }
 }
 
@@ -331,7 +436,11 @@ impl InstructionSurface for AntigravityAgent {
         name: &str,
         expected_owner: &str,
     ) -> Result<StatusReport, AgentConfigError> {
-        instructions_dir::standalone_status(self.standalone_layout(scope)?, name, expected_owner)
+        instructions_dir::standalone_status(
+            self.existing_standalone_layout(scope, name)?,
+            name,
+            expected_owner,
+        )
     }
 
     fn plan_install_instruction(
@@ -356,7 +465,7 @@ impl InstructionSurface for AntigravityAgent {
         instructions_dir::standalone_plan_uninstall(
             InstructionSurface::id(self),
             scope,
-            self.standalone_layout(scope),
+            self.existing_standalone_layout(scope, name),
             name,
             owner_tag,
         )
@@ -378,7 +487,7 @@ impl InstructionSurface for AntigravityAgent {
     ) -> Result<UninstallReport, AgentConfigError> {
         instructions_dir::standalone_uninstall(
             scope,
-            self.standalone_layout(scope)?,
+            self.existing_standalone_layout(scope, name)?,
             name,
             owner_tag,
         )
@@ -388,6 +497,7 @@ impl InstructionSurface for AntigravityAgent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::spec::InstructionPlacement;
     use std::fs;
     use tempfile::tempdir;
 
@@ -413,14 +523,35 @@ mod tests {
             .build()
     }
 
+    fn instruction(name: &str, owner: &str) -> InstructionSpec {
+        InstructionSpec::builder(name)
+            .owner(owner)
+            .placement(InstructionPlacement::StandaloneFile)
+            .body("Use Antigravity instructions.\n")
+            .build()
+    }
+
     #[test]
-    fn install_rules_uses_singular_dot_agent() {
+    fn install_rules_uses_plural_dot_agents() {
         let dir = tempdir().unwrap();
         let agent = AntigravityAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         agent.install(&scope, &rules_spec("alpha", "body")).unwrap();
-        assert!(dir.path().join(".agent/rules/alpha.md").exists());
-        assert!(!dir.path().join(".agents").exists());
+        assert!(dir.path().join(".agents/rules/alpha.md").exists());
+        assert!(!dir.path().join(".agent/rules/alpha.md").exists());
+    }
+
+    #[test]
+    fn legacy_dot_agent_rules_status_and_uninstall_still_work() {
+        let dir = tempdir().unwrap();
+        let agent = AntigravityAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        fs::create_dir_all(dir.path().join(".agent/rules")).unwrap();
+        fs::write(dir.path().join(".agent/rules/alpha.md"), "legacy\n").unwrap();
+
+        assert!(agent.is_installed(&scope, "alpha").unwrap());
+        agent.uninstall(&scope, "alpha").unwrap();
+        assert!(!dir.path().join(".agent/rules/alpha.md").exists());
     }
 
     #[test]
@@ -435,17 +566,33 @@ mod tests {
     }
 
     #[test]
-    fn install_skill_writes_under_dot_agent_skills() {
+    fn install_skill_writes_under_dot_agents_skills() {
         let dir = tempdir().unwrap();
         let agent = AntigravityAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         agent
             .install_skill(&scope, &skill("alpha", "myapp"))
             .unwrap();
-        assert!(dir.path().join(".agent/skills/alpha/SKILL.md").exists());
-        let s = fs::read_to_string(dir.path().join(".agent/skills/alpha/SKILL.md")).unwrap();
+        assert!(dir.path().join(".agents/skills/alpha/SKILL.md").exists());
+        assert!(!dir.path().join(".agent/skills/alpha/SKILL.md").exists());
+        let s = fs::read_to_string(dir.path().join(".agents/skills/alpha/SKILL.md")).unwrap();
         assert!(s.contains("name: alpha"));
         assert!(s.contains("description: Format Git commits."));
+    }
+
+    #[test]
+    fn legacy_dot_agent_skill_status_and_uninstall_still_work() {
+        let dir = tempdir().unwrap();
+        let agent = AntigravityAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let legacy_root = dir.path().join(".agent/skills");
+        skills_dir::install(&legacy_root, &skill("alpha", "myapp")).unwrap();
+
+        assert!(agent
+            .is_skill_installed(&scope, "alpha")
+            .expect("legacy skill status"));
+        agent.uninstall_skill(&scope, "alpha", "myapp").unwrap();
+        assert!(!dir.path().join(".agent/skills/alpha").exists());
     }
 
     #[test]
@@ -468,7 +615,7 @@ mod tests {
             .install_skill(&scope, &skill("alpha", "myapp"))
             .unwrap();
         agent.uninstall_skill(&scope, "alpha", "myapp").unwrap();
-        assert!(!dir.path().join(".agent/skills/alpha").exists());
+        assert!(!dir.path().join(".agents/skills/alpha").exists());
     }
 
     #[test]
@@ -489,6 +636,39 @@ mod tests {
         let scopes = agent.supported_skill_scopes();
         assert!(scopes.contains(&ScopeKind::Local));
         assert!(scopes.contains(&ScopeKind::Global));
+    }
+
+    #[test]
+    fn install_instruction_writes_under_dot_agents_rules() {
+        let dir = tempdir().unwrap();
+        let agent = AntigravityAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        agent
+            .install_instruction(&scope, &instruction("alpha", "myapp"))
+            .unwrap();
+        assert!(dir.path().join(".agents/rules/alpha.md").exists());
+        assert!(!dir.path().join(".agent/rules/alpha.md").exists());
+    }
+
+    #[test]
+    fn legacy_dot_agent_instruction_status_and_uninstall_still_work() {
+        let dir = tempdir().unwrap();
+        let agent = AntigravityAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let legacy = instructions_dir::StandaloneLayout {
+            config_dir: dir.path().join(".agent"),
+            instruction_dir: dir.path().join(".agent/rules"),
+        };
+        instructions_dir::standalone_install(&scope, legacy, &instruction("alpha", "myapp"))
+            .unwrap();
+
+        assert!(agent
+            .is_instruction_installed(&scope, "alpha")
+            .expect("legacy instruction status"));
+        agent
+            .uninstall_instruction(&scope, "alpha", "myapp")
+            .unwrap();
+        assert!(!dir.path().join(".agent/rules/alpha.md").exists());
     }
 
     #[test]

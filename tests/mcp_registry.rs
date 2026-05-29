@@ -22,6 +22,7 @@ fn mcp_capable_includes_every_file_backed_agent() {
         "windsurf",
         "kilocode",
         "antigravity",
+        "antigravitycli",
         "amp",
         "crush",
         "forge",
@@ -68,6 +69,7 @@ fn mcp_by_id_returns_each_agent() {
         "windsurf",
         "kilocode",
         "antigravity",
+        "antigravitycli",
         "amp",
         "crush",
         "forge",
@@ -110,6 +112,7 @@ fn full_mcp_round_trip_per_agent() {
         "windsurf",
         "kilocode",
         "antigravity",
+        "antigravitycli",
         "amp",
         "crush",
         "forge",
@@ -172,7 +175,13 @@ fn mcp_scope_sets_match_agent_contracts() {
     assert!(copilot.supported_mcp_scopes().contains(&ScopeKind::Global));
     assert!(copilot.supported_mcp_scopes().contains(&ScopeKind::Local));
 
-    for id in ["roo", "kilocode", "antigravity", "windsurf"] {
+    for id in [
+        "roo",
+        "kilocode",
+        "antigravity",
+        "antigravitycli",
+        "windsurf",
+    ] {
         let agent = mcp_by_id(id).unwrap();
         let scopes = agent.supported_mcp_scopes();
         assert!(scopes.contains(&ScopeKind::Global), "{id}");

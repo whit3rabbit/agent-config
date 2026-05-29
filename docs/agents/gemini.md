@@ -2,6 +2,14 @@
 
 ID: `gemini` — `agent_config::by_id("gemini")`
 
+Historical Gemini CLI support. Google announced the transition from Gemini CLI
+to Antigravity CLI on 2026-05-19 and says individual/free consumer access stops
+serving requests on 2026-06-18. The code paths remain because existing users
+and enterprise environments can still have Gemini CLI config on disk.
+
+Gemini Code Assist IDE extensions are documentation-only for this crate: no
+stable file-backed `SKILL.md` surface was found for the IDE extension.
+
 ## Hooks
 
 ### User scope (`Scope::Global`)
@@ -163,6 +171,9 @@ Gemini path for this integration.
 
 ## References
 
+- <https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/>
 - <https://geminicli.com/docs/hooks/>
 - <https://geminicli.com/docs/cli/gemini-md/>
 - <https://geminicli.com/docs/tools/mcp-server/>
+- <https://geminicli.com/docs/cli/using-agent-skills/>
+- <https://docs.cloud.google.com/gemini/docs/codeassist/chat-gemini>

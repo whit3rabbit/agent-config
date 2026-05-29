@@ -1,37 +1,35 @@
-surface: skills
-agent: antigravity
-scenario: uninstall_final_skill_removes_empty_ledger
+surface: mcp
+agent: antigravitycli
+scenario: uninstall_final_entry_prunes
 
 uninstall_result:
 Ok(
     UninstallReport {
-        removed: [
-            "[ROOT]/.agents/skills/golden-skill",
-        ],
+        removed: [],
         patched: [],
         restored: [],
-        not_installed: false,
+        not_installed: true,
     },
 )
 status:
 Ok(
     StatusReport {
-        target: Skill {
-            name: "golden-skill",
+        target: Mcp {
+            name: "golden-server",
         },
         status: Absent,
         config_path: Some(
-            "[ROOT]/.agents/skills/golden-skill",
+            "[ROOT]/.agents/mcp_config.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.agents/skills/.agent-config-skills.json",
+            "[ROOT]/.agents/.agent-config-mcp.json",
         ),
         files: [
             Missing {
-                path: "[ROOT]/.agents/skills/golden-skill",
+                path: "[ROOT]/.agents/mcp_config.json",
             },
             Missing {
-                path: "[ROOT]/.agents/skills/golden-skill/SKILL.md",
+                path: "[ROOT]/.agents/.agent-config-mcp.json",
             },
         ],
         warnings: [],
@@ -40,12 +38,12 @@ Ok(
 validation:
 Ok(
     ValidationReport {
-        target: Skill {
-            integration_id: "antigravity",
+        target: Mcp {
+            integration_id: "antigravitycli",
             scope: Local(
                 "[ROOT]",
             ),
-            name: "golden-skill",
+            name: "golden-server",
             owner: "golden-owner",
         },
         ok: true,
@@ -59,7 +57,6 @@ Ok(
 ROOT tree:
 directories:
 - .agents
-- .agents/skills
 
 HOME tree:
 <empty>

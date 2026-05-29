@@ -1,16 +1,14 @@
 surface: hooks
-agent: antigravity
-scenario: empty_rules_install
+agent: antigravitycli
+scenario: existing_same_reinstall
 
 install_result:
 Ok(
     InstallReport {
-        created: [
-            "[ROOT]/.agents/rules/golden-hook.md",
-        ],
+        created: [],
         patched: [],
         backed_up: [],
-        already_installed: false,
+        already_installed: true,
     },
 )
 status:
@@ -23,12 +21,12 @@ Ok(
             owner: "golden-hook",
         },
         config_path: Some(
-            "[ROOT]/.agents/rules/golden-hook.md",
+            "[ROOT]/AGENTS.md",
         ),
         ledger_path: None,
         files: [
             Exists {
-                path: "[ROOT]/.agents/rules/golden-hook.md",
+                path: "[ROOT]/AGENTS.md",
             },
         ],
         warnings: [],
@@ -38,7 +36,7 @@ validation:
 Ok(
     ValidationReport {
         target: Hook {
-            integration_id: "antigravity",
+            integration_id: "antigravitycli",
             scope: Local(
                 "[ROOT]",
             ),
@@ -53,14 +51,13 @@ Ok(
 )
 
 ROOT tree:
-directories:
-- .agents
-- .agents/rules
 files:
-- .agents/rules/golden-hook.md
+- AGENTS.md
   content:
 ```text
+<!-- BEGIN AGENT-CONFIG:golden-hook -->
 Use golden hook rules.
+<!-- END AGENT-CONFIG:golden-hook -->
 ```
 
 HOME tree:

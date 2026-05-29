@@ -6,7 +6,7 @@ install_result:
 Ok(
     InstallReport {
         created: [
-            "[ROOT]/.agent/rules/golden-hook.md",
+            "[ROOT]/.agents/rules/golden-hook.md",
         ],
         patched: [],
         backed_up: [],
@@ -23,12 +23,12 @@ Ok(
             owner: "golden-hook",
         },
         config_path: Some(
-            "[ROOT]/.agent/rules/golden-hook.md",
+            "[ROOT]/.agents/rules/golden-hook.md",
         ),
         ledger_path: None,
         files: [
             Exists {
-                path: "[ROOT]/.agent/rules/golden-hook.md",
+                path: "[ROOT]/.agents/rules/golden-hook.md",
             },
         ],
         warnings: [],
@@ -54,15 +54,15 @@ Ok(
 
 ROOT tree:
 directories:
-- .agent
-- .agent/rules
+- .agents
+- .agents/rules
 files:
-- .agent/rules/golden-hook.md
+- .agents/rules/golden-hook.md
   content:
 ```text
 Use golden hook rules.
 ```
-- .agent/rules/sibling-hook.md
+- .agents/rules/sibling-hook.md
   content:
 ```text
 Use sibling hook rules.

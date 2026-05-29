@@ -50,6 +50,7 @@ Safety guarantees that apply to every integration:
 | [Windsurf]             | `windsurf`    | Local              | yes          | Global + Local   | Global + Local   | Local            |
 | [Kilo Code]            | `kilocode`    | -                  | yes          | Global + Local   | Global + Local   | Local            |
 | [Google Antigravity]   | `antigravity` | -                  | yes          | Global + Local   | Global + Local   | Local            |
+| [Antigravity CLI]      | `antigravitycli` | -               | yes          | Global + Local   | -                | Global + Local   |
 | [Amp]                  | `amp`         | -                  | yes          | Global + Local   | Global + Local   | Global + Local   |
 | [CodeBuddy CLI]        | `codebuddy`   | Global + Local     | yes          | -                | Global + Local   | Global + Local   |
 | [Forge]                | `forge`       | -                  | yes          | Global + Local   | Global + Local   | Global + Local   |
@@ -73,6 +74,7 @@ Safety guarantees that apply to every integration:
 [Windsurf]: docs/agents/windsurf.md
 [Kilo Code]: docs/agents/kilocode.md
 [Google Antigravity]: docs/agents/antigravity.md
+[Antigravity CLI]: docs/agents/antigravitycli.md
 [Amp]: docs/agents/amp.md
 [CodeBuddy CLI]: docs/agents/codebuddy.md
 [Forge]: docs/agents/forge.md

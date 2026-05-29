@@ -5,6 +5,7 @@
 //! `%USERPROFILE%`/`%APPDATA%` overrides are honored before falling back to
 //! shell-known folders, which is what those harnesses ship with too.
 
+use std::fs;
 use std::path::PathBuf;
 
 use crate::error::AgentConfigError;
@@ -212,11 +213,64 @@ pub fn roo_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
 
 /// `~/.gemini/antigravity/mcp_config.json` — Antigravity's global MCP config.
 ///
+/// If Antigravity has installed that documented file as a symlink to another
+/// file under `~/.gemini`, this returns the resolved target. Antigravity uses
+/// this symlink for its shared config store, and resolving only this leaf keeps
+/// global write symlink rejection strict for every other path.
+///
 /// # Errors
 ///
 /// Propagates [`AgentConfigError::PathResolution`] from [`gemini_home`].
 pub fn antigravity_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
-    Ok(gemini_home()?.join("antigravity").join("mcp_config.json"))
+    let gemini = gemini_home()?;
+    let documented = gemini.join("antigravity").join("mcp_config.json");
+    let metadata = match fs::symlink_metadata(&documented) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(documented),
+        Err(error) => return Err(AgentConfigError::io(&documented, error)),
+    };
+    if !metadata.file_type().is_symlink() {
+        return Ok(documented);
+    }
+
+    let canonical_gemini = fs::canonicalize(&gemini).map_err(|error| {
+        AgentConfigError::PathResolution(format!(
+            "could not resolve Antigravity config root {}: {error}",
+            gemini.display()
+        ))
+    })?;
+    let target = fs::canonicalize(&documented).map_err(|error| {
+        AgentConfigError::PathResolution(format!(
+            "could not resolve Antigravity MCP config symlink {}: {error}",
+            documented.display()
+        ))
+    })?;
+    if !target.starts_with(&canonical_gemini) {
+        return Err(AgentConfigError::PathResolution(format!(
+            "refusing to resolve Antigravity MCP config symlink {} outside {}",
+            documented.display(),
+            canonical_gemini.display()
+        )));
+    }
+    Ok(target)
+}
+
+/// `~/.gemini/antigravity-cli` — Antigravity CLI's global config directory.
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`gemini_home`].
+pub fn antigravity_cli_home() -> Result<PathBuf, AgentConfigError> {
+    Ok(gemini_home()?.join("antigravity-cli"))
+}
+
+/// `~/.gemini/antigravity-cli/mcp_config.json` — Antigravity CLI's global MCP config.
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`antigravity_cli_home`].
+pub fn antigravity_cli_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
+    Ok(antigravity_cli_home()?.join("mcp_config.json"))
 }
 
 /// `~/.codeium/windsurf/mcp_config.json` — Windsurf's global MCP config.
@@ -345,6 +399,17 @@ mod tests {
 
     #[test]
     fn mcp_paths_end_correctly() {
+        let _guard = env_lock().lock().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let home_path = home.path().to_path_buf();
+        let prev_home = std::env::var_os("HOME");
+        let prev_userprofile = std::env::var_os("USERPROFILE");
+
+        #[cfg(windows)]
+        std::env::set_var("USERPROFILE", &home_path);
+        #[cfg(not(windows))]
+        std::env::set_var("HOME", &home_path);
+
         assert!(claude_mcp_user_file()
             .unwrap()
             .to_string_lossy()
@@ -373,10 +438,24 @@ mod tests {
                 .join("antigravity")
                 .join("mcp_config.json")
         ));
+        assert!(antigravity_cli_mcp_global_file().unwrap().ends_with(
+            PathBuf::from(".gemini")
+                .join("antigravity-cli")
+                .join("mcp_config.json")
+        ));
         assert!(windsurf_mcp_global_file().unwrap().ends_with(
             PathBuf::from(".codeium")
                 .join("windsurf")
                 .join("mcp_config.json")
         ));
+
+        match prev_home {
+            Some(value) => std::env::set_var("HOME", value),
+            None => std::env::remove_var("HOME"),
+        }
+        match prev_userprofile {
+            Some(value) => std::env::set_var("USERPROFILE", value),
+            None => std::env::remove_var("USERPROFILE"),
+        }
     }
 }

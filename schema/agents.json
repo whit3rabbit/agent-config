@@ -1,6 +1,6 @@
 {
   "_warning": "AUTO-GENERATED. Do not edit by hand. Regenerate on Linux via `cargo run --example gen_schema` or `AGENT_SCHEMA_UPDATE=1 cargo test --test schema_golden`. A few VS Code globalStorage paths are OS-specific; the canonical schema is the Linux view.",
-  "crate_version": "0.1.0",
+  "crate_version": "0.1.1",
   "placeholders": {
     "home": "~",
     "project_root": "<project>",
@@ -901,6 +901,7 @@
                 "~/.config/opencode/plugins/placeholder.ts"
               ],
               "directories": [
+                "~/.config",
                 "~/.config/opencode",
                 "~/.config/opencode/plugins"
               ],
@@ -932,6 +933,7 @@
                 "~/.config/opencode/opencode.json"
               ],
               "directories": [
+                "~/.config",
                 "~/.config/opencode"
               ],
               "ledger_files": [
@@ -964,6 +966,7 @@
                 "~/.config/opencode/skills/placeholder/SKILL.md"
               ],
               "directories": [
+                "~/.config",
                 "~/.config/opencode",
                 "~/.config/opencode/skills",
                 "~/.config/opencode/skills/placeholder"
@@ -1027,6 +1030,7 @@
                 "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
               ],
               "directories": [
+                "~/.config",
                 "~/.config/Code",
                 "~/.config/Code/User",
                 "~/.config/Code/User/globalStorage",
@@ -1137,6 +1141,7 @@
                 "~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json"
               ],
               "directories": [
+                "~/.config",
                 "~/.config/Code",
                 "~/.config/Code/User",
                 "~/.config/Code/User/globalStorage",
@@ -1346,6 +1351,7 @@
                 "~/.config/kilo/kilo.jsonc"
               ],
               "directories": [
+                "~/.config",
                 "~/.config/kilo"
               ],
               "ledger_files": [
@@ -1442,12 +1448,12 @@
           "scopes": {
             "local": {
               "config_files": [
-                "<project>/.agent/rules/placeholder.md"
+                "<project>/.agents/rules/placeholder.md"
               ],
               "directories": [
                 "<project>",
-                "<project>/.agent",
-                "<project>/.agent/rules"
+                "<project>/.agents",
+                "<project>/.agents/rules"
               ],
               "ledger_files": [],
               "refusals": []
@@ -1511,16 +1517,16 @@
             },
             "local": {
               "config_files": [
-                "<project>/.agent/skills/placeholder/SKILL.md"
+                "<project>/.agents/skills/placeholder/SKILL.md"
               ],
               "directories": [
                 "<project>",
-                "<project>/.agent",
-                "<project>/.agent/skills",
-                "<project>/.agent/skills/placeholder"
+                "<project>/.agents",
+                "<project>/.agents/skills",
+                "<project>/.agents/skills/placeholder"
               ],
               "ledger_files": [
-                "<project>/.agent/skills/.agent-config-skills.json"
+                "<project>/.agents/skills/.agent-config-skills.json"
               ],
               "refusals": []
             }
@@ -1534,15 +1540,121 @@
           "scopes": {
             "local": {
               "config_files": [
-                "<project>/.agent/rules/PLACEHOLDER.md"
+                "<project>/.agents/rules/PLACEHOLDER.md"
               ],
               "directories": [
                 "<project>",
-                "<project>/.agent",
-                "<project>/.agent/rules"
+                "<project>/.agents",
+                "<project>/.agents/rules"
               ],
               "ledger_files": [
-                "<project>/.agent/.agent-config-instructions.json"
+                "<project>/.agents/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "antigravitycli",
+      "display_name": "Antigravity CLI",
+      "supported_scopes": [
+        "global",
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.gemini/GEMINI.md"
+              ],
+              "directories": [
+                "~/.gemini"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "mcp": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.gemini/antigravity-cli/mcp_config.json"
+              ],
+              "directories": [
+                "~/.gemini",
+                "~/.gemini/antigravity-cli"
+              ],
+              "ledger_files": [
+                "~/.gemini/antigravity-cli/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.agents/mcp_config.json"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.agents"
+              ],
+              "ledger_files": [
+                "<project>/.agents/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "placement": "inline_block",
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.gemini/GEMINI.md"
+              ],
+              "directories": [
+                "~/.gemini"
+              ],
+              "ledger_files": [
+                "~/.gemini/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.agents"
+              ],
+              "ledger_files": [
+                "<project>/.agents/.agent-config-instructions.json"
               ],
               "refusals": []
             }
@@ -1824,6 +1936,7 @@
                 "~/.config/crush/crush.json"
               ],
               "directories": [
+                "~/.config",
                 "~/.config/crush"
               ],
               "ledger_files": [],
@@ -1853,6 +1966,7 @@
                 "~/.config/crush/crush.json"
               ],
               "directories": [
+                "~/.config",
                 "~/.config/crush"
               ],
               "ledger_files": [
@@ -1885,6 +1999,7 @@
                 "~/.config/crush/skills/placeholder/SKILL.md"
               ],
               "directories": [
+                "~/.config",
                 "~/.config/crush",
                 "~/.config/crush/skills",
                 "~/.config/crush/skills/placeholder"
@@ -1923,6 +2038,7 @@
                 "~/.config/crush/AGENTS.md"
               ],
               "directories": [
+                "~/.config",
                 "~/.config/crush"
               ],
               "ledger_files": [

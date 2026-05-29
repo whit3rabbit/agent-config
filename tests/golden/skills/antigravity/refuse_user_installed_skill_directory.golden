@@ -19,17 +19,17 @@ Ok(
         },
         status: PresentUnowned,
         config_path: Some(
-            "[ROOT]/.agent/skills/golden-skill",
+            "[ROOT]/.agents/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.agent/skills/.agent-config-skills.json",
+            "[ROOT]/.agents/skills/.agent-config-skills.json",
         ),
         files: [
             Exists {
-                path: "[ROOT]/.agent/skills/golden-skill",
+                path: "[ROOT]/.agents/skills/golden-skill",
             },
             Exists {
-                path: "[ROOT]/.agent/skills/golden-skill/SKILL.md",
+                path: "[ROOT]/.agents/skills/golden-skill/SKILL.md",
             },
         ],
         warnings: [],
@@ -49,7 +49,7 @@ Ok(
         ok: false,
         issues: [
             ConfigOnly {
-                path: "[ROOT]/.agent/skills/golden-skill",
+                path: "[ROOT]/.agents/skills/golden-skill",
             },
         ],
         suggested_actions: [
@@ -60,11 +60,11 @@ Ok(
 
 ROOT tree:
 directories:
-- .agent
-- .agent/skills
-- .agent/skills/golden-skill
+- .agents
+- .agents/skills
+- .agents/skills/golden-skill
 files:
-- .agent/skills/golden-skill/SKILL.md
+- .agents/skills/golden-skill/SKILL.md
   content:
 ```text
 ---

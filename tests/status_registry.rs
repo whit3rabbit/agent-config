@@ -15,7 +15,15 @@ use agent_config::{
 };
 
 const LOCAL_HOOK_AGENTS: &[&str] = &[
-    "claude", "cursor", "gemini", "codex", "copilot", "opencode", "cline", "windsurf",
+    "claude",
+    "cursor",
+    "gemini",
+    "codex",
+    "copilot",
+    "opencode",
+    "cline",
+    "windsurf",
+    "antigravitycli",
 ];
 
 const LOCAL_MCP_AGENTS: &[&str] = &[
@@ -28,6 +36,7 @@ const LOCAL_MCP_AGENTS: &[&str] = &[
     "windsurf",
     "kilocode",
     "antigravity",
+    "antigravitycli",
     "roo",
 ];
 

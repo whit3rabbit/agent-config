@@ -10,7 +10,7 @@ contract across all integrations. Each entry documents:
 - **MCP**, **Skills**, and **Instructions** — implemented where this crate has
   a file-backed or config-backed contract and tests for the emitted shape.
 
-**Last updated:** 2026-04-28. MCP, skills, and instruction coverage reflects
+**Last updated:** 2026-05-29. MCP, skills, and instruction coverage reflects
 the current file-backed locations implemented by this crate.
 
 ## Implemented
@@ -30,6 +30,7 @@ the current file-backed locations implemented by this crate.
 | [Windsurf](windsurf.md)          | ✓ (Local) | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Local, StandaloneFile) |
 | [Kilo Code](kilocode.md)         | -                    | ✓ | ✓ (Global + Local, JSONC) | ✓ (Global + Local) | ✓ (Local, StandaloneFile) |
 | [Google Antigravity](antigravity.md) | -                | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Local, StandaloneFile) |
+| [Antigravity CLI](antigravitycli.md) | -                | ✓ | ✓ (Global + Local) | - | ✓ (Global + Local, InlineBlock) |
 | [Amp](amp.md)                    | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
 | [CodeBuddy CLI](codebuddy.md)    | ✓ (Global + Local) | ✓ | - | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
 | [Charm Crush](crush.md)          | ✓ (Global + Local) | ✓ | ✓ (Global + Local, JSONC) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |

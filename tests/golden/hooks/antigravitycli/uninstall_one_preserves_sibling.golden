@@ -1,14 +1,14 @@
 surface: hooks
-agent: antigravity
+agent: antigravitycli
 scenario: uninstall_one_preserves_sibling
 
 uninstall_result:
 Ok(
     UninstallReport {
-        removed: [
-            "[ROOT]/.agents/rules/golden-hook.md",
+        removed: [],
+        patched: [
+            "[ROOT]/AGENTS.md",
         ],
-        patched: [],
         restored: [],
         not_installed: false,
     },
@@ -21,12 +21,12 @@ Ok(
         },
         status: Absent,
         config_path: Some(
-            "[ROOT]/.agents/rules/golden-hook.md",
+            "[ROOT]/AGENTS.md",
         ),
         ledger_path: None,
         files: [
-            Missing {
-                path: "[ROOT]/.agents/rules/golden-hook.md",
+            Exists {
+                path: "[ROOT]/AGENTS.md",
             },
         ],
         warnings: [],
@@ -36,29 +36,39 @@ validation:
 Ok(
     ValidationReport {
         target: Hook {
-            integration_id: "antigravity",
+            integration_id: "antigravitycli",
             scope: Local(
                 "[ROOT]",
             ),
             tag: "golden-hook",
         },
-        ok: true,
-        issues: [],
+        ok: false,
+        issues: [
+            BackupCollision {
+                path: "[ROOT]/AGENTS.md.bak",
+            },
+        ],
         suggested_actions: [
-            NoAction,
+            RestoreBackup,
         ],
     },
 )
 
 ROOT tree:
-directories:
-- .agents
-- .agents/rules
 files:
-- .agents/rules/sibling-hook.md
+- AGENTS.md
   content:
 ```text
+<!-- BEGIN AGENT-CONFIG:sibling-hook -->
 Use sibling hook rules.
+<!-- END AGENT-CONFIG:sibling-hook -->
+```
+- AGENTS.md.bak
+  content:
+```text
+<!-- BEGIN AGENT-CONFIG:golden-hook -->
+Use golden hook rules.
+<!-- END AGENT-CONFIG:golden-hook -->
 ```
 
 HOME tree:

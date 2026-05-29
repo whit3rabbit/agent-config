@@ -6,7 +6,7 @@ uninstall_result:
 Ok(
     UninstallReport {
         removed: [
-            "[ROOT]/.agent/rules/sibling-hook.md",
+            "[ROOT]/.agents/rules/sibling-hook.md",
         ],
         patched: [],
         restored: [],
@@ -21,12 +21,12 @@ Ok(
         },
         status: Absent,
         config_path: Some(
-            "[ROOT]/.agent/rules/sibling-hook.md",
+            "[ROOT]/.agents/rules/sibling-hook.md",
         ),
         ledger_path: None,
         files: [
             Missing {
-                path: "[ROOT]/.agent/rules/sibling-hook.md",
+                path: "[ROOT]/.agents/rules/sibling-hook.md",
             },
         ],
         warnings: [],

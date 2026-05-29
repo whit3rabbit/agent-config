@@ -25,6 +25,7 @@ const INSTRUCTION_CAPABLE: &[&str] = &[
     "kilocode",
     "windsurf",
     "antigravity",
+    "antigravitycli",
     "gemini",
     "codex",
     "copilot",
@@ -44,6 +45,7 @@ const INSTRUCTION_CAPABLE: &[&str] = &[
 /// Agents that take both `Scope::Global` and `Scope::Local`.
 const GLOBAL_AND_LOCAL: &[&str] = &[
     "claude",
+    "antigravitycli",
     "gemini",
     "codex",
     "codebuddy",
