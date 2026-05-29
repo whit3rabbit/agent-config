@@ -320,36 +320,33 @@ fn changes_to_value(
     let mut ledger_files: BTreeSet<String> = BTreeSet::new();
     let mut refusals: Vec<Value> = Vec::new();
 
-    let render = |p: &Path| -> Option<String> { render_path(scope, p).ok() };
-
     for change in &plan.changes {
         match change {
             PlannedChange::CreateFile { path } | PlannedChange::PatchFile { path } => {
-                if let Some(s) = render(path) {
-                    config_files.insert(s);
-                }
+                record_file_path(scope, path, &mut config_files, &mut directories);
             }
             PlannedChange::CreateDir { path } => {
-                if let Some(s) = render(path) {
+                if let Ok(s) = render_path(scope, path) {
                     directories.insert(s);
                 }
             }
             PlannedChange::WriteLedger { path, .. } => {
-                if let Some(s) = render(path) {
-                    ledger_files.insert(s);
-                }
+                record_file_path(scope, path, &mut ledger_files, &mut directories);
             }
             PlannedChange::Refuse { reason, path } => {
                 refusals.push(json!({
                     "reason": refusal_label(*reason),
-                    "path": path.as_ref().and_then(|p| render(p)),
+                    "path": path.as_ref().and_then(|p| render_path(scope, p).ok()),
                 }));
             }
+            PlannedChange::NoOp { path, .. } => {
+                record_file_path(scope, path, &mut config_files, &mut directories);
+            }
             // Other variants (RemoveFile, RestoreBackup, CreateBackup,
-            // RemoveDir, RemoveLedgerEntry, SetPermissions, NoOp) only show
-            // up in uninstall/repair plans or for paths we already captured
-            // via Create/Patch. They are not load-bearing for a layout
-            // manifest, so skip.
+            // RemoveDir, RemoveLedgerEntry, SetPermissions) only show up in
+            // uninstall/repair plans or for paths we already captured via
+            // Create/Patch. They are not load-bearing for a layout manifest,
+            // so skip.
             _ => {}
         }
     }
@@ -360,6 +357,56 @@ fn changes_to_value(
         "ledger_files": ledger_files.into_iter().collect::<Vec<_>>(),
         "refusals": refusals,
     })
+}
+
+fn record_file_path(
+    scope: &Scope,
+    path: &Path,
+    files: &mut BTreeSet<String>,
+    directories: &mut BTreeSet<String>,
+) {
+    if let Ok(s) = render_path(scope, path) {
+        files.insert(s);
+    }
+    record_parent_dirs(scope, path, directories);
+}
+
+fn record_parent_dirs(scope: &Scope, path: &Path, directories: &mut BTreeSet<String>) {
+    let Some(mut cur) = path.parent().filter(|p| !p.as_os_str().is_empty()) else {
+        return;
+    };
+
+    match scope {
+        Scope::Local(root) => loop {
+            if !cur.starts_with(root) {
+                break;
+            }
+            if let Ok(s) = render_path(scope, cur) {
+                directories.insert(s);
+            }
+            if cur == root {
+                break;
+            }
+            let Some(next) = cur.parent() else {
+                break;
+            };
+            cur = next;
+        },
+        Scope::Global => {
+            let Ok(home) = paths::home_dir() else {
+                return;
+            };
+            while cur.starts_with(&home) && cur != home {
+                if let Ok(s) = render_path(scope, cur) {
+                    directories.insert(s);
+                }
+                let Some(next) = cur.parent() else {
+                    break;
+                };
+                cur = next;
+            }
+        }
+    }
 }
 
 fn refusal_label(reason: RefusalReason) -> &'static str {
