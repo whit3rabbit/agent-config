@@ -50,19 +50,24 @@ plugin instead. The library writes the body verbatim.
 
 ### Event mapping
 
-The `Event` enum is currently ignored by this integration — OpenCode's hook
-points are namespaced strings (`tool.execute.before`, `session.start`,
-`message.before`, etc.) and the plugin body declares which it implements.
-Use a custom script to attach to anything other than `tool.execute.before`.
+The `Event` enum is dynamically mapped to OpenCode's hook points:
+- `Event::PreToolUse` maps to `"tool.execute.before"`.
+- `Event::PostToolUse` maps to `"tool.execute.after"`.
+- `Event::Custom(name)` maps directly to the custom hook name `name` (e.g., `"session.idle"`).
+
+For tool events (`tool.execute.before`/`after`), the callback receives `(input, output)` and compiles with tool filtering/payload formatting. For custom non-tool events, the callback receives `(input, output)` and compiles a payload passing the entire input: `const payload = JSON.stringify({ event: input });`.
 
 OpenCode supports 25+ hook points: `tool.execute.before/after`, session/file/
 message/shell/command/LSP/permission/server/todo/TUI families.
 
 ### Matcher mapping
 
-The `Matcher` enum is currently unused by this integration — the default
-plugin guards on `input.tool === "bash"` inside the TS body. Use a custom script
-to filter differently.
+The `Matcher` enum is dynamically compiled into a guard block in the hook callback:
+- `Matcher::All` compiles to no tool filter.
+- `Matcher::Bash` compiles to `if (input.tool !== "bash") return;`.
+- `Matcher::Exact(tool)` compiles to `if (input.tool !== "<tool>") return;`.
+- `Matcher::AnyOf(tools)` compiles to `if (![<tools>].includes(input.tool)) return;`.
+- `Matcher::Regex(pattern)` compiles to `if (!new RegExp("<pattern>").test(input.tool)) return;`.
 
 ## Prompt instructions
 

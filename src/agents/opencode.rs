@@ -22,7 +22,7 @@ use crate::integration::{
 use crate::paths;
 use crate::plan::{InstallPlan, PlanTarget, RefusalReason, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{HookSpec, InstructionSpec, McpSpec, ScriptTemplate, SkillSpec};
+use crate::spec::{Event, HookSpec, InstructionSpec, Matcher, McpSpec, ScriptTemplate, SkillSpec};
 use crate::status::StatusReport;
 use crate::util::{
     file_lock, fs_atomic, instructions_dir, mcp_json_map, md_block, ownership, planning, safe_fs,
@@ -71,14 +71,29 @@ impl OpenCodeAgent {
         })
     }
 
-    fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
-        Ok(match scope {
-            Scope::Global => paths::home_dir()?
-                .join(".config")
-                .join("opencode")
-                .join("skills"),
-            Scope::Local(p) => p.join(".opencode").join("skills"),
-        })
+    fn resolve_skills_root(scope: &Scope, name: &str) -> Result<PathBuf, AgentConfigError> {
+        let roots = match scope {
+            Scope::Global => vec![
+                paths::home_dir()?
+                    .join(".config")
+                    .join("opencode")
+                    .join("skills"),
+                paths::home_dir()?.join(".claude").join("skills"),
+                paths::home_dir()?.join(".agents").join("skills"),
+            ],
+            Scope::Local(p) => vec![
+                p.join(".opencode").join("skills"),
+                p.join(".claude").join("skills"),
+                p.join(".agents").join("skills"),
+            ],
+        };
+        for root in &roots {
+            let (dir, _, ledger) = skills_dir::paths_for_status(root, name);
+            if ownership::contains(&ledger, name).unwrap_or(false) || dir.exists() {
+                return Ok(root.clone());
+            }
+        }
+        Ok(roots[0].clone())
     }
 
     fn instruction_config_dir(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
@@ -139,7 +154,7 @@ impl Integration for OpenCodeAgent {
                     RefusalReason::MissingRequiredSpecField,
                 ));
             }
-            None => default_plugin_body(&spec.command.render_shell()),
+            None => generate_plugin_body(spec),
         };
         let body = fs_atomic::ensure_trailing_newline(&body);
         let mut changes = Vec::new();
@@ -181,7 +196,7 @@ impl Integration for OpenCodeAgent {
                     field: "script (TypeScript)",
                 });
             }
-            None => default_plugin_body(&spec.command.render_shell()),
+            None => generate_plugin_body(spec),
         };
         let body = fs_atomic::ensure_trailing_newline(&body);
 
@@ -394,7 +409,7 @@ impl SkillSurface for OpenCodeAgent {
         expected_owner: &str,
     ) -> Result<StatusReport, AgentConfigError> {
         SkillSpec::validate_name(name)?;
-        let root = Self::skills_root(scope)?;
+        let root = Self::resolve_skills_root(scope, name)?;
         let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
         let recorded = ownership::owner_of(&ledger, name)?;
         Ok(StatusReport::for_skill(
@@ -412,11 +427,12 @@ impl SkillSurface for OpenCodeAgent {
         scope: &Scope,
         spec: &SkillSpec,
     ) -> Result<InstallPlan, AgentConfigError> {
+        let root = Self::resolve_skills_root(scope, &spec.name)?;
         agent_planning::skill_install(
             SkillSurface::id(self),
             scope,
             spec,
-            Self::skills_root(scope),
+            Ok(root),
         )
     }
 
@@ -426,12 +442,13 @@ impl SkillSurface for OpenCodeAgent {
         name: &str,
         owner_tag: &str,
     ) -> Result<UninstallPlan, AgentConfigError> {
+        let root = Self::resolve_skills_root(scope, name)?;
         agent_planning::skill_uninstall(
             SkillSurface::id(self),
             scope,
             name,
             owner_tag,
-            Self::skills_root(scope),
+            Ok(root),
         )
     }
 
@@ -440,7 +457,7 @@ impl SkillSurface for OpenCodeAgent {
         scope: &Scope,
         spec: &SkillSpec,
     ) -> Result<InstallReport, AgentConfigError> {
-        let root = Self::skills_root(scope)?;
+        let root = Self::resolve_skills_root(scope, &spec.name)?;
         scope.ensure_contained(&root)?;
         skills_dir::install(&root, spec)
     }
@@ -451,7 +468,7 @@ impl SkillSurface for OpenCodeAgent {
         name: &str,
         owner_tag: &str,
     ) -> Result<UninstallReport, AgentConfigError> {
-        let root = Self::skills_root(scope)?;
+        let root = Self::resolve_skills_root(scope, name)?;
         scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
     }
@@ -521,12 +538,50 @@ impl InstructionSurface for OpenCodeAgent {
     }
 }
 
-/// A minimal TS plugin body that runs `command` before every `bash`-tool call,
-/// piping the call's args (JSON) on stdin.
-///
-/// Callers who need richer behavior should pass their own [`ScriptTemplate::TypeScript`].
-fn default_plugin_body(command: &str) -> String {
-    let escaped = escape_js_template_literal(command);
+/// A dynamically generated TS plugin body based on the event and matcher of HookSpec.
+fn generate_plugin_body(spec: &HookSpec) -> String {
+    let command = spec.command.render_shell();
+    let escaped = escape_js_template_literal(&command);
+
+    let hook_name = match &spec.event {
+        Event::PreToolUse => "tool.execute.before",
+        Event::PostToolUse => "tool.execute.after",
+        Event::Custom(name) => name.as_str(),
+    };
+
+    let is_tool_event = hook_name == "tool.execute.before" || hook_name == "tool.execute.after";
+
+    let guard = if is_tool_event {
+        match &spec.matcher {
+            Matcher::All => "".to_string(),
+            Matcher::Bash => "    if (input.tool !== \"bash\") return;\n".to_string(),
+            Matcher::Exact(tool) => format!("    if (input.tool !== {:?}) return;\n", tool),
+            Matcher::AnyOf(tools) => {
+                let list = tools
+                    .iter()
+                    .map(|t| format!("{:?}", t))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("    if (![{}].includes(input.tool)) return;\n", list)
+            }
+            Matcher::Regex(pattern) => {
+                let escaped_pat = pattern.replace('\\', "\\\\").replace('"', "\\\"");
+                format!(
+                    "    if (!new RegExp(\"{}\").test(input.tool)) return;\n",
+                    escaped_pat
+                )
+            }
+        }
+    } else {
+        "".to_string()
+    };
+
+    let payload_js = if is_tool_event {
+        "    const payload = JSON.stringify({ tool: input.tool, args: output.args });"
+    } else {
+        "    const payload = JSON.stringify({ event: input });"
+    };
+
     format!(
         r#"// Generated by agent-config. Edit at your own risk.
 // Re-running install will overwrite this file.
@@ -534,13 +589,13 @@ fn default_plugin_body(command: &str) -> String {
 import type {{ Plugin }} from "@opencode-ai/plugin";
 
 export const Hook: Plugin = async ({{ $ }}) => ({{
-  "tool.execute.before": async (input, output) => {{
-    if (input.tool !== "bash") return;
-    const payload = JSON.stringify({{ tool: input.tool, args: output.args }});
+  {:?}: async (input, output) => {{
+{}{}
     await $`echo ${{payload}} | {escaped}`;
   }},
 }});
-"#
+"#,
+        hook_name, guard, payload_js
     )
 }
 
@@ -563,6 +618,50 @@ mod tests {
             .event(Event::PreToolUse)
             .script(ScriptTemplate::TypeScript(ts.into()))
             .build()
+    }
+
+    #[test]
+    fn generate_plugin_body_with_various_matchers_and_events() {
+        // Test PostToolUse with Matcher::All
+        let s1 = HookSpec::builder("all_post")
+            .command_program("test", [] as [&str; 0])
+            .matcher(Matcher::All)
+            .event(Event::PostToolUse)
+            .build();
+        let body1 = generate_plugin_body(&s1);
+        assert!(body1.contains("\"tool.execute.after\""));
+        assert!(!body1.contains("if (input.tool"));
+        assert!(body1.contains("const payload = JSON.stringify({ tool: input.tool, args: output.args });"));
+
+        // Test Custom event with Matcher::Exact
+        let s2 = HookSpec::builder("custom")
+            .command_program("test", [] as [&str; 0])
+            .matcher(Matcher::Exact("git".into()))
+            .event(Event::Custom("session.idle".into()))
+            .build();
+        let body2 = generate_plugin_body(&s2);
+        assert!(body2.contains("\"session.idle\""));
+        // Custom non-tool event should not generate matcher guard since input.tool might not exist
+        assert!(!body2.contains("if (input.tool !== \"git\")"));
+        assert!(body2.contains("const payload = JSON.stringify({ event: input });"));
+
+        // Test PreToolUse with Matcher::AnyOf
+        let s3 = HookSpec::builder("any_of")
+            .command_program("test", [] as [&str; 0])
+            .matcher(Matcher::AnyOf(vec!["git".into(), "bash".into()]))
+            .event(Event::PreToolUse)
+            .build();
+        let body3 = generate_plugin_body(&s3);
+        assert!(body3.contains("if (![\"git\", \"bash\"].includes(input.tool))"));
+
+        // Test PreToolUse with Matcher::Regex
+        let s4 = HookSpec::builder("regex")
+            .command_program("test", [] as [&str; 0])
+            .matcher(Matcher::Regex("g.t".into()))
+            .event(Event::PreToolUse)
+            .build();
+        let body4 = generate_plugin_body(&s4);
+        assert!(body4.contains("if (!new RegExp(\"g.t\").test(input.tool))"));
     }
 
     #[test]
@@ -831,5 +930,30 @@ mod tests {
         agent.uninstall_mcp(&scope, "github", "myapp").unwrap();
         // Empty config gets removed.
         assert!(!dir.path().join("opencode.json").exists());
+    }
+
+    #[test]
+    fn skills_resolve_multiple_roots() {
+        let dir = tempdir().unwrap();
+        let scope = Scope::Local(dir.path().to_path_buf());
+
+        // 1. Initially, should resolve to .opencode/skills (primary)
+        let root = OpenCodeAgent::resolve_skills_root(&scope, "my-skill").unwrap();
+        assert_eq!(root, dir.path().join(".opencode").join("skills"));
+
+        // 2. Install manually in .claude/skills and check if resolved root updates
+        let claude_skills = dir.path().join(".claude").join("skills");
+        std::fs::create_dir_all(&claude_skills).unwrap();
+        std::fs::create_dir(claude_skills.join("my-skill")).unwrap();
+        let root = OpenCodeAgent::resolve_skills_root(&scope, "my-skill").unwrap();
+        assert_eq!(root, claude_skills);
+
+        // 3. Let's install to .agents/skills/my-skill manually and check
+        std::fs::remove_dir(claude_skills.join("my-skill")).unwrap();
+        let agents_skills = dir.path().join(".agents").join("skills");
+        std::fs::create_dir_all(&agents_skills).unwrap();
+        std::fs::create_dir(agents_skills.join("my-skill")).unwrap();
+        let root = OpenCodeAgent::resolve_skills_root(&scope, "my-skill").unwrap();
+        assert_eq!(root, agents_skills);
     }
 }
