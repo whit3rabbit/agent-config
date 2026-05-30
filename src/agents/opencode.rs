@@ -428,12 +428,7 @@ impl SkillSurface for OpenCodeAgent {
         spec: &SkillSpec,
     ) -> Result<InstallPlan, AgentConfigError> {
         let root = Self::resolve_skills_root(scope, &spec.name)?;
-        agent_planning::skill_install(
-            SkillSurface::id(self),
-            scope,
-            spec,
-            Ok(root),
-        )
+        agent_planning::skill_install(SkillSurface::id(self), scope, spec, Ok(root))
     }
 
     fn plan_uninstall_skill(
@@ -443,13 +438,7 @@ impl SkillSurface for OpenCodeAgent {
         owner_tag: &str,
     ) -> Result<UninstallPlan, AgentConfigError> {
         let root = Self::resolve_skills_root(scope, name)?;
-        agent_planning::skill_uninstall(
-            SkillSurface::id(self),
-            scope,
-            name,
-            owner_tag,
-            Ok(root),
-        )
+        agent_planning::skill_uninstall(SkillSurface::id(self), scope, name, owner_tag, Ok(root))
     }
 
     fn install_skill(
@@ -631,7 +620,8 @@ mod tests {
         let body1 = generate_plugin_body(&s1);
         assert!(body1.contains("\"tool.execute.after\""));
         assert!(!body1.contains("if (input.tool"));
-        assert!(body1.contains("const payload = JSON.stringify({ tool: input.tool, args: output.args });"));
+        assert!(body1
+            .contains("const payload = JSON.stringify({ tool: input.tool, args: output.args });"));
 
         // Test Custom event with Matcher::Exact
         let s2 = HookSpec::builder("custom")

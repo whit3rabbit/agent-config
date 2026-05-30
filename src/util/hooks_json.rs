@@ -85,12 +85,8 @@ pub(crate) fn plan_install(
     let hook_val = build_hook_value(spec);
     tag_obj.insert(event_key, hook_val);
 
-    let changed = json_patch::upsert_named_object_entry(
-        &mut root,
-        &[],
-        &spec.tag,
-        Value::Object(tag_obj),
-    )?;
+    let changed =
+        json_patch::upsert_named_object_entry(&mut root, &[], &spec.tag, Value::Object(tag_obj))?;
 
     if changed {
         let bytes = json_patch::to_pretty(&root);

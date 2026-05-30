@@ -749,9 +749,6 @@ mod tests {
         agent.install(&scope, &hook_only_spec("alpha")).unwrap();
         let cfg = dir.path().join(".agents/hooks.json");
         let v = read_json(&cfg);
-        assert_eq!(
-            v["alpha"]["PreToolUse"][0]["matcher"],
-            json!("run_command")
-        );
+        assert_eq!(v["alpha"]["PreToolUse"][0]["matcher"], json!("run_command"));
     }
 }

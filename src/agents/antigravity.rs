@@ -29,7 +29,9 @@ use crate::plan::{InstallPlan, PlanTarget, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
 use crate::spec::{HookSpec, InstructionSpec, Matcher, McpSpec, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{hooks_json, instructions_dir, mcp_json_object, ownership, rules_dir, skills_dir};
+use crate::util::{
+    hooks_json, instructions_dir, mcp_json_object, ownership, rules_dir, skills_dir,
+};
 
 const RULES_DIR: &str = ".agents/rules";
 const LEGACY_RULES_DIR: &str = ".agent/rules";
