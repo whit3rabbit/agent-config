@@ -1064,19 +1064,18 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+                "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
               ],
               "directories": [
-                "~/Library",
-                "~/Library/Application Support",
-                "~/Library/Application Support/Code",
-                "~/Library/Application Support/Code/User",
-                "~/Library/Application Support/Code/User/globalStorage",
-                "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev",
-                "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings"
+                "~/.config",
+                "~/.config/Code",
+                "~/.config/Code/User",
+                "~/.config/Code/User/globalStorage",
+                "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev",
+                "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings"
               ],
               "ledger_files": [
-                "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.agent-config-mcp.json"
+                "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.agent-config-mcp.json"
               ],
               "refusals": []
             }
@@ -1176,19 +1175,18 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json"
+                "~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json"
               ],
               "directories": [
-                "~/Library",
-                "~/Library/Application Support",
-                "~/Library/Application Support/Code",
-                "~/Library/Application Support/Code/User",
-                "~/Library/Application Support/Code/User/globalStorage",
-                "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline",
-                "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings"
+                "~/.config",
+                "~/.config/Code",
+                "~/.config/Code/User",
+                "~/.config/Code/User/globalStorage",
+                "~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline",
+                "~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings"
               ],
               "ledger_files": [
-                "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/.agent-config-mcp.json"
+                "~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/.agent-config-mcp.json"
               ],
               "refusals": []
             },
@@ -2027,13 +2025,12 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/Library/Application Support/crush/AGENTS.md",
-                "~/Library/Application Support/crush/crush.json"
+                "~/.config/crush/AGENTS.md",
+                "~/.config/crush/crush.json"
               ],
               "directories": [
-                "~/Library",
-                "~/Library/Application Support",
-                "~/Library/Application Support/crush"
+                "~/.config",
+                "~/.config/crush"
               ],
               "ledger_files": [],
               "refusals": []
@@ -2059,15 +2056,14 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/Library/Application Support/crush/crush.json"
+                "~/.config/crush/crush.json"
               ],
               "directories": [
-                "~/Library",
-                "~/Library/Application Support",
-                "~/Library/Application Support/crush"
+                "~/.config",
+                "~/.config/crush"
               ],
               "ledger_files": [
-                "~/Library/Application Support/crush/.agent-config-mcp.json"
+                "~/.config/crush/.agent-config-mcp.json"
               ],
               "refusals": []
             },
@@ -2093,17 +2089,16 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/Library/Application Support/crush/skills/placeholder/SKILL.md"
+                "~/.config/crush/skills/placeholder/SKILL.md"
               ],
               "directories": [
-                "~/Library",
-                "~/Library/Application Support",
-                "~/Library/Application Support/crush",
-                "~/Library/Application Support/crush/skills",
-                "~/Library/Application Support/crush/skills/placeholder"
+                "~/.config",
+                "~/.config/crush",
+                "~/.config/crush/skills",
+                "~/.config/crush/skills/placeholder"
               ],
               "ledger_files": [
-                "~/Library/Application Support/crush/skills/.agent-config-skills.json"
+                "~/.config/crush/skills/.agent-config-skills.json"
               ],
               "refusals": []
             },
@@ -2133,15 +2128,14 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/Library/Application Support/crush/AGENTS.md"
+                "~/.config/crush/AGENTS.md"
               ],
               "directories": [
-                "~/Library",
-                "~/Library/Application Support",
-                "~/Library/Application Support/crush"
+                "~/.config",
+                "~/.config/crush"
               ],
               "ledger_files": [
-                "~/Library/Application Support/crush/.agent-config-instructions.json"
+                "~/.config/crush/.agent-config-instructions.json"
               ],
               "refusals": []
             },
