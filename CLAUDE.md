@@ -26,6 +26,52 @@ cargo clippy --all-targets     # lints lib + tests + examples
 
 No external services or network required. All tests use `tempfile` for isolation.
 
+## Release
+
+Publishing to crates.io must go through `.github/workflows/release.yml`, not a
+local `cargo publish`. The release workflow runs on pushed tags matching
+`v[0-9]+.[0-9]+.[0-9]+*`, verifies the tag version matches `Cargo.toml`, runs
+`cargo test --locked --all-targets`, runs `cargo publish --locked --dry-run`,
+then publishes with the repository `CARGO_REGISTRY_TOKEN` secret.
+
+Before creating or moving a release tag:
+
+```bash
+cargo test --locked --all-targets
+cargo clippy --locked --all-targets -- -D warnings
+cargo publish --locked --dry-run
+```
+
+If the change affects generated schema paths, regenerate `schema/agents.json`
+for the Linux view before tagging. The macOS `schema_golden` test intentionally
+skips byte comparison, so it can miss this failure. Prefer a Linux host or
+container; if using macOS only, set `XDG_CONFIG_HOME="$HOME/.config"` when
+running the schema generator and inspect that the diff is only Linux config-dir
+paths:
+
+```bash
+XDG_CONFIG_HOME="$HOME/.config" cargo run --example gen_schema
+```
+
+Create the release tag only after `main` contains the checked version:
+
+```bash
+git tag -a v0.3.0 -m "v0.3.0"
+git push origin main v0.3.0
+```
+
+If a tag-triggered release fails before publishing, fix `main`, verify crates.io
+does not contain that version, then move the tag to the fixed commit and push it
+with lease:
+
+```bash
+git tag -f -a v0.3.0 -m "v0.3.0"
+git push --force-with-lease origin v0.3.0
+```
+
+Do not move a tag for a version that has already been published to crates.io.
+Published crate versions are immutable; bump `Cargo.toml` instead.
+
 ### Examples
 
 Runnable end-to-end programs live under `examples/`. Each writes into a fresh
