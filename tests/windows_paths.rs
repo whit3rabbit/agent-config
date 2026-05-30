@@ -134,7 +134,7 @@ fn windsurf_and_antigravity_mcp_files_resolve_under_userprofile() {
         paths::antigravity_mcp_global_file().unwrap(),
         env.home_path()
             .join(".gemini")
-            .join("antigravity")
+            .join("config")
             .join("mcp_config.json")
     );
     assert_eq!(
