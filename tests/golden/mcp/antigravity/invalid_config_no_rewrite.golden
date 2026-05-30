@@ -5,7 +5,7 @@ scenario: invalid_config_no_rewrite
 install_result:
 Err(
     JsonInvalid {
-        path: "[ROOT]/.agent/mcp_config.json",
+        path: "[ROOT]/.agents/mcp_config.json",
         source: Error("key must be a string", line: 1, column: 3),
     },
 )
@@ -18,24 +18,24 @@ Ok(
         status: Drifted {
             issues: [
                 InvalidConfig {
-                    path: "[ROOT]/.agent/mcp_config.json",
+                    path: "[ROOT]/.agents/mcp_config.json",
                     reason: "key must be a string at line 1 column 3",
                 },
             ],
         },
         config_path: Some(
-            "[ROOT]/.agent/mcp_config.json",
+            "[ROOT]/.agents/mcp_config.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.agent/.agent-config-mcp.json",
+            "[ROOT]/.agents/.agent-config-mcp.json",
         ),
         files: [
             Invalid {
-                path: "[ROOT]/.agent/mcp_config.json",
+                path: "[ROOT]/.agents/mcp_config.json",
                 reason: "key must be a string at line 1 column 3",
             },
             Missing {
-                path: "[ROOT]/.agent/.agent-config-mcp.json",
+                path: "[ROOT]/.agents/.agent-config-mcp.json",
             },
         ],
         warnings: [],
@@ -55,7 +55,7 @@ Ok(
         ok: false,
         issues: [
             MalformedConfig {
-                path: "[ROOT]/.agent/mcp_config.json",
+                path: "[ROOT]/.agents/mcp_config.json",
                 reason: "key must be a string at line 1 column 3",
             },
         ],
@@ -68,9 +68,9 @@ invalid_preserved: true
 
 ROOT tree:
 directories:
-- .agent
+- .agents
 files:
-- .agent/mcp_config.json
+- .agents/mcp_config.json
   content:
 ```text
 { invalid json

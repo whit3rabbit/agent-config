@@ -10,12 +10,10 @@
 //!    `<root>/.agents/mcp_config.json` (Local). Remote entries use
 //!    `serverUrl`, not Gemini CLI's legacy `url` field.
 //! 3. **Instructions**: `InlineBlock` placement inside the same prompt files.
-//!
-//! Native CLI skills are currently flat markdown files under
-//! `~/.gemini/antigravity-cli/skills/` or `.agents/skills/`, while this
-//! crate's `SkillSurface` is a directory-scoped `SKILL.md` package surface.
-//! Do not register Antigravity CLI as skill-capable until that layout is
-//! represented explicitly.
+//! 4. **Hooks**: event hooks inside `hooks.json` at `<root>/.agents/hooks.json` (Local)
+//!    or `~/.gemini/antigravity-cli/hooks.json` (Global).
+//! 5. **Skills**: directory-scoped skills at `.agents/skills/<name>/` (Local)
+//!    or `~/.gemini/antigravity-cli/skills/<name>/` (Global).
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -25,15 +23,16 @@ use serde_json::{Map, Value};
 use crate::agents::planning as agent_planning;
 use crate::error::AgentConfigError;
 use crate::integration::{
-    InstallReport, InstructionSurface, Integration, McpSurface, UninstallReport,
+    InstallReport, InstructionSurface, Integration, McpSurface, SkillSurface, UninstallReport,
 };
 use crate::paths;
-use crate::plan::{InstallPlan, UninstallPlan};
+use crate::plan::{InstallPlan, PlanTarget, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{HookSpec, InstructionSpec, McpSpec, McpTransport};
+use crate::spec::{HookSpec, InstructionSpec, Matcher, McpSpec, McpTransport, SkillSpec};
 use crate::status::StatusReport;
 use crate::util::{
-    file_lock, fs_atomic, instructions_dir, mcp_json_map, md_block, ownership, safe_fs,
+    file_lock, fs_atomic, hooks_json, instructions_dir, mcp_json_map, md_block, ownership,
+    planning, safe_fs, skills_dir,
 };
 
 const MCP_SERVERS_PATH: &[&str] = &["mcpServers"];
@@ -57,10 +56,24 @@ impl AntigravityCliAgent {
         })
     }
 
+    fn hooks_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
+        Ok(match scope {
+            Scope::Global => paths::antigravity_cli_home()?.join("hooks.json"),
+            Scope::Local(p) => p.join(".agents").join("hooks.json"),
+        })
+    }
+
     fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::antigravity_cli_mcp_global_file()?,
             Scope::Local(p) => p.join(".agents").join("mcp_config.json"),
+        })
+    }
+
+    fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
+        Ok(match scope {
+            Scope::Global => paths::antigravity_cli_home()?.join("skills"),
+            Scope::Local(p) => p.join(".agents").join("skills"),
         })
     }
 
@@ -98,7 +111,20 @@ impl Integration for AntigravityCliAgent {
     fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
         let path = Self::rules_path(scope)?;
-        StatusReport::for_markdown_block_hook(tag, path)
+        if path.exists() {
+            let host = fs_atomic::read_to_string_or_empty(&path)?;
+            if md_block::contains(&host, tag) {
+                return StatusReport::for_markdown_block_hook(tag, path);
+            }
+        }
+
+        let hooks_path = Self::hooks_path(scope)?;
+        let presence = hooks_json::config_presence(&hooks_path, tag)?;
+        if let crate::status::ConfigPresence::Absent = presence {
+            StatusReport::for_markdown_block_hook(tag, path)
+        } else {
+            Ok(StatusReport::for_tagged_hook(tag, hooks_path, presence))
+        }
     }
 
     fn plan_install(
@@ -106,82 +132,123 @@ impl Integration for AntigravityCliAgent {
         scope: &Scope,
         spec: &HookSpec,
     ) -> Result<InstallPlan, AgentConfigError> {
-        agent_planning::markdown_install(
-            Integration::id(self),
-            scope,
-            spec,
-            Self::rules_path(scope),
-            true,
-        )
+        HookSpec::validate_tag(&spec.tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: spec.tag.clone(),
+        };
+        let mut changes = Vec::new();
+
+        // 1. Plan hook command installation in hooks.json
+        let hooks_path = Self::hooks_path(scope)?;
+        hooks_json::plan_install(&mut changes, &hooks_path, spec, build_hook_value)?;
+
+        // 2. Plan rules installation if spec.rules is Some
+        if let Some(rules) = &spec.rules {
+            let path = Self::rules_path(scope)?;
+            planning::plan_markdown_upsert(&mut changes, &path, &spec.tag, &rules.content)?;
+        }
+
+        Ok(InstallPlan::from_changes(target, changes))
     }
 
     fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError> {
-        agent_planning::markdown_uninstall(
-            Integration::id(self),
-            scope,
-            tag,
-            Self::rules_path(scope),
-        )
+        HookSpec::validate_tag(tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: tag.to_string(),
+        };
+        let mut changes = Vec::new();
+
+        // 1. Plan hook command removal
+        let hooks_path = Self::hooks_path(scope)?;
+        hooks_json::plan_uninstall(&mut changes, &hooks_path, tag)?;
+
+        // 2. Plan rules removal
+        let path = Self::rules_path(scope)?;
+        planning::plan_markdown_remove(&mut changes, &path, tag)?;
+
+        Ok(UninstallPlan::from_changes(target, changes))
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
-        let rules = spec
-            .rules
-            .as_ref()
-            .ok_or(AgentConfigError::MissingSpecField {
-                id: "antigravitycli",
-                field: "rules",
-            })?;
-        let path = Self::rules_path(scope)?;
-        scope.ensure_contained(&path)?;
         let mut report = InstallReport::default();
-        file_lock::with_lock(&path, || {
-            let host = fs_atomic::read_to_string_or_empty(&path)?;
-            let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
-            let outcome = safe_fs::write(scope, &path, new_host.as_bytes(), true)?;
-            if outcome.no_change {
-                report.already_installed = true;
-            } else if outcome.existed {
-                report.patched.push(outcome.path.clone());
-            } else {
-                report.created.push(outcome.path.clone());
-            }
-            if let Some(b) = outcome.backup {
-                report.backed_up.push(b);
-            }
-            Ok::<(), AgentConfigError>(())
-        })?;
+
+        // 1. Install hook command
+        let hooks_path = Self::hooks_path(scope)?;
+        let hook_report = hooks_json::install(scope, &hooks_path, spec, build_hook_value)?;
+        report.created.extend(hook_report.created);
+        report.patched.extend(hook_report.patched);
+        report.backed_up.extend(hook_report.backed_up);
+        report.already_installed = hook_report.already_installed;
+
+        // 2. Install rules if present
+        if let Some(rules) = &spec.rules {
+            let path = Self::rules_path(scope)?;
+            scope.ensure_contained(&path)?;
+            file_lock::with_lock(&path, || {
+                let host = fs_atomic::read_to_string_or_empty(&path)?;
+                let new_host = md_block::upsert(&host, &spec.tag, &rules.content);
+                let outcome = safe_fs::write(scope, &path, new_host.as_bytes(), true)?;
+                if outcome.no_change {
+                    // if hook_report.already_installed was true, keep it, otherwise set false
+                } else if outcome.existed {
+                    report.patched.push(outcome.path.clone());
+                    report.already_installed = false;
+                } else {
+                    report.created.push(outcome.path.clone());
+                    report.already_installed = false;
+                }
+                if let Some(b) = outcome.backup {
+                    report.backed_up.push(b);
+                }
+                Ok::<(), AgentConfigError>(())
+            })?;
+        }
+
         Ok(report)
     }
 
     fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
+        let mut report = UninstallReport::default();
+
+        // 1. Uninstall hook command
+        let hooks_path = Self::hooks_path(scope)?;
+        let hook_report = hooks_json::uninstall(scope, &hooks_path, tag)?;
+        report.removed.extend(hook_report.removed);
+        report.patched.extend(hook_report.patched);
+        report.restored.extend(hook_report.restored);
+        report.not_installed = hook_report.not_installed;
+
+        // 2. Uninstall rules
         let path = Self::rules_path(scope)?;
         scope.ensure_contained(&path)?;
-        let mut report = UninstallReport::default();
-        file_lock::with_lock(&path, || {
-            let host = fs_atomic::read_to_string_or_empty(&path)?;
-            let (stripped, removed) = md_block::remove(&host, tag);
-
-            if !removed {
-                report.not_installed = true;
-                return Ok(());
-            }
-
-            if stripped.trim().is_empty() {
-                if safe_fs::restore_backup_if_matches(scope, &path, stripped.as_bytes())? {
-                    report.restored.push(path.clone());
-                } else {
-                    safe_fs::remove_file(scope, &path)?;
-                    report.removed.push(path.clone());
+        if path.exists() {
+            file_lock::with_lock(&path, || {
+                let host = fs_atomic::read_to_string_or_empty(&path)?;
+                let (stripped, removed) = md_block::remove(&host, tag);
+                if removed {
+                    report.not_installed = false;
+                    if stripped.trim().is_empty() {
+                        if safe_fs::restore_backup_if_matches(scope, &path, stripped.as_bytes())? {
+                            report.restored.push(path.clone());
+                        } else {
+                            safe_fs::remove_file(scope, &path)?;
+                            report.removed.push(path.clone());
+                        }
+                    } else {
+                        safe_fs::write(scope, &path, stripped.as_bytes(), false)?;
+                        report.patched.push(path.clone());
+                    }
                 }
-            } else {
-                safe_fs::write(scope, &path, stripped.as_bytes(), false)?;
-                report.patched.push(path.clone());
-            }
-            Ok::<(), AgentConfigError>(())
-        })?;
+                Ok::<(), AgentConfigError>(())
+            })?;
+        }
+
         Ok(report)
     }
 }
@@ -297,6 +364,85 @@ impl McpSurface for AntigravityCliAgent {
     }
 }
 
+impl SkillSurface for AntigravityCliAgent {
+    fn id(&self) -> &'static str {
+        "antigravitycli"
+    }
+
+    fn supported_skill_scopes(&self) -> &'static [ScopeKind] {
+        &[ScopeKind::Global, ScopeKind::Local]
+    }
+
+    fn skill_status(
+        &self,
+        scope: &Scope,
+        name: &str,
+        expected_owner: &str,
+    ) -> Result<StatusReport, AgentConfigError> {
+        SkillSpec::validate_name(name)?;
+        let root = Self::skills_root(scope)?;
+        let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
+        let recorded = ownership::owner_of(&ledger, name)?;
+        Ok(StatusReport::for_skill(
+            name,
+            dir,
+            manifest,
+            ledger,
+            expected_owner,
+            recorded,
+        ))
+    }
+
+    fn plan_install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallPlan, AgentConfigError> {
+        agent_planning::skill_install(
+            SkillSurface::id(self),
+            scope,
+            spec,
+            Self::skills_root(scope),
+        )
+    }
+
+    fn plan_uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallPlan, AgentConfigError> {
+        agent_planning::skill_uninstall(
+            SkillSurface::id(self),
+            scope,
+            name,
+            owner_tag,
+            Self::skills_root(scope),
+        )
+    }
+
+    fn install_skill(
+        &self,
+        scope: &Scope,
+        spec: &SkillSpec,
+    ) -> Result<InstallReport, AgentConfigError> {
+        let root = Self::skills_root(scope)?;
+        scope.ensure_contained(&root)?;
+        skills_dir::install(&root, spec)
+    }
+
+    fn uninstall_skill(
+        &self,
+        scope: &Scope,
+        name: &str,
+        owner_tag: &str,
+    ) -> Result<UninstallReport, AgentConfigError> {
+        let root = Self::skills_root(scope)?;
+        scope.ensure_contained(&root)?;
+        skills_dir::uninstall(&root, name, owner_tag)
+    }
+}
+
 impl InstructionSurface for AntigravityCliAgent {
     fn id(&self) -> &'static str {
         "antigravitycli"
@@ -361,6 +507,33 @@ impl InstructionSurface for AntigravityCliAgent {
     }
 }
 
+fn matcher_to_antigravity(m: &Matcher) -> String {
+    match m {
+        Matcher::All => "*".to_string(),
+        Matcher::Bash => "run_command".to_string(),
+        Matcher::Exact(s) => s.clone(),
+        Matcher::AnyOf(names) => names.join("|"),
+        Matcher::Regex(s) => s.clone(),
+    }
+}
+
+fn build_hook_value(spec: &HookSpec) -> serde_json::Value {
+    let matcher_str = matcher_to_antigravity(&spec.matcher);
+    let command_str = spec.command.render_shell();
+    serde_json::json!([
+        {
+            "matcher": matcher_str,
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": command_str,
+                    "timeout": 10
+                }
+            ]
+        }
+    ])
+}
+
 fn antigravity_cli_mcp_value(spec: &McpSpec) -> Value {
     let mut obj = Map::new();
     match &spec.transport {
@@ -410,6 +583,14 @@ mod tests {
         HookSpec::builder(tag)
             .command_program("noop", [] as [&str; 0])
             .rules(body)
+            .build()
+    }
+
+    fn hook_only_spec(tag: &str) -> HookSpec {
+        HookSpec::builder(tag)
+            .command_program("myapp", ["hook"])
+            .matcher(Matcher::Bash)
+            .event(crate::spec::Event::PreToolUse)
             .build()
     }
 
@@ -558,5 +739,19 @@ mod tests {
             .path()
             .join(".agents/.agent-config-instructions.json")
             .exists());
+    }
+
+    #[test]
+    fn install_hook_writes_hooks_json() {
+        let dir = tempdir().unwrap();
+        let agent = AntigravityCliAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        agent.install(&scope, &hook_only_spec("alpha")).unwrap();
+        let cfg = dir.path().join(".agents/hooks.json");
+        let v = read_json(&cfg);
+        assert_eq!(
+            v["alpha"]["PreToolUse"][0]["matcher"],
+            json!("run_command")
+        );
     }
 }

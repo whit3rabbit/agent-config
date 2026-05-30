@@ -1,6 +1,6 @@
 //! Google Antigravity integration.
 //!
-//! Two surfaces:
+//! Four surfaces:
 //!
 //! 1. **Rules** — project-local markdown files at `.agents/rules/<tag>.md`.
 //!    Legacy `.agent/rules/<tag>.md` installs are still detected and removed.
@@ -10,12 +10,12 @@
 //!    folder with `SKILL.md` plus optional `scripts/`/`references/`/`assets/`.
 //!    Legacy `.agent/skills/<name>/` installs are still detected and removed.
 //!
-//! 3. **MCP servers** — JSON config at `.agent/mcp_config.json` (Local) or
-//!    `~/.gemini/antigravity/mcp_config.json` (Global), keyed by server name
+//! 3. **MCP servers** — JSON config at `.agents/mcp_config.json` (Local) or
+//!    `~/.gemini/config/mcp_config.json` (Global), keyed by server name
 //!    under `mcpServers`.
 //!
-//! Antigravity does not yet expose a hooks surface in the way other harnesses
-//! do.
+//! 4. **Hooks** — event hooks inside `hooks.json` at `.agents/hooks.json` (Local)
+//!    or `~/.gemini/config/hooks.json` (Global).
 
 use std::path::PathBuf;
 
@@ -25,11 +25,11 @@ use crate::integration::{
     InstallReport, InstructionSurface, Integration, McpSurface, SkillSurface, UninstallReport,
 };
 use crate::paths;
-use crate::plan::{InstallPlan, UninstallPlan};
+use crate::plan::{InstallPlan, PlanTarget, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{HookSpec, InstructionSpec, McpSpec, SkillSpec};
+use crate::spec::{HookSpec, InstructionSpec, Matcher, McpSpec, SkillSpec};
 use crate::status::StatusReport;
-use crate::util::{instructions_dir, mcp_json_object, ownership, rules_dir, skills_dir};
+use crate::util::{hooks_json, instructions_dir, mcp_json_object, ownership, rules_dir, skills_dir};
 
 const RULES_DIR: &str = ".agents/rules";
 const LEGACY_RULES_DIR: &str = ".agent/rules";
@@ -91,11 +91,32 @@ impl AntigravityAgent {
         Ok(root)
     }
 
+    fn hooks_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
+        Ok(match scope {
+            Scope::Global => paths::gemini_home()?.join("config").join("hooks.json"),
+            Scope::Local(p) => p.join(".agents").join("hooks.json"),
+        })
+    }
+
     fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
             Scope::Global => paths::antigravity_mcp_global_file()?,
-            Scope::Local(p) => p.join(".agent").join("mcp_config.json"),
+            Scope::Local(p) => p.join(".agents").join("mcp_config.json"),
         })
+    }
+
+    fn existing_mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
+        let primary = Self::mcp_path(scope)?;
+        if primary.exists() {
+            return Ok(primary);
+        }
+        if let Scope::Local(p) = scope {
+            let legacy = p.join(".agent").join("mcp_config.json");
+            if legacy.exists() {
+                return Ok(legacy);
+            }
+        }
+        Ok(primary)
     }
 }
 
@@ -109,20 +130,37 @@ impl Integration for AntigravityAgent {
     }
 
     fn supported_scopes(&self) -> &'static [ScopeKind] {
-        &[ScopeKind::Local]
+        &[ScopeKind::Global, ScopeKind::Local]
     }
 
     fn status(&self, scope: &Scope, tag: &str) -> Result<StatusReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
-        let root = self.project_root(scope)?;
-        let path = rules_dir::target_path(root, RULES_DIR, tag);
-        if !path.exists() {
-            let legacy = rules_dir::target_path(root, LEGACY_RULES_DIR, tag);
+
+        // 1. Check rules files (Local scope only)
+        if let Scope::Local(p) = scope {
+            let path = rules_dir::target_path(p, RULES_DIR, tag);
+            if path.exists() {
+                return Ok(StatusReport::for_file_hook(tag, path));
+            }
+            let legacy = rules_dir::target_path(p, LEGACY_RULES_DIR, tag);
             if legacy.exists() {
                 return Ok(StatusReport::for_file_hook(tag, legacy));
             }
         }
-        Ok(StatusReport::for_file_hook(tag, path))
+
+        // 2. Check hooks.json
+        let hooks_path = Self::hooks_path(scope)?;
+        let presence = hooks_json::config_presence(&hooks_path, tag)?;
+        if let crate::status::ConfigPresence::Absent = presence {
+            if let Scope::Local(p) = scope {
+                let path = rules_dir::target_path(p, RULES_DIR, tag);
+                Ok(StatusReport::for_file_hook(tag, path))
+            } else {
+                Ok(StatusReport::for_tagged_hook(tag, hooks_path, presence))
+            }
+        } else {
+            Ok(StatusReport::for_tagged_hook(tag, hooks_path, presence))
+        }
     }
 
     fn plan_install(
@@ -130,62 +168,126 @@ impl Integration for AntigravityAgent {
         scope: &Scope,
         spec: &HookSpec,
     ) -> Result<InstallPlan, AgentConfigError> {
-        agent_planning::rules_install(
-            Integration::id(self),
-            scope,
-            spec,
-            self.project_root(scope),
-            RULES_DIR,
-        )
+        HookSpec::validate_tag(&spec.tag)?;
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: spec.tag.clone(),
+        };
+        let mut changes = Vec::new();
+
+        // 1. Plan hook command installation in hooks.json
+        let hooks_path = Self::hooks_path(scope)?;
+        hooks_json::plan_install(&mut changes, &hooks_path, spec, build_hook_value)?;
+
+        // 2. Plan rules installation if spec.rules is Some
+        if let Some(rules) = &spec.rules {
+            let root = self.project_root(scope);
+            let root = match root {
+                Ok(root) => root,
+                Err(AgentConfigError::UnsupportedScope { .. }) => {
+                    return Ok(InstallPlan::refused(
+                        target,
+                        None,
+                        crate::plan::RefusalReason::UnsupportedScope,
+                    ));
+                }
+                Err(e) => return Err(e),
+            };
+            let rule_changes = rules_dir::plan_install(root, RULES_DIR, &spec.tag, &rules.content)?;
+            changes.extend(rule_changes);
+        }
+
+        Ok(InstallPlan::from_changes(target, changes))
     }
 
     fn plan_uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallPlan, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
-        let root = self.project_root(scope);
-        let rules_dir = if let Ok(root) = root {
-            let current = rules_dir::target_path(root, RULES_DIR, tag);
-            let legacy = rules_dir::target_path(root, LEGACY_RULES_DIR, tag);
-            if !current.exists() && legacy.exists() {
+        let target = PlanTarget::Hook {
+            integration_id: Integration::id(self),
+            scope: scope.clone(),
+            tag: tag.to_string(),
+        };
+        let mut changes = Vec::new();
+
+        // 1. Plan hook command removal
+        let hooks_path = Self::hooks_path(scope)?;
+        hooks_json::plan_uninstall(&mut changes, &hooks_path, tag)?;
+
+        // 2. Plan rules removal if in Local scope
+        if let Scope::Local(p) = scope {
+            let current = rules_dir::target_path(p, RULES_DIR, tag);
+            let legacy = rules_dir::target_path(p, LEGACY_RULES_DIR, tag);
+            let rules_dir_name = if !current.exists() && legacy.exists() {
                 LEGACY_RULES_DIR
             } else {
                 RULES_DIR
-            }
-        } else {
-            RULES_DIR
-        };
-        agent_planning::rules_uninstall(
-            Integration::id(self),
-            scope,
-            tag,
-            self.project_root(scope),
-            rules_dir,
-        )
+            };
+            let rule_changes = rules_dir::plan_uninstall(p, rules_dir_name, tag)?;
+            changes.extend(rule_changes);
+        }
+
+        Ok(UninstallPlan::from_changes(target, changes))
     }
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
-        let _ = self.project_root(scope)?;
-        let rules = spec
-            .rules
-            .as_ref()
-            .ok_or(AgentConfigError::MissingSpecField {
-                id: "antigravity",
-                field: "rules",
-            })?;
-        rules_dir::install(scope, RULES_DIR, &spec.tag, &rules.content)
+        let mut report = InstallReport::default();
+
+        // 1. Install hook command
+        let hooks_path = Self::hooks_path(scope)?;
+        let hook_report = hooks_json::install(scope, &hooks_path, spec, build_hook_value)?;
+        report.created.extend(hook_report.created);
+        report.patched.extend(hook_report.patched);
+        report.backed_up.extend(hook_report.backed_up);
+        report.already_installed = hook_report.already_installed;
+
+        // 2. Install rules if present
+        if let Some(rules) = &spec.rules {
+            let _ = self.project_root(scope)?;
+            let rules_report = rules_dir::install(scope, RULES_DIR, &spec.tag, &rules.content)?;
+            report.created.extend(rules_report.created);
+            report.patched.extend(rules_report.patched);
+            report.backed_up.extend(rules_report.backed_up);
+            if !rules_report.already_installed {
+                report.already_installed = false;
+            }
+        }
+
+        Ok(report)
     }
 
     fn uninstall(&self, scope: &Scope, tag: &str) -> Result<UninstallReport, AgentConfigError> {
         HookSpec::validate_tag(tag)?;
-        let root = self.project_root(scope)?;
-        let current = rules_dir::target_path(root, RULES_DIR, tag);
-        let legacy = rules_dir::target_path(root, LEGACY_RULES_DIR, tag);
-        let rules_dir = if !current.exists() && legacy.exists() {
-            LEGACY_RULES_DIR
-        } else {
-            RULES_DIR
-        };
-        rules_dir::uninstall(scope, rules_dir, tag)
+        let mut report = UninstallReport::default();
+
+        // 1. Uninstall hook command
+        let hooks_path = Self::hooks_path(scope)?;
+        let hook_report = hooks_json::uninstall(scope, &hooks_path, tag)?;
+        report.removed.extend(hook_report.removed);
+        report.patched.extend(hook_report.patched);
+        report.restored.extend(hook_report.restored);
+        report.not_installed = hook_report.not_installed;
+
+        // 2. Uninstall rules if in Local scope
+        if let Scope::Local(p) = scope {
+            let current = rules_dir::target_path(p, RULES_DIR, tag);
+            let legacy = rules_dir::target_path(p, LEGACY_RULES_DIR, tag);
+            let rules_dir_name = if !current.exists() && legacy.exists() {
+                LEGACY_RULES_DIR
+            } else {
+                RULES_DIR
+            };
+            let rules_report = rules_dir::uninstall(scope, rules_dir_name, tag)?;
+            report.removed.extend(rules_report.removed);
+            report.patched.extend(rules_report.patched);
+            report.restored.extend(rules_report.restored);
+            if !rules_report.not_installed {
+                report.not_installed = false;
+            }
+        }
+
+        Ok(report)
     }
 }
 
@@ -205,7 +307,7 @@ impl McpSurface for AntigravityAgent {
         expected_owner: &str,
     ) -> Result<StatusReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
-        let cfg = Self::mcp_path(scope)?;
+        let cfg = Self::existing_mcp_path(scope)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         let presence = mcp_json_object::config_presence(&cfg, name)?;
         let recorded = ownership::owner_of(&ledger, name)?;
@@ -228,7 +330,7 @@ impl McpSurface for AntigravityAgent {
             McpSurface::id(self),
             scope,
             spec,
-            Self::mcp_path(scope),
+            Self::existing_mcp_path(scope),
         )
     }
 
@@ -243,7 +345,7 @@ impl McpSurface for AntigravityAgent {
             scope,
             name,
             owner_tag,
-            Self::mcp_path(scope),
+            Self::existing_mcp_path(scope),
         )
     }
 
@@ -253,7 +355,7 @@ impl McpSurface for AntigravityAgent {
         spec: &McpSpec,
     ) -> Result<InstallReport, AgentConfigError> {
         spec.validate()?;
-        let cfg = Self::mcp_path(scope)?;
+        let cfg = Self::existing_mcp_path(scope)?;
         spec.validate_local_secret_policy(scope)?;
         scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
@@ -268,7 +370,7 @@ impl McpSurface for AntigravityAgent {
     ) -> Result<UninstallReport, AgentConfigError> {
         McpSpec::validate_name(name)?;
         HookSpec::validate_tag(owner_tag)?;
-        let cfg = Self::mcp_path(scope)?;
+        let cfg = Self::existing_mcp_path(scope)?;
         scope.ensure_contained(&cfg)?;
         let ledger = ownership::mcp_ledger_for(&cfg);
         mcp_json_object::uninstall(&cfg, &ledger, name, owner_tag, "mcp server")
@@ -494,6 +596,33 @@ impl InstructionSurface for AntigravityAgent {
     }
 }
 
+fn matcher_to_antigravity(m: &Matcher) -> String {
+    match m {
+        Matcher::All => "*".to_string(),
+        Matcher::Bash => "run_command".to_string(),
+        Matcher::Exact(s) => s.clone(),
+        Matcher::AnyOf(names) => names.join("|"),
+        Matcher::Regex(s) => s.clone(),
+    }
+}
+
+fn build_hook_value(spec: &HookSpec) -> serde_json::Value {
+    let matcher_str = matcher_to_antigravity(&spec.matcher);
+    let command_str = spec.command.render_shell();
+    serde_json::json!([
+        {
+            "matcher": matcher_str,
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": command_str,
+                    "timeout": 10
+                }
+            ]
+        }
+    ])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -505,6 +634,14 @@ mod tests {
         HookSpec::builder(tag)
             .command_program("noop", [] as [&str; 0])
             .rules(body)
+            .build()
+    }
+
+    fn hook_only_spec(tag: &str) -> HookSpec {
+        HookSpec::builder(tag)
+            .command_program("myapp", ["hook"])
+            .matcher(Matcher::Bash)
+            .event(crate::spec::Event::PreToolUse)
             .build()
     }
 
@@ -672,29 +809,14 @@ mod tests {
     }
 
     #[test]
-    fn rules_install_requires_rules_field() {
-        let dir = tempdir().unwrap();
-        let agent = AntigravityAgent::new();
-        let scope = Scope::Local(dir.path().to_path_buf());
-        let no_rules = HookSpec::builder("alpha")
-            .command_program("noop", [] as [&str; 0])
-            .build();
-        let err = agent.install(&scope, &no_rules).unwrap_err();
-        assert!(matches!(
-            err,
-            AgentConfigError::MissingSpecField { field: "rules", .. }
-        ));
-    }
-
-    #[test]
-    fn install_mcp_writes_dot_agent_mcp_config() {
+    fn install_mcp_writes_dot_agents_mcp_config() {
         let dir = tempdir().unwrap();
         let agent = AntigravityAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         agent
             .install_mcp(&scope, &mcp_spec("github", "myapp"))
             .unwrap();
-        let cfg = dir.path().join(".agent/mcp_config.json");
+        let cfg = dir.path().join(".agents/mcp_config.json");
         let v: serde_json::Value = serde_json::from_slice(&fs::read(cfg).unwrap()).unwrap();
         assert_eq!(
             v["mcpServers"]["github"]["command"],
@@ -712,5 +834,19 @@ mod tests {
             .unwrap();
         let err = agent.uninstall_mcp(&scope, "github", "appB").unwrap_err();
         assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
+    }
+
+    #[test]
+    fn install_hook_writes_hooks_json() {
+        let dir = tempdir().unwrap();
+        let agent = AntigravityAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        agent.install(&scope, &hook_only_spec("alpha")).unwrap();
+        let cfg = dir.path().join(".agents/hooks.json");
+        let v: serde_json::Value = serde_json::from_slice(&fs::read(cfg).unwrap()).unwrap();
+        assert_eq!(
+            v["alpha"]["PreToolUse"][0]["matcher"],
+            serde_json::json!("run_command")
+        );
     }
 }

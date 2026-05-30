@@ -1,6 +1,6 @@
-surface: mcp
-agent: antigravity
-scenario: existing_owned_same_name_reinstall
+surface: skills
+agent: antigravitycli
+scenario: reinstall_identical_skill
 
 install_result:
 Ok(
@@ -14,24 +14,24 @@ Ok(
 status:
 Ok(
     StatusReport {
-        target: Mcp {
-            name: "golden-server",
+        target: Skill {
+            name: "golden-skill",
         },
         status: InstalledOwned {
             owner: "golden-owner",
         },
         config_path: Some(
-            "[ROOT]/.agents/mcp_config.json",
+            "[ROOT]/.agents/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.agents/.agent-config-mcp.json",
+            "[ROOT]/.agents/skills/.agent-config-skills.json",
         ),
         files: [
             Exists {
-                path: "[ROOT]/.agents/mcp_config.json",
+                path: "[ROOT]/.agents/skills/golden-skill",
             },
             Exists {
-                path: "[ROOT]/.agents/.agent-config-mcp.json",
+                path: "[ROOT]/.agents/skills/golden-skill/SKILL.md",
             },
         ],
         warnings: [],
@@ -40,12 +40,12 @@ Ok(
 validation:
 Ok(
     ValidationReport {
-        target: Mcp {
-            integration_id: "antigravity",
+        target: Skill {
+            integration_id: "antigravitycli",
             scope: Local(
                 "[ROOT]",
             ),
-            name: "golden-server",
+            name: "golden-skill",
             owner: "golden-owner",
         },
         ok: true,
@@ -59,34 +59,32 @@ Ok(
 ROOT tree:
 directories:
 - .agents
+- .agents/skills
+- .agents/skills/golden-skill
 files:
-- .agents/.agent-config-mcp.json
+- .agents/skills/.agent-config-skills.json
   content:
 ```text
 {
   "entries": {
-    "golden-server": {
-      "content_hash": "de73436d65e5d173e50b0a75ebd36bc753c2281d77b04050a84202439c0173ec",
+    "golden-skill": {
+      "content_hash": "514bf376c8c933a19c837c64f505f5c3b186b7bbe8386edb3ad939b36ad058d9",
       "owner": "golden-owner"
     }
   },
   "version": 2
 }
 ```
-- .agents/mcp_config.json
+- .agents/skills/golden-skill/SKILL.md
   content:
 ```text
-{
-  "mcpServers": {
-    "golden-server": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@example/server"
-      ]
-    }
-  }
-}
+---
+name: golden-skill
+description: Use during golden snapshot tests.
+---
+
+## Goal
+Preserve the config shape.
 ```
 
 HOME tree:

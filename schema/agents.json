@@ -1064,18 +1064,19 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+                "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
               ],
               "directories": [
-                "~/.config",
-                "~/.config/Code",
-                "~/.config/Code/User",
-                "~/.config/Code/User/globalStorage",
-                "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev",
-                "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings"
+                "~/Library",
+                "~/Library/Application Support",
+                "~/Library/Application Support/Code",
+                "~/Library/Application Support/Code/User",
+                "~/Library/Application Support/Code/User/globalStorage",
+                "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev",
+                "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings"
               ],
               "ledger_files": [
-                "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.agent-config-mcp.json"
+                "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.agent-config-mcp.json"
               ],
               "refusals": []
             }
@@ -1175,18 +1176,19 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json"
+                "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json"
               ],
               "directories": [
-                "~/.config",
-                "~/.config/Code",
-                "~/.config/Code/User",
-                "~/.config/Code/User/globalStorage",
-                "~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline",
-                "~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings"
+                "~/Library",
+                "~/Library/Application Support",
+                "~/Library/Application Support/Code",
+                "~/Library/Application Support/Code/User",
+                "~/Library/Application Support/Code/User/globalStorage",
+                "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline",
+                "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings"
               ],
               "ledger_files": [
-                "~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/.agent-config-mcp.json"
+                "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/.agent-config-mcp.json"
               ],
               "refusals": []
             },
@@ -1475,16 +1477,30 @@
       "id": "antigravity",
       "display_name": "Google Antigravity",
       "supported_scopes": [
+        "global",
         "local"
       ],
       "surfaces": {
         "hook": {
           "supported_scopes": [
+            "global",
             "local"
           ],
           "scopes": {
+            "global": {
+              "config_files": [],
+              "directories": [],
+              "ledger_files": [],
+              "refusals": [
+                {
+                  "reason": "unsupported_scope",
+                  "path": null
+                }
+              ]
+            },
             "local": {
               "config_files": [
+                "<project>/.agents/hooks.json",
                 "<project>/.agents/rules/placeholder.md"
               ],
               "directories": [
@@ -1505,27 +1521,27 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.gemini/antigravity/mcp_config.json"
+                "~/.gemini/config/mcp_config.json"
               ],
               "directories": [
                 "~/.gemini",
-                "~/.gemini/antigravity"
+                "~/.gemini/config"
               ],
               "ledger_files": [
-                "~/.gemini/antigravity/.agent-config-mcp.json"
+                "~/.gemini/config/.agent-config-mcp.json"
               ],
               "refusals": []
             },
             "local": {
               "config_files": [
-                "<project>/.agent/mcp_config.json"
+                "<project>/.agents/mcp_config.json"
               ],
               "directories": [
                 "<project>",
-                "<project>/.agent"
+                "<project>/.agents"
               ],
               "ledger_files": [
-                "<project>/.agent/.agent-config-mcp.json"
+                "<project>/.agents/.agent-config-mcp.json"
               ],
               "refusals": []
             }
@@ -1609,20 +1625,24 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.gemini/GEMINI.md"
+                "~/.gemini/GEMINI.md",
+                "~/.gemini/antigravity-cli/hooks.json"
               ],
               "directories": [
-                "~/.gemini"
+                "~/.gemini",
+                "~/.gemini/antigravity-cli"
               ],
               "ledger_files": [],
               "refusals": []
             },
             "local": {
               "config_files": [
+                "<project>/.agents/hooks.json",
                 "<project>/AGENTS.md"
               ],
               "directories": [
-                "<project>"
+                "<project>",
+                "<project>/.agents"
               ],
               "ledger_files": [],
               "refusals": []
@@ -1658,6 +1678,44 @@
               ],
               "ledger_files": [
                 "<project>/.agents/.agent-config-mcp.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.gemini/antigravity-cli/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.gemini",
+                "~/.gemini/antigravity-cli",
+                "~/.gemini/antigravity-cli/skills",
+                "~/.gemini/antigravity-cli/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.gemini/antigravity-cli/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.agents/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.agents",
+                "<project>/.agents/skills",
+                "<project>/.agents/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.agents/skills/.agent-config-skills.json"
               ],
               "refusals": []
             }
@@ -1969,12 +2027,13 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.config/crush/AGENTS.md",
-                "~/.config/crush/crush.json"
+                "~/Library/Application Support/crush/AGENTS.md",
+                "~/Library/Application Support/crush/crush.json"
               ],
               "directories": [
-                "~/.config",
-                "~/.config/crush"
+                "~/Library",
+                "~/Library/Application Support",
+                "~/Library/Application Support/crush"
               ],
               "ledger_files": [],
               "refusals": []
@@ -2000,14 +2059,15 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.config/crush/crush.json"
+                "~/Library/Application Support/crush/crush.json"
               ],
               "directories": [
-                "~/.config",
-                "~/.config/crush"
+                "~/Library",
+                "~/Library/Application Support",
+                "~/Library/Application Support/crush"
               ],
               "ledger_files": [
-                "~/.config/crush/.agent-config-mcp.json"
+                "~/Library/Application Support/crush/.agent-config-mcp.json"
               ],
               "refusals": []
             },
@@ -2033,16 +2093,17 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.config/crush/skills/placeholder/SKILL.md"
+                "~/Library/Application Support/crush/skills/placeholder/SKILL.md"
               ],
               "directories": [
-                "~/.config",
-                "~/.config/crush",
-                "~/.config/crush/skills",
-                "~/.config/crush/skills/placeholder"
+                "~/Library",
+                "~/Library/Application Support",
+                "~/Library/Application Support/crush",
+                "~/Library/Application Support/crush/skills",
+                "~/Library/Application Support/crush/skills/placeholder"
               ],
               "ledger_files": [
-                "~/.config/crush/skills/.agent-config-skills.json"
+                "~/Library/Application Support/crush/skills/.agent-config-skills.json"
               ],
               "refusals": []
             },
@@ -2072,14 +2133,15 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.config/crush/AGENTS.md"
+                "~/Library/Application Support/crush/AGENTS.md"
               ],
               "directories": [
-                "~/.config",
-                "~/.config/crush"
+                "~/Library",
+                "~/Library/Application Support",
+                "~/Library/Application Support/crush"
               ],
               "ledger_files": [
-                "~/.config/crush/.agent-config-instructions.json"
+                "~/Library/Application Support/crush/.agent-config-instructions.json"
               ],
               "refusals": []
             },

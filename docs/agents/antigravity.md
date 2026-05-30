@@ -7,8 +7,16 @@ Google's Antigravity desktop app / IDE. Antigravity CLI is separate:
 
 ## Hooks
 
-Not supported. This integration is prompt-rules, MCP, skills, and
-instructions only.
+Hook commands are configured inside `hooks.json` under top-level consumer tags.
+
+| Scope | File |
+| --- | --- |
+| Global | `~/.gemini/config/hooks.json` |
+| Local | `<root>/.agents/hooks.json` |
+
+Matches event names like `PreToolUse` and `PostToolUse`. Matcher translates `Matcher::Bash` to `"run_command"`.
+
+If the hook specification includes `rules`, prompt rules are written to `<root>/.agents/rules/<tag>.md` (Local scope only; global prompt rules are unsupported).
 
 ## Prompt Instructions
 
@@ -94,30 +102,25 @@ crate has no workflow surface yet.
 
 | | |
 | --- | --- |
-| File | `~/.gemini/antigravity/mcp_config.json` |
+| File | `~/.gemini/config/mcp_config.json` |
 | Format | JSON |
 | Key | `mcpServers` |
-
-If that documented compatibility path is a symlink into `~/.gemini`, the
-implementation resolves the symlink target before writing. Antigravity's
-current app/IDE docs also mention `~/.gemini/config/mcp_config.json`; this row
-keeps the existing crate path for compatibility with installed Antigravity
-profiles.
 
 ### Project scope (`Scope::Local(<root>)`)
 
 | | |
 | --- | --- |
-| File | `<root>/.agent/mcp_config.json` |
+| File | `<root>/.agents/mcp_config.json` |
+| Legacy fallback | `<root>/.agent/mcp_config.json` |
 | Format | JSON |
 | Key | `mcpServers` |
 | Support level | Observed |
 
-Local app MCP remains `.agent/mcp_config.json` until Google documents an exact
-app-local replacement.
+Local app MCP is updated to `.agents/mcp_config.json`, with legacy fallback support to `.agent/mcp_config.json` for status, planning, and uninstall.
 
 ## References
 
+- <https://antigravity.google/docs/hooks>
 - <https://antigravity.google/docs/rules-workflows>
 - <https://antigravity.google/docs/skills>
 - <https://antigravity.google/docs/mcp>

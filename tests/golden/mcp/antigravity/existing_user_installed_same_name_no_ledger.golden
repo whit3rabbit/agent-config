@@ -19,17 +19,17 @@ Ok(
         },
         status: PresentUnowned,
         config_path: Some(
-            "[ROOT]/.agent/mcp_config.json",
+            "[ROOT]/.agents/mcp_config.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.agent/.agent-config-mcp.json",
+            "[ROOT]/.agents/.agent-config-mcp.json",
         ),
         files: [
             Exists {
-                path: "[ROOT]/.agent/mcp_config.json",
+                path: "[ROOT]/.agents/mcp_config.json",
             },
             Missing {
-                path: "[ROOT]/.agent/.agent-config-mcp.json",
+                path: "[ROOT]/.agents/.agent-config-mcp.json",
             },
         ],
         warnings: [],
@@ -49,7 +49,7 @@ Ok(
         ok: false,
         issues: [
             ConfigOnly {
-                path: "[ROOT]/.agent/mcp_config.json",
+                path: "[ROOT]/.agents/mcp_config.json",
             },
         ],
         suggested_actions: [
@@ -60,9 +60,9 @@ Ok(
 
 ROOT tree:
 directories:
-- .agent
+- .agents
 files:
-- .agent/mcp_config.json
+- .agents/mcp_config.json
   content:
 ```text
 {

@@ -7,9 +7,11 @@ Ok(
     InstallReport {
         created: [],
         patched: [
+            "[ROOT]/.agents/hooks.json",
             "[ROOT]/AGENTS.md",
         ],
         backed_up: [
+            "[ROOT]/.agents/hooks.json.bak",
             "[ROOT]/AGENTS.md.bak",
         ],
         already_installed: false,
@@ -59,7 +61,63 @@ Ok(
 )
 
 ROOT tree:
+directories:
+- .agents
 files:
+- .agents/hooks.json
+  content:
+```text
+{
+  "sibling-hook": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "golden-hook": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+- .agents/hooks.json.bak
+  content:
+```text
+{
+  "sibling-hook": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 - AGENTS.md
   content:
 ```text

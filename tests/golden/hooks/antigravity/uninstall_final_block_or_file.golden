@@ -6,6 +6,7 @@ uninstall_result:
 Ok(
     UninstallReport {
         removed: [
+            "[ROOT]/.agents/hooks.json",
             "[ROOT]/.agents/rules/golden-hook.md",
         ],
         patched: [],

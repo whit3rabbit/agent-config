@@ -147,8 +147,8 @@ fn antigravity_global_mcp_install_resolves_documented_leaf_symlink() {
 
     let env = IsolatedGlobalEnv::new();
     let gemini = env.home_path().join(".gemini");
-    let documented = gemini.join("antigravity").join("mcp_config.json");
-    let target = gemini.join("config").join("mcp_config.json");
+    let documented = gemini.join("config").join("mcp_config.json");
+    let target = gemini.join("other_config").join("mcp_config.json");
     fs::create_dir_all(documented.parent().unwrap()).unwrap();
     fs::create_dir_all(target.parent().unwrap()).unwrap();
     fs::write(&target, b"{}").unwrap();
@@ -188,7 +188,7 @@ fn antigravity_global_mcp_install_rejects_leaf_symlink_outside_gemini_home() {
 
     let env = IsolatedGlobalEnv::new();
     let gemini = env.home_path().join(".gemini");
-    let documented = gemini.join("antigravity").join("mcp_config.json");
+    let documented = gemini.join("config").join("mcp_config.json");
     let outside_dir = env.home_path().join("outside");
     let outside_target = outside_dir.join("mcp_config.json");
     fs::create_dir_all(documented.parent().unwrap()).unwrap();
@@ -296,7 +296,11 @@ fn assert_hook_plan_matches_actual(
     scope: &Scope,
 ) {
     let tag = format!("parity-{}-{}", agent.id(), scope_label(kind));
-    let spec = hook_spec(&tag);
+    let spec = if agent.id() == "antigravity" && kind == ScopeKind::Global {
+        bare_hook_spec(&tag)
+    } else {
+        hook_spec(&tag)
+    };
 
     let initial = agent.plan_install(scope, &spec).unwrap();
     assert!(

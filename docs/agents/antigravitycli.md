@@ -7,8 +7,16 @@ Google's terminal-first Antigravity CLI. This is separate from the
 
 ## Hooks
 
-No native hook surface is implemented. `HookSpec::rules` installs prompt
-context into the CLI's context file.
+Hook commands are configured inside `hooks.json` under top-level consumer tags.
+
+| Scope | File |
+| --- | --- |
+| Global | `~/.gemini/antigravity-cli/hooks.json` |
+| Local | `<root>/.agents/hooks.json` |
+
+Matches event names like `PreToolUse` and `PostToolUse`. Matcher translates `Matcher::Bash` to `"run_command"`.
+
+If the hook specification includes `rules`, prompt rules are written/injected into local `AGENTS.md` or global `~/.gemini/GEMINI.md`.
 
 ## Prompt Instructions
 
@@ -77,14 +85,18 @@ which is the path this integration writes.
 
 ## Skills
 
-Not registered as `SkillSurface` yet. Antigravity CLI skills are flat markdown
-files such as `.agents/skills/format-tests.md` and
-`~/.gemini/antigravity-cli/skills/format-tests.md`, while this crate's current
-skill surface is directory-scoped `SKILL.md` packages.
+Skills are directory-scoped packages containing `SKILL.md` manifest and optional supporting files.
+
+| Scope | File |
+| --- | --- |
+| Global | `~/.gemini/antigravity-cli/skills/<name>/` |
+| Local | `<root>/.agents/skills/<name>/` |
 
 ## References
 
+- <https://antigravity.google/docs/hooks>
+- <https://antigravity.google/docs/skills>
+- <https://antigravity.google/docs/mcp>
 - <https://antigravity.google/docs/gcli-migration>
-- <https://antigravity.google/docs/cli-plugins>
 - <https://antigravity.google/assets/docs/cli/gcli-migration.md>
 - <https://antigravity.google/assets/docs/cli/cli-plugins.md>

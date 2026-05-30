@@ -8,8 +8,12 @@ Ok(
         created: [
             "[ROOT]/.agents/rules/golden-hook.md",
         ],
-        patched: [],
-        backed_up: [],
+        patched: [
+            "[ROOT]/.agents/hooks.json",
+        ],
+        backed_up: [
+            "[ROOT]/.agents/hooks.json.bak",
+        ],
         already_installed: false,
     },
 )
@@ -57,6 +61,60 @@ directories:
 - .agents
 - .agents/rules
 files:
+- .agents/hooks.json
+  content:
+```text
+{
+  "sibling-hook": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "golden-hook": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+- .agents/hooks.json.bak
+  content:
+```text
+{
+  "sibling-hook": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 - .agents/rules/golden-hook.md
   content:
 ```text

@@ -7,10 +7,10 @@ Ok(
     InstallReport {
         created: [],
         patched: [
-            "[ROOT]/.agent/mcp_config.json",
+            "[ROOT]/.agents/mcp_config.json",
         ],
         backed_up: [
-            "[ROOT]/.agent/mcp_config.json.bak",
+            "[ROOT]/.agents/mcp_config.json.bak",
         ],
         already_installed: false,
     },
@@ -25,17 +25,17 @@ Ok(
             owner: "golden-owner",
         },
         config_path: Some(
-            "[ROOT]/.agent/mcp_config.json",
+            "[ROOT]/.agents/mcp_config.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.agent/.agent-config-mcp.json",
+            "[ROOT]/.agents/.agent-config-mcp.json",
         ),
         files: [
             Exists {
-                path: "[ROOT]/.agent/mcp_config.json",
+                path: "[ROOT]/.agents/mcp_config.json",
             },
             Exists {
-                path: "[ROOT]/.agent/.agent-config-mcp.json",
+                path: "[ROOT]/.agents/.agent-config-mcp.json",
             },
         ],
         warnings: [],
@@ -55,7 +55,7 @@ Ok(
         ok: false,
         issues: [
             BackupCollision {
-                path: "[ROOT]/.agent/mcp_config.json.bak",
+                path: "[ROOT]/.agents/mcp_config.json.bak",
             },
         ],
         suggested_actions: [
@@ -66,9 +66,9 @@ Ok(
 
 ROOT tree:
 directories:
-- .agent
+- .agents
 files:
-- .agent/.agent-config-mcp.json
+- .agents/.agent-config-mcp.json
   content:
 ```text
 {
@@ -81,7 +81,7 @@ files:
   "version": 2
 }
 ```
-- .agent/mcp_config.json
+- .agents/mcp_config.json
   content:
 ```text
 {
@@ -103,7 +103,7 @@ files:
   }
 }
 ```
-- .agent/mcp_config.json.bak
+- .agents/mcp_config.json.bak
   content:
 ```text
 {

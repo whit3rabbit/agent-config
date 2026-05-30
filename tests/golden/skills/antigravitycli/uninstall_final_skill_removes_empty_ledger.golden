@@ -1,13 +1,12 @@
-surface: hooks
+surface: skills
 agent: antigravitycli
-scenario: uninstall_final_block_or_file
+scenario: uninstall_final_skill_removes_empty_ledger
 
 uninstall_result:
 Ok(
     UninstallReport {
         removed: [
-            "[ROOT]/.agents/hooks.json",
-            "[ROOT]/AGENTS.md",
+            "[ROOT]/.agents/skills/golden-skill",
         ],
         patched: [],
         restored: [],
@@ -17,17 +16,22 @@ Ok(
 status:
 Ok(
     StatusReport {
-        target: Hook {
-            tag: "golden-hook",
+        target: Skill {
+            name: "golden-skill",
         },
         status: Absent,
         config_path: Some(
-            "[ROOT]/AGENTS.md",
+            "[ROOT]/.agents/skills/golden-skill",
         ),
-        ledger_path: None,
+        ledger_path: Some(
+            "[ROOT]/.agents/skills/.agent-config-skills.json",
+        ),
         files: [
             Missing {
-                path: "[ROOT]/AGENTS.md",
+                path: "[ROOT]/.agents/skills/golden-skill",
+            },
+            Missing {
+                path: "[ROOT]/.agents/skills/golden-skill/SKILL.md",
             },
         ],
         warnings: [],
@@ -36,12 +40,13 @@ Ok(
 validation:
 Ok(
     ValidationReport {
-        target: Hook {
+        target: Skill {
             integration_id: "antigravitycli",
             scope: Local(
                 "[ROOT]",
             ),
-            tag: "golden-hook",
+            name: "golden-skill",
+            owner: "golden-owner",
         },
         ok: true,
         issues: [],
@@ -54,6 +59,7 @@ Ok(
 ROOT tree:
 directories:
 - .agents
+- .agents/skills
 
 HOME tree:
 <empty>

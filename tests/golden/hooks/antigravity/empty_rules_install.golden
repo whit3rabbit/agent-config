@@ -6,6 +6,7 @@ install_result:
 Ok(
     InstallReport {
         created: [
+            "[ROOT]/.agents/hooks.json",
             "[ROOT]/.agents/rules/golden-hook.md",
         ],
         patched: [],
@@ -57,6 +58,26 @@ directories:
 - .agents
 - .agents/rules
 files:
+- .agents/hooks.json
+  content:
+```text
+{
+  "golden-hook": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 - .agents/rules/golden-hook.md
   content:
 ```text

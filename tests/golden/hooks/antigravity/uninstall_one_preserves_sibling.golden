@@ -8,7 +8,9 @@ Ok(
         removed: [
             "[ROOT]/.agents/rules/golden-hook.md",
         ],
-        patched: [],
+        patched: [
+            "[ROOT]/.agents/hooks.json",
+        ],
         restored: [],
         not_installed: false,
     },
@@ -55,6 +57,46 @@ directories:
 - .agents
 - .agents/rules
 files:
+- .agents/hooks.json
+  content:
+```text
+{
+  "sibling-hook": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+- .agents/hooks.json.bak
+  content:
+```text
+{
+  "golden-hook": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 - .agents/rules/sibling-hook.md
   content:
 ```text

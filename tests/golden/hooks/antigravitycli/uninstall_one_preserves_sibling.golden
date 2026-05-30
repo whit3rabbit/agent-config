@@ -7,6 +7,7 @@ Ok(
     UninstallReport {
         removed: [],
         patched: [
+            "[ROOT]/.agents/hooks.json",
             "[ROOT]/AGENTS.md",
         ],
         restored: [],
@@ -55,7 +56,49 @@ Ok(
 )
 
 ROOT tree:
+directories:
+- .agents
 files:
+- .agents/hooks.json
+  content:
+```text
+{
+  "sibling-hook": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+- .agents/hooks.json.bak
+  content:
+```text
+{
+  "golden-hook": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "golden hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 - AGENTS.md
   content:
 ```text

@@ -6,7 +6,7 @@ uninstall_result:
 Ok(
     UninstallReport {
         removed: [
-            "[ROOT]/.agent/mcp_config.json",
+            "[ROOT]/.agents/mcp_config.json",
         ],
         patched: [],
         restored: [],
@@ -21,17 +21,17 @@ Ok(
         },
         status: Absent,
         config_path: Some(
-            "[ROOT]/.agent/mcp_config.json",
+            "[ROOT]/.agents/mcp_config.json",
         ),
         ledger_path: Some(
-            "[ROOT]/.agent/.agent-config-mcp.json",
+            "[ROOT]/.agents/.agent-config-mcp.json",
         ),
         files: [
             Missing {
-                path: "[ROOT]/.agent/mcp_config.json",
+                path: "[ROOT]/.agents/mcp_config.json",
             },
             Missing {
-                path: "[ROOT]/.agent/.agent-config-mcp.json",
+                path: "[ROOT]/.agents/.agent-config-mcp.json",
             },
         ],
         warnings: [],
@@ -58,7 +58,7 @@ Ok(
 
 ROOT tree:
 directories:
-- .agent
+- .agents
 
 HOME tree:
 <empty>

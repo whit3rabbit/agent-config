@@ -156,6 +156,7 @@ to avoid colliding with cross-host skill sets.
 
 - <https://github.com/charmbracelet/crush>
 - <https://github.com/charmbracelet/crush/blob/main/docs/hooks/README.md>
+- <https://github.com/charmbracelet/crush/blob/cd592e80fd4758155f12b8a0fbf9930e44ea9024/README.md?plain=1#L295>
 - <https://charm.land/crush.json>
 
-Accessed: 2026-04-28.
+Accessed: 2026-05-30.

@@ -223,7 +223,7 @@ pub fn roo_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
 /// Propagates [`AgentConfigError::PathResolution`] from [`gemini_home`].
 pub fn antigravity_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
     let gemini = gemini_home()?;
-    let documented = gemini.join("antigravity").join("mcp_config.json");
+    let documented = gemini.join("config").join("mcp_config.json");
     let metadata = match fs::symlink_metadata(&documented) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(documented),
@@ -435,7 +435,7 @@ mod tests {
         ));
         assert!(antigravity_mcp_global_file().unwrap().ends_with(
             PathBuf::from(".gemini")
-                .join("antigravity")
+                .join("config")
                 .join("mcp_config.json")
         ));
         assert!(antigravity_cli_mcp_global_file().unwrap().ends_with(
