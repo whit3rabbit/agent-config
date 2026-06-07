@@ -8,7 +8,7 @@ use crate::spec::InstructionSpec;
 use crate::status::StatusReport;
 use crate::util::instructions_dir;
 
-use super::{ClineAgent, RULES_DIR};
+use super::{ClineAgent, LEGACY_RULES_DIR, RULES_DIR};
 
 impl ClineAgent {
     pub(super) fn standalone_layout(
@@ -17,6 +17,18 @@ impl ClineAgent {
     ) -> Result<instructions_dir::StandaloneLayout, AgentConfigError> {
         let root = self.project_root(scope)?;
         let rules_dir = root.join(RULES_DIR);
+        Ok(instructions_dir::StandaloneLayout {
+            config_dir: rules_dir.clone(),
+            instruction_dir: rules_dir,
+        })
+    }
+
+    pub(super) fn legacy_standalone_layout(
+        &self,
+        scope: &Scope,
+    ) -> Result<instructions_dir::StandaloneLayout, AgentConfigError> {
+        let root = self.project_root(scope)?;
+        let rules_dir = root.join(LEGACY_RULES_DIR);
         Ok(instructions_dir::StandaloneLayout {
             config_dir: rules_dir.clone(),
             instruction_dir: rules_dir,
@@ -39,7 +51,31 @@ impl InstructionSurface for ClineAgent {
         name: &str,
         expected_owner: &str,
     ) -> Result<StatusReport, AgentConfigError> {
-        instructions_dir::standalone_status(self.standalone_layout(scope)?, name, expected_owner)
+        let primary_status = instructions_dir::standalone_status(
+            self.standalone_layout(scope)?,
+            name,
+            expected_owner,
+        )?;
+        if matches!(
+            primary_status.status,
+            crate::status::InstallStatus::InstalledOwned { .. }
+                | crate::status::InstallStatus::InstalledOtherOwner { .. }
+        ) {
+            Ok(primary_status)
+        } else {
+            let legacy_layout = self.legacy_standalone_layout(scope)?;
+            let legacy_status =
+                instructions_dir::standalone_status(legacy_layout, name, expected_owner)?;
+            if matches!(
+                legacy_status.status,
+                crate::status::InstallStatus::InstalledOwned { .. }
+                    | crate::status::InstallStatus::InstalledOtherOwner { .. }
+            ) {
+                Ok(legacy_status)
+            } else {
+                Ok(primary_status)
+            }
+        }
     }
 
     fn plan_install_instruction(
@@ -61,13 +97,24 @@ impl InstructionSurface for ClineAgent {
         name: &str,
         owner_tag: &str,
     ) -> Result<UninstallPlan, AgentConfigError> {
-        instructions_dir::standalone_plan_uninstall(
+        let mut plan = instructions_dir::standalone_plan_uninstall(
             InstructionSurface::id(self),
             scope,
             self.standalone_layout(scope),
             name,
             owner_tag,
-        )
+        )?;
+        if let Ok(legacy_layout) = self.legacy_standalone_layout(scope) {
+            let legacy_plan = instructions_dir::standalone_plan_uninstall(
+                InstructionSurface::id(self),
+                scope,
+                Ok(legacy_layout),
+                name,
+                owner_tag,
+            )?;
+            plan.changes.extend(legacy_plan.changes);
+        }
+        Ok(plan)
     }
 
     fn install_instruction(
@@ -84,12 +131,18 @@ impl InstructionSurface for ClineAgent {
         name: &str,
         owner_tag: &str,
     ) -> Result<UninstallReport, AgentConfigError> {
-        instructions_dir::standalone_uninstall(
+        let mut report = instructions_dir::standalone_uninstall(
             scope,
             self.standalone_layout(scope)?,
             name,
             owner_tag,
-        )
+        )?;
+        if let Ok(legacy_layout) = self.legacy_standalone_layout(scope) {
+            let legacy_report =
+                instructions_dir::standalone_uninstall(scope, legacy_layout, name, owner_tag)?;
+            report.merge(legacy_report);
+        }
+        Ok(report)
     }
 }
 
@@ -115,7 +168,7 @@ mod tests {
         agent
             .install_instruction(&scope, &instruction_spec("test-rule", "myapp"))
             .unwrap();
-        assert!(dir.path().join(".clinerules/test-rule.md").exists());
+        assert!(dir.path().join(".cline/rules/test-rule.md").exists());
     }
 
     #[test]
@@ -129,7 +182,7 @@ mod tests {
         agent
             .uninstall_instruction(&scope, "test-rule", "myapp")
             .unwrap();
-        assert!(!dir.path().join(".clinerules/test-rule.md").exists());
+        assert!(!dir.path().join(".cline/rules/test-rule.md").exists());
     }
 
     #[test]

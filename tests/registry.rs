@@ -127,11 +127,10 @@ fn custom_event_hooks_round_trip_for_json_hook_agents() {
     let dir = tempfile::tempdir().unwrap();
     let scope = Scope::Local(dir.path().to_path_buf());
 
-    for id in ["claude", "cursor", "gemini", "codex", "windsurf"] {
+    for id in ["claude", "cursor", "codex", "windsurf"] {
         let agent = by_id(id).expect(id);
         let spec = HookSpec::builder("customtest")
             .command_program("customtest", ["hook"])
-            .matcher(Matcher::Bash)
             .event(Event::Custom("customEvent".into()))
             .build();
 

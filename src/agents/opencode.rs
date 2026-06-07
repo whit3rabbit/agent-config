@@ -536,6 +536,7 @@ fn generate_plugin_body(spec: &HookSpec) -> String {
         Event::PreToolUse => "tool.execute.before",
         Event::PostToolUse => "tool.execute.after",
         Event::Custom(name) => name.as_str(),
+        other => other.as_str(),
     };
 
     let is_tool_event = hook_name == "tool.execute.before" || hook_name == "tool.execute.after";

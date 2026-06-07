@@ -6,7 +6,7 @@ uninstall_result:
 Ok(
     UninstallReport {
         removed: [
-            "[ROOT]/.clinerules/golden-hook.md",
+            "[ROOT]/.cline/rules/golden-hook.md",
         ],
         patched: [],
         restored: [],
@@ -21,14 +21,14 @@ Ok(
         },
         status: Absent,
         config_path: Some(
-            "[ROOT]/.clinerules/golden-hook.md",
+            "[ROOT]/.cline/rules/golden-hook.md",
         ),
         ledger_path: Some(
-            "[ROOT]/.clinerules/hooks/.agent-config-hooks.json",
+            "[ROOT]/.cline/hooks/.agent-config-hooks.json",
         ),
         files: [
             Missing {
-                path: "[ROOT]/.clinerules/golden-hook.md",
+                path: "[ROOT]/.cline/rules/golden-hook.md",
             },
         ],
         warnings: [],

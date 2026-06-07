@@ -110,6 +110,7 @@ impl Integration for PromptAgent {
     ) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let _ = self.require_local(spec_scope)?;
+        agent_planning::validate_prompt_only_event(self.id, &spec.event)?;
         let rules = spec
             .rules
             .as_ref()

@@ -103,6 +103,7 @@ impl Integration for RooAgent {
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
         let _ = self.require_local(scope)?;
+        agent_planning::validate_prompt_only_event(Integration::id(self), &spec.event)?;
         let rules = spec
             .rules
             .as_ref()

@@ -420,6 +420,7 @@ fn refusal_label(reason: RefusalReason) -> &'static str {
         RefusalReason::InlineSecretInLocalScope => "inline_secret_in_local_scope",
         RefusalReason::UnsupportedTransport => "unsupported_transport",
         RefusalReason::UnsupportedPlatform => "unsupported_platform",
+        RefusalReason::UnsupportedSpecField => "unsupported_spec_field",
     }
 }
 

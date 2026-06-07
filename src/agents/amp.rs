@@ -121,6 +121,7 @@ impl Integration for AmpAgent {
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
+        agent_planning::validate_prompt_only_event(Integration::id(self), &spec.event)?;
         let rules = spec
             .rules
             .as_ref()

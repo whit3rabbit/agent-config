@@ -589,6 +589,7 @@ fn event_to_windsurf(event: &Event) -> String {
         Event::PreToolUse => "pre_run_command".into(),
         Event::PostToolUse => "post_cascade_response".into(),
         Event::Custom(s) => s.clone(),
+        other => other.as_str().into(),
     }
 }
 

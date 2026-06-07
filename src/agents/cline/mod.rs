@@ -44,7 +44,8 @@ mod instructions;
 mod mcp;
 mod skills;
 
-pub(super) const RULES_DIR: &str = ".clinerules";
+pub(super) const RULES_DIR: &str = ".cline/rules";
+pub(super) const LEGACY_RULES_DIR: &str = ".clinerules";
 const HOOKS_SUBDIR: &str = "hooks";
 #[cfg(not(windows))]
 const KIND: &str = "cline hook";
@@ -74,15 +75,25 @@ impl ClineAgent {
         }
     }
 
-    /// `.clinerules/hooks/` (Local). Global is unsupported (Cline's
-    /// `~/Documents/Cline/Hooks/` is macOS/Linux-only and the path
-    /// convention is unstable enough that we leave it out of v0.1).
     fn hooks_dir(&self, scope: &Scope) -> Result<PathBuf, AgentConfigError> {
-        Ok(self.project_root(scope)?.join(RULES_DIR).join(HOOKS_SUBDIR))
+        Ok(self.project_root(scope)?.join(".cline").join("hooks"))
+    }
+
+    fn legacy_hooks_dir(&self, scope: &Scope) -> Result<PathBuf, AgentConfigError> {
+        Ok(self
+            .project_root(scope)?
+            .join(LEGACY_RULES_DIR)
+            .join(HOOKS_SUBDIR))
     }
 
     fn ledger_path(&self, scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(self.hooks_dir(scope)?.join(".agent-config-hooks.json"))
+    }
+
+    fn legacy_ledger_path(&self, scope: &Scope) -> Result<PathBuf, AgentConfigError> {
+        Ok(self
+            .legacy_hooks_dir(scope)?
+            .join(".agent-config-hooks.json"))
     }
 }
 
@@ -107,21 +118,33 @@ impl Integration for ClineAgent {
         let root = self.project_root(scope)?;
         let rules_file = rules_dir::target_path(root, RULES_DIR, tag);
         let rules_exists = rules_file.exists();
+        let legacy_rules_file = rules_dir::target_path(root, LEGACY_RULES_DIR, tag);
+        let legacy_rules_exists = legacy_rules_file.exists();
 
         let ledger = self.ledger_path(scope)?;
-        let owned_hook_count = if ledger.exists() {
-            let v = crate::util::json_patch::read_or_empty(&ledger)?;
-            v.get("entries")
-                .and_then(|e| e.as_object())
-                .map(|m| {
-                    m.values()
-                        .filter(|entry| entry.get("owner").and_then(|o| o.as_str()) == Some(tag))
-                        .count()
-                })
-                .unwrap_or(0)
-        } else {
-            0
-        };
+        let legacy_ledger = self.legacy_ledger_path(scope)?;
+
+        let get_owned_hook_count =
+            |ledger_path: &std::path::Path| -> Result<usize, AgentConfigError> {
+                if ledger_path.exists() {
+                    let v = crate::util::json_patch::read_or_empty(ledger_path)?;
+                    Ok(v.get("entries")
+                        .and_then(|e| e.as_object())
+                        .map(|m| {
+                            m.values()
+                                .filter(|entry| {
+                                    entry.get("owner").and_then(|o| o.as_str()) == Some(tag)
+                                })
+                                .count()
+                        })
+                        .unwrap_or(0))
+                } else {
+                    Ok(0)
+                }
+            };
+
+        let new_hook_count = get_owned_hook_count(&ledger)?;
+        let legacy_hook_count = get_owned_hook_count(&legacy_ledger)?;
 
         let mut files = vec![if rules_exists {
             PathStatus::Exists {
@@ -132,30 +155,54 @@ impl Integration for ClineAgent {
                 path: rules_file.clone(),
             }
         }];
+        if legacy_rules_exists {
+            files.push(PathStatus::Exists {
+                path: legacy_rules_file.clone(),
+            });
+        }
         if ledger.exists() {
             files.push(PathStatus::Exists {
                 path: ledger.clone(),
             });
         }
+        if legacy_ledger.exists() {
+            files.push(PathStatus::Exists {
+                path: legacy_ledger.clone(),
+            });
+        }
 
         let mut warnings = Vec::new();
-        let status = if rules_exists || owned_hook_count > 0 {
+        let status = if rules_exists || new_hook_count > 0 || legacy_rules_exists || legacy_hook_count > 0 {
             InstallStatus::InstalledOwned {
                 owner: tag.to_string(),
             }
         } else {
             // Surface a backup file if it exists for the rules markdown.
-            let mut bak = rules_file.clone();
-            if let Some(name) = bak.file_name().map(|n| n.to_os_string()) {
-                if let Ok(mut s) = name.into_string() {
-                    s.push_str(".bak");
-                    bak.set_file_name(s);
-                    if bak.exists() {
-                        warnings.push(StatusWarning::BackupExists { path: bak });
+            for file_path in [&rules_file, &legacy_rules_file] {
+                let mut bak = file_path.clone();
+                if let Some(name) = bak.file_name().map(|n| n.to_os_string()) {
+                    if let Ok(mut s) = name.into_string() {
+                        s.push_str(".bak");
+                        bak.set_file_name(s);
+                        if bak.exists() {
+                            warnings.push(StatusWarning::BackupExists { path: bak });
+                        }
                     }
                 }
             }
             InstallStatus::Absent
+        };
+
+        let chosen_rules = if rules_exists || !legacy_rules_exists {
+            rules_file
+        } else {
+            legacy_rules_file
+        };
+
+        let chosen_ledger = if ledger.exists() || !legacy_ledger.exists() {
+            ledger
+        } else {
+            legacy_ledger
         };
 
         Ok(StatusReport {
@@ -163,8 +210,8 @@ impl Integration for ClineAgent {
                 tag: tag.to_string(),
             },
             status,
-            config_path: Some(rules_file),
-            ledger_path: Some(ledger),
+            config_path: Some(chosen_rules),
+            ledger_path: Some(chosen_ledger),
             files,
             warnings,
         })
@@ -181,6 +228,16 @@ impl Integration for ClineAgent {
             scope: scope.clone(),
             tag: spec.tag.clone(),
         };
+        if let Event::Custom(s) = &spec.event {
+            validate_custom_event_filename(s)?;
+        }
+        if validate_cline_event(&spec.event).is_err() {
+            return Ok(InstallPlan::refused(
+                target,
+                None,
+                RefusalReason::UnsupportedSpecField,
+            ));
+        }
         let root = match self.project_root(scope) {
             Ok(root) => root,
             Err(AgentConfigError::UnsupportedScope { .. }) => {
@@ -291,44 +348,54 @@ impl Integration for ClineAgent {
             Err(e) => return Err(e),
         };
         let mut changes = rules_dir::plan_uninstall(root, RULES_DIR, tag)?;
-        let ledger = self.ledger_path(scope)?;
-        if ledger.exists() {
-            let v = match crate::util::json_patch::read_or_empty(&ledger) {
-                Ok(v) => v,
-                Err(AgentConfigError::JsonInvalid { .. }) => {
-                    changes.push(PlannedChange::Refuse {
-                        path: Some(ledger),
-                        reason: RefusalReason::InvalidConfig,
-                    });
-                    return Ok(UninstallPlan::from_changes(target, changes));
+        let legacy_rules_changes = rules_dir::plan_uninstall(root, LEGACY_RULES_DIR, tag)?;
+        changes.extend(legacy_rules_changes);
+
+        for (l_path, h_dir) in [
+            (self.ledger_path(scope)?, self.hooks_dir(scope)?),
+            (
+                self.legacy_ledger_path(scope)?,
+                self.legacy_hooks_dir(scope)?,
+            ),
+        ] {
+            if l_path.exists() {
+                let v = match crate::util::json_patch::read_or_empty(&l_path) {
+                    Ok(v) => v,
+                    Err(AgentConfigError::JsonInvalid { .. }) => {
+                        changes.push(PlannedChange::Refuse {
+                            path: Some(l_path),
+                            reason: RefusalReason::InvalidConfig,
+                        });
+                        return Ok(UninstallPlan::from_changes(target, changes));
+                    }
+                    Err(e) => return Err(e),
+                };
+                let owned: Vec<String> = v
+                    .get("entries")
+                    .and_then(|e| e.as_object())
+                    .map(|m| {
+                        m.iter()
+                            .filter(|(_, entry)| {
+                                entry.get("owner").and_then(|o| o.as_str()) == Some(tag)
+                            })
+                            .map(|(k, _)| k.clone())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                for filename in owned {
+                    if validate_custom_event_filename(&filename).is_err() {
+                        changes.push(PlannedChange::Refuse {
+                            path: Some(l_path.clone()),
+                            reason: RefusalReason::InvalidConfig,
+                        });
+                        return Ok(UninstallPlan::from_changes(target, changes));
+                    }
+                    let path = h_dir.join(&filename);
+                    if path.exists() {
+                        changes.push(PlannedChange::RemoveFile { path });
+                    }
+                    planning::plan_remove_ledger_entry(&mut changes, &l_path, &filename);
                 }
-                Err(e) => return Err(e),
-            };
-            let owned: Vec<String> = v
-                .get("entries")
-                .and_then(|e| e.as_object())
-                .map(|m| {
-                    m.iter()
-                        .filter(|(_, entry)| {
-                            entry.get("owner").and_then(|o| o.as_str()) == Some(tag)
-                        })
-                        .map(|(k, _)| k.clone())
-                        .collect()
-                })
-                .unwrap_or_default();
-            for filename in owned {
-                if validate_custom_event_filename(&filename).is_err() {
-                    changes.push(PlannedChange::Refuse {
-                        path: Some(ledger),
-                        reason: RefusalReason::InvalidConfig,
-                    });
-                    return Ok(UninstallPlan::from_changes(target, changes));
-                }
-                let path = self.hooks_dir(scope)?.join(&filename);
-                if path.exists() {
-                    changes.push(PlannedChange::RemoveFile { path });
-                }
-                planning::plan_remove_ledger_entry(&mut changes, &ledger, &filename);
             }
         }
         Ok(UninstallPlan::from_changes(target, changes))
@@ -336,6 +403,7 @@ impl Integration for ClineAgent {
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
+        validate_cline_event(&spec.event)?;
         let root = self.project_root(scope)?;
         let mut report = InstallReport::default();
 
@@ -426,45 +494,72 @@ impl Integration for ClineAgent {
         let r = rules_dir::uninstall(scope, RULES_DIR, tag)?;
         report.merge(r);
 
-        // Any hook scripts owned by this tag.
-        let hooks_dir = self.hooks_dir(scope)?;
-        scope.ensure_contained(&hooks_dir)?;
-        file_lock::with_lock(&hooks_dir, || {
-            let ledger = hooks_dir.join(".agent-config-hooks.json");
-            if ledger.exists() {
-                let v = crate::util::json_patch::read_or_empty(&ledger)?;
-                let owned: Vec<String> = v
-                    .get("entries")
-                    .and_then(|e| e.as_object())
-                    .map(|m| {
-                        m.iter()
-                            .filter(|(_, entry)| {
-                                entry.get("owner").and_then(|o| o.as_str()) == Some(tag)
-                            })
-                            .map(|(k, _)| k.clone())
-                            .collect()
-                    })
-                    .unwrap_or_default();
+        scope.ensure_contained(&rules_dir::target_path(root, LEGACY_RULES_DIR, tag))?;
+        let r_legacy = rules_dir::uninstall(scope, LEGACY_RULES_DIR, tag)?;
+        report.merge(r_legacy);
 
-                for filename in owned {
-                    validate_custom_event_filename(&filename)?;
-                    let path = hooks_dir.join(&filename);
-                    if path.exists() {
-                        safe_fs::remove_file(scope, &path)?;
-                        report.removed.push(path);
+        // Any hook scripts owned by this tag (primary and legacy).
+        for (hooks_dir, ledger) in [
+            (self.hooks_dir(scope)?, self.ledger_path(scope)?),
+            (
+                self.legacy_hooks_dir(scope)?,
+                self.legacy_ledger_path(scope)?,
+            ),
+        ] {
+            if hooks_dir.exists() {
+                scope.ensure_contained(&hooks_dir)?;
+                file_lock::with_lock(&hooks_dir, || {
+                    if ledger.exists() {
+                        let v = crate::util::json_patch::read_or_empty(&ledger)?;
+                        let owned: Vec<String> = v
+                            .get("entries")
+                            .and_then(|e| e.as_object())
+                            .map(|m| {
+                                m.iter()
+                                    .filter(|(_, entry)| {
+                                        entry.get("owner").and_then(|o| o.as_str()) == Some(tag)
+                                    })
+                                    .map(|(k, _)| k.clone())
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+
+                        for filename in owned {
+                            validate_custom_event_filename(&filename)?;
+                            let path = hooks_dir.join(&filename);
+                            if path.exists() {
+                                safe_fs::remove_file(scope, &path)?;
+                                report.removed.push(path);
+                            }
+                            ownership::record_uninstall(&ledger, &filename)?;
+                        }
                     }
-                    ownership::record_uninstall(&ledger, &filename)?;
+                    Ok::<(), AgentConfigError>(())
+                })?;
+            }
+        }
+
+        // Tidy: prune empty hooks/ then .cline/rules and .clinerules/ in case the rules path
+        // already pruned them.
+        for empty_dir in [
+            self.hooks_dir(scope)?,
+            root.join(RULES_DIR),
+            self.legacy_hooks_dir(scope)?,
+            root.join(LEGACY_RULES_DIR),
+        ] {
+            if empty_dir.exists() {
+                if let Ok(mut entries) = std::fs::read_dir(&empty_dir) {
+                    if entries.next().is_none() {
+                        let _ = safe_fs::remove_empty_dir(scope, &empty_dir);
+                    }
                 }
             }
-            Ok::<(), AgentConfigError>(())
-        })?;
-
-        // Tidy: prune empty hooks/ then .clinerules/ in case the rules path
-        // already pruned them.
-        for empty_dir in [self.hooks_dir(scope)?, root.join(RULES_DIR)] {
-            if let Ok(mut entries) = std::fs::read_dir(&empty_dir) {
+        }
+        let cline_dir = root.join(".cline");
+        if cline_dir.exists() {
+            if let Ok(mut entries) = std::fs::read_dir(&cline_dir) {
                 if entries.next().is_none() {
-                    let _ = safe_fs::remove_empty_dir(scope, &empty_dir);
+                    let _ = safe_fs::remove_empty_dir(scope, &cline_dir);
                 }
             }
         }
@@ -484,6 +579,10 @@ fn event_to_filename(event: &Event) -> Result<String, AgentConfigError> {
         Event::PreToolUse => Ok("PreToolUse".into()),
         Event::PostToolUse => Ok("PostToolUse".into()),
         Event::Custom(s) => validate_custom_event_filename(s).map(|()| s.clone()),
+        other => {
+            let s = other.as_str();
+            validate_custom_event_filename(s).map(|()| s.to_string())
+        }
     }
 }
 
@@ -504,6 +603,45 @@ fn validate_custom_event_filename(name: &str) -> Result<(), AgentConfigError> {
         });
     }
     Ok(())
+}
+
+fn validate_cline_event(event: &Event) -> Result<(), AgentConfigError> {
+    if let Event::Custom(s) = event {
+        validate_custom_event_filename(s)?;
+    }
+    match event {
+        Event::PreToolUse | Event::PostToolUse | Event::UserPromptSubmit | Event::PreCompact => {
+            Ok(())
+        }
+        Event::Custom(s)
+            if s == "TaskStart"
+                || s == "TaskResume"
+                || s == "TaskCancel"
+                || s == "TaskComplete" =>
+        {
+            Ok(())
+        }
+        other => {
+            let s = other.as_str();
+            if s == "PreToolUse"
+                || s == "PostToolUse"
+                || s == "UserPromptSubmit"
+                || s == "PreCompact"
+                || s == "TaskStart"
+                || s == "TaskResume"
+                || s == "TaskCancel"
+                || s == "TaskComplete"
+            {
+                Ok(())
+            } else {
+                Err(AgentConfigError::UnsupportedSpecField {
+                    id: "cline",
+                    field: "event",
+                    value: format!("{:?}", event),
+                })
+            }
+        }
+    }
 }
 
 #[cfg(not(windows))]
@@ -561,7 +699,7 @@ mod tests {
         agent
             .install(&scope, &rules_spec("alpha", "rule body"))
             .unwrap();
-        let p = dir.path().join(".clinerules/alpha.md");
+        let p = dir.path().join(".cline/rules/alpha.md");
         assert!(p.exists());
         assert_eq!(fs::read_to_string(&p).unwrap(), "rule body\n");
     }
@@ -578,7 +716,7 @@ mod tests {
                 &hook_spec("alpha", Event::PreToolUse, "myapp hook cline"),
             )
             .unwrap();
-        let p = dir.path().join(".clinerules/hooks/PreToolUse");
+        let p = dir.path().join(".cline/hooks/PreToolUse");
         assert!(p.exists());
         let body = fs::read_to_string(&p).unwrap();
         assert!(body.starts_with("#!/usr/bin/env bash"));
@@ -623,7 +761,7 @@ mod tests {
             err,
             AgentConfigError::UnsupportedPlatform { id: "cline", .. }
         ));
-        assert!(!dir.path().join(".clinerules/hooks/PreToolUse").exists());
+        assert!(!dir.path().join(".cline/hooks/PreToolUse").exists());
     }
 
     #[cfg(windows)]
@@ -637,7 +775,7 @@ mod tests {
         agent
             .install(&scope, &rules_spec("alpha", "rule body"))
             .unwrap();
-        assert!(dir.path().join(".clinerules/alpha.md").exists());
+        assert!(dir.path().join(".cline/rules/alpha.md").exists());
     }
 
     #[cfg(not(windows))]
@@ -655,7 +793,7 @@ mod tests {
 
         agent.install(&scope, &spec).unwrap();
 
-        let body = fs::read_to_string(dir.path().join(".clinerules/hooks/PreToolUse")).unwrap();
+        let body = fs::read_to_string(dir.path().join(".cline/hooks/PreToolUse")).unwrap();
         assert!(body.contains("\n'my hook' 'repo path' 'semi;$(not run)' '`tick`' 'quote'\\''s'\n"));
     }
 
@@ -671,7 +809,7 @@ mod tests {
             .script(ScriptTemplate::Shell("echo started".into()))
             .build();
         agent.install(&scope, &s).unwrap();
-        let p = dir.path().join(".clinerules/hooks/TaskStart");
+        let p = dir.path().join(".cline/hooks/TaskStart");
         assert!(p.exists());
         let body = fs::read_to_string(&p).unwrap();
         assert!(body.contains("echo started"));
@@ -701,7 +839,7 @@ mod tests {
             );
         }
 
-        assert!(!dir.path().join(".clinerules/hooks").exists());
+        assert!(!dir.path().join(".cline/hooks").exists());
     }
 
     #[cfg(not(windows))]
@@ -728,9 +866,7 @@ mod tests {
         agent
             .install(&scope, &hook_spec("myapp", Event::PreToolUse, "noop"))
             .unwrap();
-        let ledger = dir
-            .path()
-            .join(".clinerules/hooks/.agent-config-hooks.json");
+        let ledger = dir.path().join(".cline/hooks/.agent-config-hooks.json");
         assert!(ledger.exists());
         let v: serde_json::Value = serde_json::from_slice(&fs::read(&ledger).unwrap()).unwrap();
         assert_eq!(
@@ -753,7 +889,7 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
         // appA's hook untouched.
-        let body = fs::read_to_string(dir.path().join(".clinerules/hooks/PreToolUse")).unwrap();
+        let body = fs::read_to_string(dir.path().join(".cline/hooks/PreToolUse")).unwrap();
         assert!(body.contains("a\n"));
     }
 
@@ -789,8 +925,8 @@ mod tests {
         let agent = ClineAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         agent.install(&scope, &rules_spec("alpha", "body")).unwrap();
-        assert!(dir.path().join(".clinerules/alpha.md").exists());
-        assert!(!dir.path().join(".clinerules/hooks").exists());
+        assert!(dir.path().join(".cline/rules/alpha.md").exists());
+        assert!(!dir.path().join(".cline/hooks").exists());
     }
 
     #[cfg(not(windows))]
@@ -806,8 +942,8 @@ mod tests {
             .script(ScriptTemplate::Shell("echo hi".into()))
             .build();
         agent.install(&scope, &s).unwrap();
-        assert!(dir.path().join(".clinerules/alpha.md").exists());
-        assert!(dir.path().join(".clinerules/hooks/PreToolUse").exists());
+        assert!(dir.path().join(".cline/rules/alpha.md").exists());
+        assert!(dir.path().join(".cline/hooks/PreToolUse").exists());
     }
 
     #[cfg(not(windows))]
@@ -827,6 +963,7 @@ mod tests {
             )
             .unwrap();
         agent.uninstall(&scope, "alpha").unwrap();
+        assert!(!dir.path().join(".cline").exists());
         assert!(!dir.path().join(".clinerules").exists());
     }
 
@@ -843,8 +980,8 @@ mod tests {
             .install(&scope, &hook_spec("appB", Event::PostToolUse, "b"))
             .unwrap();
         agent.uninstall(&scope, "appA").unwrap();
-        assert!(!dir.path().join(".clinerules/hooks/PreToolUse").exists());
-        assert!(dir.path().join(".clinerules/hooks/PostToolUse").exists());
+        assert!(!dir.path().join(".cline/hooks/PreToolUse").exists());
+        assert!(dir.path().join(".cline/hooks/PostToolUse").exists());
     }
 
     #[test]

@@ -195,6 +195,34 @@ pub fn vscode_global_storage(extension_id: &str) -> Result<PathBuf, AgentConfigE
 ///
 /// Propagates [`AgentConfigError::PathResolution`] from [`vscode_global_storage`].
 pub fn cline_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
+    if let Ok(dir) = std::env::var("CLINE_DATA_DIR") {
+        if !dir.is_empty() {
+            return Ok(PathBuf::from(dir)
+                .join("settings")
+                .join("cline_mcp_settings.json"));
+        }
+    }
+    if let Ok(dir) = std::env::var("CLINE_DIR") {
+        if !dir.is_empty() {
+            return Ok(PathBuf::from(dir)
+                .join("data")
+                .join("settings")
+                .join("cline_mcp_settings.json"));
+        }
+    }
+    Ok(home_dir()?
+        .join(".cline")
+        .join("data")
+        .join("settings")
+        .join("cline_mcp_settings.json"))
+}
+
+/// Cline's legacy global MCP settings file inside VS Code globalStorage.
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`vscode_global_storage`].
+pub fn legacy_cline_mcp_global_file() -> Result<PathBuf, AgentConfigError> {
     Ok(vscode_global_storage("saoudrizwan.claude-dev")?
         .join("settings")
         .join("cline_mcp_settings.json"))
@@ -418,6 +446,12 @@ mod tests {
             .unwrap()
             .ends_with(PathBuf::from(".config").join("kilo").join("kilo.jsonc")));
         assert!(cline_mcp_global_file().unwrap().ends_with(
+            PathBuf::from(".cline")
+                .join("data")
+                .join("settings")
+                .join("cline_mcp_settings.json")
+        ));
+        assert!(legacy_cline_mcp_global_file().unwrap().ends_with(
             PathBuf::from("Code")
                 .join("User")
                 .join("globalStorage")

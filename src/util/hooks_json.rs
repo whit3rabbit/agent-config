@@ -80,6 +80,7 @@ pub(crate) fn plan_install(
         crate::spec::Event::PreToolUse => "PreToolUse".to_string(),
         crate::spec::Event::PostToolUse => "PostToolUse".to_string(),
         crate::spec::Event::Custom(s) => s.clone(),
+        other => other.as_str().to_string(),
     };
 
     let hook_val = build_hook_value(spec);
@@ -170,6 +171,7 @@ pub(crate) fn install(
             crate::spec::Event::PreToolUse => "PreToolUse".to_string(),
             crate::spec::Event::PostToolUse => "PostToolUse".to_string(),
             crate::spec::Event::Custom(s) => s.clone(),
+            other => other.as_str().to_string(),
         };
 
         let hook_val = build_hook_value(spec);

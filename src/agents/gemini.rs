@@ -122,6 +122,13 @@ impl Integration for GeminiAgent {
             tag: spec.tag.clone(),
         };
         let p = Self::settings_path(scope)?;
+        if !matches!(spec.event, Event::PreToolUse | Event::PostToolUse) {
+            return Ok(InstallPlan::refused(
+                target,
+                None,
+                crate::plan::RefusalReason::UnsupportedSpecField,
+            ));
+        }
         let mut changes = Vec::new();
 
         let event_key = event_to_string(&spec.event);
@@ -185,6 +192,13 @@ impl Integration for GeminiAgent {
 
         let p = Self::settings_path(scope)?;
         scope.ensure_contained(&p)?;
+        if !matches!(spec.event, Event::PreToolUse | Event::PostToolUse) {
+            return Err(AgentConfigError::UnsupportedSpecField {
+                id: "gemini",
+                field: "event",
+                value: format!("{:?}", spec.event),
+            });
+        }
         file_lock::with_lock(&p, || {
             let mut root = json_patch::read_or_empty(&p)?;
 
@@ -561,6 +575,7 @@ fn event_to_string(e: &Event) -> String {
         Event::PreToolUse => "BeforeTool".into(),
         Event::PostToolUse => "AfterTool".into(),
         Event::Custom(s) => s.clone(),
+        other => other.as_str().into(),
     }
 }
 
@@ -757,5 +772,31 @@ mod tests {
             .unwrap();
         let err = agent.uninstall_mcp(&scope, "github", "appB").unwrap_err();
         assert!(matches!(err, AgentConfigError::NotOwnedByCaller { .. }));
+    }
+
+    #[test]
+    fn event_validation_rejects_unsupported() {
+        let dir = tempdir().unwrap();
+        let agent = GeminiAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let spec = HookSpec::builder("alpha")
+            .command_program("noop", [] as [&str; 0])
+            .event(Event::Stop)
+            .build();
+
+        // 1. plan_install refuses it
+        let plan = agent.plan_install(&scope, &spec).unwrap();
+        assert!(matches!(plan.status, crate::plan::PlanStatus::Refused));
+        assert!(plan.changes.iter().any(|c| matches!(
+            c,
+            crate::plan::PlannedChange::Refuse {
+                reason: crate::plan::RefusalReason::UnsupportedSpecField,
+                ..
+            }
+        )));
+
+        // 2. install returns error
+        let err = agent.install(&scope, &spec).unwrap_err();
+        assert!(matches!(err, AgentConfigError::UnsupportedSpecField { .. }));
     }
 }

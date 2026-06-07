@@ -6,7 +6,7 @@ install_result:
 Ok(
     InstallReport {
         created: [
-            "[ROOT]/.clinerules/golden-hook.md",
+            "[ROOT]/.cline/rules/golden-hook.md",
         ],
         patched: [],
         backed_up: [],
@@ -23,14 +23,14 @@ Ok(
             owner: "golden-hook",
         },
         config_path: Some(
-            "[ROOT]/.clinerules/golden-hook.md",
+            "[ROOT]/.cline/rules/golden-hook.md",
         ),
         ledger_path: Some(
-            "[ROOT]/.clinerules/hooks/.agent-config-hooks.json",
+            "[ROOT]/.cline/hooks/.agent-config-hooks.json",
         ),
         files: [
             Exists {
-                path: "[ROOT]/.clinerules/golden-hook.md",
+                path: "[ROOT]/.cline/rules/golden-hook.md",
             },
         ],
         warnings: [],
@@ -56,9 +56,10 @@ Ok(
 
 ROOT tree:
 directories:
-- .clinerules
+- .cline
+- .cline/rules
 files:
-- .clinerules/golden-hook.md
+- .cline/rules/golden-hook.md
   content:
 ```text
 Use golden hook rules.

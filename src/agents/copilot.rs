@@ -593,6 +593,7 @@ fn event_to_string(e: &Event) -> String {
         Event::PreToolUse => "preToolUse".into(),
         Event::PostToolUse => "postToolUse".into(),
         Event::Custom(s) => s.clone(),
+        other => other.as_str().into(),
     }
 }
 

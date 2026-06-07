@@ -273,7 +273,7 @@ fn hook_validation_reports_non_executable_script() {
     let agent = by_id("cline").unwrap();
     agent.install(&scope, &hook_spec("script-owner")).unwrap();
 
-    let script = dir.path().join(".clinerules/hooks/PreToolUse");
+    let script = dir.path().join(".cline/hooks/PreToolUse");
     let mut permissions = std::fs::metadata(&script).unwrap().permissions();
     permissions.set_mode(0o644);
     std::fs::set_permissions(&script, permissions).unwrap();

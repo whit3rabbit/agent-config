@@ -75,7 +75,10 @@ files:
         "hooks": [
           {
             "type": "command",
-            "command": "golden hook"
+            "command": "golden",
+            "args": [
+              "hook"
+            ]
           }
         ],
         "_agent_config_tag": "sibling-hook"
@@ -85,7 +88,10 @@ files:
         "hooks": [
           {
             "type": "command",
-            "command": "golden hook"
+            "command": "golden",
+            "args": [
+              "hook"
+            ]
           }
         ],
         "_agent_config_tag": "golden-hook"
@@ -105,7 +111,10 @@ files:
         "hooks": [
           {
             "type": "command",
-            "command": "golden hook"
+            "command": "golden",
+            "args": [
+              "hook"
+            ]
           }
         ],
         "_agent_config_tag": "sibling-hook"

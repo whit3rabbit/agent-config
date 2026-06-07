@@ -14,6 +14,24 @@ mod builder;
 
 pub use builder::HookSpecBuilder;
 
+/// Optional execution configuration for command hooks.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct HookRuntimeOptions {
+    /// Maximum time in seconds the harness should allow the hook script to run.
+    pub timeout_seconds: Option<u64>,
+    /// Optional status message the harness should display while executing the hook.
+    pub status_message: Option<String>,
+    /// Whether the hook should run asynchronously (non-blocking).
+    pub async_run: Option<bool>,
+    /// Custom shell path to use when executing the command (e.g. `"/bin/bash"`).
+    pub shell: Option<String>,
+    /// Windows-specific command override.
+    pub windows_command: Option<HookCommand>,
+    /// Codex-specific: install inline inside `config.toml` instead of `hooks.json`.
+    pub codex_inline_toml: Option<bool>,
+}
+
 /// Everything an [`Integration`](crate::Integration) needs to install a hook.
 ///
 /// Build via [`HookSpec::builder`]. For fallible construction see
@@ -51,6 +69,9 @@ pub struct HookSpec {
     /// Optional human-friendly display name for log/UI output. If absent the
     /// integration's `display_name` is used.
     pub friendly_name: Option<String>,
+
+    /// Optional execution options for command hooks.
+    pub options: HookRuntimeOptions,
 }
 
 impl HookSpec {
@@ -64,6 +85,7 @@ impl HookSpec {
             rules: None,
             script: None,
             friendly_name: None,
+            options: HookRuntimeOptions::default(),
         }
     }
 
@@ -237,7 +259,7 @@ fn shell_quote(value: &str) -> String {
 /// Each integration translates this to its harness's native syntax. For
 /// example, Claude Code accepts a regex when the matcher contains characters
 /// outside `[A-Za-z0-9_|]`, so [`Matcher::Regex`] passes through verbatim.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Matcher {
     /// Match any tool call.
@@ -256,7 +278,7 @@ pub enum Matcher {
 /// Lifecycle event to attach to. Each integration maps this to its harness's
 /// own event name (e.g., `PreToolUse` on Claude Code, `BeforeTool` on Gemini,
 /// `tool.execute.before` on OpenCode).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Event {
     /// Fire before a tool call is executed (the most common case; lets the
@@ -264,8 +286,57 @@ pub enum Event {
     PreToolUse,
     /// Fire after a tool call completes.
     PostToolUse,
+
+    /// Hook fires when a notification event is dispatched.
+    Notification,
+    /// Hook fires when user submits a prompt.
+    UserPromptSubmit,
+    /// Hook fires when the agent stops.
+    Stop,
+    /// Hook fires when a subagent stops.
+    SubagentStop,
+    /// Hook fires before message compaction.
+    PreCompact,
+    /// Hook fires when a session starts.
+    SessionStart,
+    /// Hook fires when a session ends.
+    SessionEnd,
+    /// Hook fires when a permission request is initiated.
+    PermissionRequest,
+    /// Hook fires when a permission is denied.
+    PermissionDenied,
+    /// Hook fires when configuration changes.
+    ConfigChange,
+    /// Hook fires when a file is changed.
+    FileChanged,
+    /// Hook fires when instructions are loaded.
+    InstructionsLoaded,
+
     /// Pass through a custom event name verbatim.
     Custom(String),
+}
+
+impl Event {
+    /// Return the canonical string representation of the event.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Event::PreToolUse => "PreToolUse",
+            Event::PostToolUse => "PostToolUse",
+            Event::Notification => "Notification",
+            Event::UserPromptSubmit => "UserPromptSubmit",
+            Event::Stop => "Stop",
+            Event::SubagentStop => "SubagentStop",
+            Event::PreCompact => "PreCompact",
+            Event::SessionStart => "SessionStart",
+            Event::SessionEnd => "SessionEnd",
+            Event::PermissionRequest => "PermissionRequest",
+            Event::PermissionDenied => "PermissionDenied",
+            Event::ConfigChange => "ConfigChange",
+            Event::FileChanged => "FileChanged",
+            Event::InstructionsLoaded => "InstructionsLoaded",
+            Event::Custom(s) => s.as_str(),
+        }
+    }
 }
 
 /// Markdown content to inject into the harness's memory/rules file, fenced by

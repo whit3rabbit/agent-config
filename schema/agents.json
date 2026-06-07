@@ -1046,11 +1046,12 @@
           "scopes": {
             "local": {
               "config_files": [
-                "<project>/.clinerules/placeholder.md"
+                "<project>/.cline/rules/placeholder.md"
               ],
               "directories": [
                 "<project>",
-                "<project>/.clinerules"
+                "<project>/.cline",
+                "<project>/.cline/rules"
               ],
               "ledger_files": [],
               "refusals": []
@@ -1064,18 +1065,15 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+                "~/.cline/data/settings/cline_mcp_settings.json"
               ],
               "directories": [
-                "~/.config",
-                "~/.config/Code",
-                "~/.config/Code/User",
-                "~/.config/Code/User/globalStorage",
-                "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev",
-                "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings"
+                "~/.cline",
+                "~/.cline/data",
+                "~/.cline/data/settings"
               ],
               "ledger_files": [
-                "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.agent-config-mcp.json"
+                "~/.cline/data/settings/.agent-config-mcp.json"
               ],
               "refusals": []
             }
@@ -1126,14 +1124,15 @@
           "scopes": {
             "local": {
               "config_files": [
-                "<project>/.clinerules/PLACEHOLDER.md"
+                "<project>/.cline/rules/PLACEHOLDER.md"
               ],
               "directories": [
                 "<project>",
-                "<project>/.clinerules"
+                "<project>/.cline",
+                "<project>/.cline/rules"
               ],
               "ledger_files": [
-                "<project>/.clinerules/.agent-config-instructions.json"
+                "<project>/.cline/rules/.agent-config-instructions.json"
               ],
               "refusals": []
             }

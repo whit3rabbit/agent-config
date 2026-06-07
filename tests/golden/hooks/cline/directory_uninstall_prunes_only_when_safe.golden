@@ -6,7 +6,7 @@ uninstall_result:
 Ok(
     UninstallReport {
         removed: [
-            "[ROOT]/.clinerules/sibling-hook.md",
+            "[ROOT]/.cline/rules/sibling-hook.md",
         ],
         patched: [],
         restored: [],
@@ -21,14 +21,14 @@ Ok(
         },
         status: Absent,
         config_path: Some(
-            "[ROOT]/.clinerules/sibling-hook.md",
+            "[ROOT]/.cline/rules/sibling-hook.md",
         ),
         ledger_path: Some(
-            "[ROOT]/.clinerules/hooks/.agent-config-hooks.json",
+            "[ROOT]/.cline/hooks/.agent-config-hooks.json",
         ),
         files: [
             Missing {
-                path: "[ROOT]/.clinerules/sibling-hook.md",
+                path: "[ROOT]/.cline/rules/sibling-hook.md",
             },
         ],
         warnings: [],

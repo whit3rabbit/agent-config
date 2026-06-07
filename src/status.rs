@@ -220,6 +220,13 @@ pub enum StatusWarning {
         /// The backup path.
         path: PathBuf,
     },
+    /// Both hooks.json and inline config.toml hook configurations exist.
+    DualHooksExist {
+        /// Path to the hooks.json file.
+        hooks_json: PathBuf,
+        /// Path to the config.toml file.
+        config_toml: PathBuf,
+    },
 }
 
 /// Per-file check used to populate [`StatusReport::files`].

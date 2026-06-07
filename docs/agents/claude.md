@@ -33,7 +33,11 @@ ID: `claude` — `agent_config::by_id("claude")`
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "myapp hook claude" }
+          {
+            "type": "command",
+            "command": "myapp",
+            "args": ["hook", "claude"]
+          }
         ],
         "_agent_config_tag": "myapp"
       }
@@ -41,6 +45,10 @@ ID: `claude` — `agent_config::by_id("claude")`
   }
 }
 ```
+
+`HookCommand::Program` renders as Claude's exec form (`command` plus `args`).
+`HookCommand::ShellUnchecked` preserves the legacy shell-string form with only
+`command`.
 
 ### Event mapping
 
@@ -51,6 +59,7 @@ ID: `claude` — `agent_config::by_id("claude")`
 | `Custom(s)`    | `s`           |
 
 Claude supports many additional events (`SessionStart`, `UserPromptSubmit`,
+`MessageDisplay`, `InstructionsLoaded`, `ConfigChange`, `FileChanged`,
 `Stop`, `SubagentStart`, etc.). Use `Event::Custom` to attach to those.
 
 ### Matcher mapping
@@ -159,6 +168,11 @@ claude mcp list
 | User scope | `~/.claude/skills/<name>/` |
 | Project scope | `.claude/skills/<name>/` |
 
+If a folder under a Claude skills directory contains
+`.claude-plugin/plugin.json`, Claude treats it as a skills-directory plugin
+instead of a plain skill. This crate installs plain skill directories; plugin
+lifecycle scaffolding remains out of scope.
+
 ### Format
 
 Skills are directory-scoped. Each skill contains:
@@ -177,6 +191,24 @@ my-skill/
 ---
 name: my-skill
 description: Clear, specific trigger phrase for skill activation
+when_to_use: Use for repository-specific review workflows
+argument-hint: issue-id
+arguments:
+  - issue
+disable-model-invocation: true
+user-invocable: true
+allowed-tools:
+  - Read
+  - Bash
+disallowed-tools:
+  - Write
+model: inherit
+effort: high
+context: fork
+agent: reviewer
+paths:
+  - src/**
+shell: bash
 ---
 
 ## Goal
@@ -192,9 +224,19 @@ Usage examples.
 Limitations or edge cases.
 ```
 
+The builder exposes typed setters for Claude's current skill frontmatter:
+`when_to_use`, `argument_hint`, `arguments`,
+`disable_model_invocation`, `user_invocable`, `allowed_tools`,
+`disallowed_tools`, `model`, `effort`, `context`, `agent`, `paths`, and
+`shell`. `description` is still required by this crate for cross-harness
+safety, even though Claude can infer it in some cases.
+
 ## References
 
 - <https://code.claude.com/docs/en/hooks>
 - <https://code.claude.com/docs/en/settings>
 - <https://code.claude.com/docs/en/mcp>
 - <https://code.claude.com/docs/en/memory>
+- <https://code.claude.com/docs/en/skills>
+- <https://code.claude.com/docs/en/plugins-reference>
+- <https://code.claude.com/docs/en/claude-directory>

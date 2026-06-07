@@ -21,17 +21,17 @@ Ok(
             owner: "golden-owner",
         },
         config_path: Some(
-            "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+            "[HOME]/.cline/data/settings/cline_mcp_settings.json",
         ),
         ledger_path: Some(
-            "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.agent-config-mcp.json",
+            "[HOME]/.cline/data/settings/.agent-config-mcp.json",
         ),
         files: [
             Exists {
-                path: "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+                path: "[HOME]/.cline/data/settings/cline_mcp_settings.json",
             },
             Exists {
-                path: "[HOME]/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.agent-config-mcp.json",
+                path: "[HOME]/.cline/data/settings/.agent-config-mcp.json",
             },
         ],
         warnings: [],
@@ -59,15 +59,11 @@ ROOT tree:
 
 HOME tree:
 directories:
-- Library
-- Library/Application Support
-- Library/Application Support/Code
-- Library/Application Support/Code/User
-- Library/Application Support/Code/User/globalStorage
-- Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev
-- Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings
+- .cline
+- .cline/data
+- .cline/data/settings
 files:
-- Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/.agent-config-mcp.json
+- .cline/data/settings/.agent-config-mcp.json
   content:
 ```text
 {
@@ -80,7 +76,7 @@ files:
   "version": 2
 }
 ```
-- Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json
+- .cline/data/settings/cline_mcp_settings.json
   content:
 ```text
 {

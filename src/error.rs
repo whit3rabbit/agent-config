@@ -62,6 +62,17 @@ pub enum AgentConfigError {
         field: &'static str,
     },
 
+    /// The spec contains a field or value that is unsupported by this integration.
+    #[error("integration {id} does not support HookSpec field `{field}` with value {value:?}")]
+    UnsupportedSpecField {
+        /// Integration id.
+        id: &'static str,
+        /// The unsupported field name.
+        field: &'static str,
+        /// The value that was rejected.
+        value: String,
+    },
+
     /// The hook tag is invalid (empty or contains illegal characters).
     #[error("invalid tag {tag:?}: {reason}")]
     InvalidTag {
@@ -273,6 +284,13 @@ mod tests {
             field: "command",
         };
         assert!(format!("{missing}").contains("command"));
+
+        let unsupported_field = AgentConfigError::UnsupportedSpecField {
+            id: "agent",
+            field: "event",
+            value: "PostToolUse".to_string(),
+        };
+        assert!(format!("{unsupported_field}").contains("PostToolUse"));
 
         let tag = AgentConfigError::InvalidTag {
             tag: "bad!".into(),

@@ -34,6 +34,87 @@ fn validate_frontmatter_scalar(value: &str) -> Result<(), AgentConfigError> {
     Ok(())
 }
 
+fn validate_optional_frontmatter_scalar(value: Option<&String>) -> Result<(), AgentConfigError> {
+    if let Some(value) = value {
+        validate_frontmatter_scalar(value)?;
+    }
+    Ok(())
+}
+
+fn validate_optional_frontmatter_list(
+    values: Option<&Vec<String>>,
+) -> Result<(), AgentConfigError> {
+    if let Some(values) = values {
+        for value in values {
+            validate_frontmatter_scalar(value)?;
+        }
+    }
+    Ok(())
+}
+
+/// Claude skill effort override.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SkillEffort {
+    /// Low reasoning effort.
+    Low,
+    /// Medium reasoning effort.
+    Medium,
+    /// High reasoning effort.
+    High,
+    /// Extra-high reasoning effort.
+    XHigh,
+    /// Maximum reasoning effort.
+    Max,
+}
+
+impl SkillEffort {
+    pub(crate) const fn as_yaml(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::XHigh => "xhigh",
+            Self::Max => "max",
+        }
+    }
+}
+
+/// Claude skill context mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SkillContext {
+    /// Run the skill in a forked subagent context.
+    Fork,
+}
+
+impl SkillContext {
+    pub(crate) const fn as_yaml(self) -> &'static str {
+        match self {
+            Self::Fork => "fork",
+        }
+    }
+}
+
+/// Claude skill shell for inline shell snippets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SkillShell {
+    /// Use Bash for inline shell commands.
+    Bash,
+    /// Use PowerShell for inline shell commands.
+    PowerShell,
+}
+
+impl SkillShell {
+    pub(crate) const fn as_yaml(self) -> &'static str {
+        match self {
+            Self::Bash => "bash",
+            Self::PowerShell => "powershell",
+        }
+    }
+}
+
 /// Caller-supplied description of an agent skill to install.
 ///
 /// Skills are directory-scoped: each one occupies a subdirectory under the
@@ -82,7 +163,19 @@ impl SkillSpec {
             frontmatter: SkillFrontmatter {
                 name,
                 description: String::new(),
+                when_to_use: None,
+                argument_hint: None,
+                arguments: None,
+                disable_model_invocation: None,
+                user_invocable: None,
                 allowed_tools: None,
+                disallowed_tools: None,
+                model: None,
+                effort: None,
+                context: None,
+                agent: None,
+                paths: None,
+                shell: None,
             },
             body: String::new(),
             assets: Vec::new(),
@@ -107,11 +200,14 @@ impl SkillSpec {
         }
         validate_frontmatter_scalar(&self.frontmatter.name)?;
         validate_frontmatter_scalar(&self.frontmatter.description)?;
-        if let Some(tools) = &self.frontmatter.allowed_tools {
-            for t in tools {
-                validate_frontmatter_scalar(t)?;
-            }
-        }
+        validate_optional_frontmatter_scalar(self.frontmatter.when_to_use.as_ref())?;
+        validate_optional_frontmatter_scalar(self.frontmatter.argument_hint.as_ref())?;
+        validate_optional_frontmatter_list(self.frontmatter.arguments.as_ref())?;
+        validate_optional_frontmatter_list(self.frontmatter.allowed_tools.as_ref())?;
+        validate_optional_frontmatter_list(self.frontmatter.disallowed_tools.as_ref())?;
+        validate_optional_frontmatter_scalar(self.frontmatter.model.as_ref())?;
+        validate_optional_frontmatter_scalar(self.frontmatter.agent.as_ref())?;
+        validate_optional_frontmatter_list(self.frontmatter.paths.as_ref())?;
         validate_identifier(&self.owner_tag, IdentifierKind::OwnerTag)
     }
 
@@ -121,8 +217,10 @@ impl SkillSpec {
     }
 }
 
-/// YAML frontmatter prepended to `SKILL.md`. `description` is the field
-/// harnesses use to decide when to activate the skill.
+/// YAML frontmatter prepended to `SKILL.md`.
+///
+/// `description` remains required by this crate for cross-harness safety,
+/// even though Claude can infer it in some cases.
 #[derive(Debug, Clone)]
 pub struct SkillFrontmatter {
     /// Skill identifier surfaced in tooling (typically matches the directory
@@ -134,9 +232,45 @@ pub struct SkillFrontmatter {
     /// model matches against this string.
     pub description: String,
 
+    /// Optional Claude `when_to_use` field.
+    pub when_to_use: Option<String>,
+
+    /// Optional Claude `argument-hint` field.
+    pub argument_hint: Option<String>,
+
+    /// Optional Claude `arguments` list.
+    pub arguments: Option<Vec<String>>,
+
+    /// Optional Claude `disable-model-invocation` field.
+    pub disable_model_invocation: Option<bool>,
+
+    /// Optional Claude `user-invocable` field.
+    pub user_invocable: Option<bool>,
+
     /// Optional `allowed-tools` list (Claude). When `None`, the field is
     /// omitted from the frontmatter.
     pub allowed_tools: Option<Vec<String>>,
+
+    /// Optional Claude `disallowed-tools` list.
+    pub disallowed_tools: Option<Vec<String>>,
+
+    /// Optional Claude `model` override.
+    pub model: Option<String>,
+
+    /// Optional Claude `effort` override.
+    pub effort: Option<SkillEffort>,
+
+    /// Optional Claude `context` mode.
+    pub context: Option<SkillContext>,
+
+    /// Optional Claude `agent` to use with forked context.
+    pub agent: Option<String>,
+
+    /// Optional Claude `paths` list.
+    pub paths: Option<Vec<String>>,
+
+    /// Optional Claude `shell` override.
+    pub shell: Option<SkillShell>,
 }
 
 /// One supporting file inside a skill directory.
@@ -187,6 +321,40 @@ impl SkillSpecBuilder {
         self
     }
 
+    /// Set the SKILL.md frontmatter `when_to_use` field.
+    pub fn when_to_use(mut self, value: impl Into<String>) -> Self {
+        self.frontmatter.when_to_use = Some(value.into());
+        self
+    }
+
+    /// Set the SKILL.md frontmatter `argument-hint` field.
+    pub fn argument_hint(mut self, value: impl Into<String>) -> Self {
+        self.frontmatter.argument_hint = Some(value.into());
+        self
+    }
+
+    /// Set the SKILL.md frontmatter `arguments` list.
+    pub fn arguments<I, S>(mut self, arguments: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.frontmatter.arguments = Some(arguments.into_iter().map(Into::into).collect());
+        self
+    }
+
+    /// Set the SKILL.md frontmatter `disable-model-invocation` field.
+    pub fn disable_model_invocation(mut self, disable: bool) -> Self {
+        self.frontmatter.disable_model_invocation = Some(disable);
+        self
+    }
+
+    /// Set the SKILL.md frontmatter `user-invocable` field.
+    pub fn user_invocable(mut self, invocable: bool) -> Self {
+        self.frontmatter.user_invocable = Some(invocable);
+        self
+    }
+
     /// Set the SKILL.md frontmatter `allowed-tools` list (Claude only).
     pub fn allowed_tools<I, S>(mut self, tools: I) -> Self
     where
@@ -194,6 +362,56 @@ impl SkillSpecBuilder {
         S: Into<String>,
     {
         self.frontmatter.allowed_tools = Some(tools.into_iter().map(Into::into).collect());
+        self
+    }
+
+    /// Set the SKILL.md frontmatter `disallowed-tools` list.
+    pub fn disallowed_tools<I, S>(mut self, tools: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.frontmatter.disallowed_tools = Some(tools.into_iter().map(Into::into).collect());
+        self
+    }
+
+    /// Set the SKILL.md frontmatter `model` override.
+    pub fn model(mut self, model: impl Into<String>) -> Self {
+        self.frontmatter.model = Some(model.into());
+        self
+    }
+
+    /// Set the SKILL.md frontmatter `effort` override.
+    pub fn effort(mut self, effort: SkillEffort) -> Self {
+        self.frontmatter.effort = Some(effort);
+        self
+    }
+
+    /// Set the SKILL.md frontmatter `context` mode.
+    pub fn context(mut self, context: SkillContext) -> Self {
+        self.frontmatter.context = Some(context);
+        self
+    }
+
+    /// Set the SKILL.md frontmatter `agent` field.
+    pub fn agent(mut self, agent: impl Into<String>) -> Self {
+        self.frontmatter.agent = Some(agent.into());
+        self
+    }
+
+    /// Set the SKILL.md frontmatter `paths` list.
+    pub fn paths<I, S>(mut self, paths: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.frontmatter.paths = Some(paths.into_iter().map(Into::into).collect());
+        self
+    }
+
+    /// Set the SKILL.md frontmatter `shell` override.
+    pub fn shell(mut self, shell: SkillShell) -> Self {
+        self.frontmatter.shell = Some(shell);
         self
     }
 
@@ -296,6 +514,27 @@ mod tests {
             .try_build()
             .unwrap_err();
         assert!(matches!(err, AgentConfigError::InvalidTag { .. }));
+    }
+
+    #[test]
+    fn validate_rejects_control_char_in_current_frontmatter_fields() {
+        let newline = SkillSpec::builder("alpha")
+            .owner("appA")
+            .description("ok")
+            .when_to_use("line1\nline2")
+            .body("body")
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(newline, AgentConfigError::InvalidTag { .. }));
+
+        let tab = SkillSpec::builder("alpha")
+            .owner("appA")
+            .description("ok")
+            .disallowed_tools(["Write\tFile"])
+            .body("body")
+            .try_build()
+            .unwrap_err();
+        assert!(matches!(tab, AgentConfigError::InvalidTag { .. }));
     }
 
     #[test]

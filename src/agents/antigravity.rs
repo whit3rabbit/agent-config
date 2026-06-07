@@ -234,6 +234,7 @@ impl Integration for AntigravityAgent {
 
     fn install(&self, scope: &Scope, spec: &HookSpec) -> Result<InstallReport, AgentConfigError> {
         HookSpec::validate_tag(&spec.tag)?;
+        agent_planning::validate_prompt_only_event(Integration::id(self), &spec.event)?;
         let mut report = InstallReport::default();
 
         // 1. Install hook command

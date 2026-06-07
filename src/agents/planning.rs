@@ -34,6 +34,14 @@ pub(crate) fn rules_install(
         }
         Err(e) => return Err(e),
     };
+    use crate::spec::Event;
+    if !matches!(spec.event, Event::PreToolUse) {
+        return Ok(InstallPlan::refused(
+            target,
+            None,
+            RefusalReason::UnsupportedSpecField,
+        ));
+    }
     let Some(rules) = spec.rules.as_ref() else {
         return Ok(InstallPlan::refused(
             target,
@@ -97,6 +105,14 @@ pub(crate) fn markdown_install(
         }
         Err(e) => return Err(e),
     };
+    use crate::spec::Event;
+    if !matches!(spec.event, Event::PreToolUse) {
+        return Ok(InstallPlan::refused(
+            target,
+            None,
+            RefusalReason::UnsupportedSpecField,
+        ));
+    }
     let Some(rules) = spec.rules.as_ref() else {
         if required_rules {
             return Ok(InstallPlan::refused(
@@ -481,4 +497,18 @@ pub(crate) fn skill_uninstall(
     };
     let changes = skills_dir::plan_uninstall(&root, name, owner_tag)?;
     Ok(UninstallPlan::from_changes(target, changes))
+}
+
+pub(crate) fn validate_prompt_only_event(
+    id: &'static str,
+    event: &crate::spec::Event,
+) -> Result<(), AgentConfigError> {
+    if !matches!(event, crate::spec::Event::PreToolUse) {
+        return Err(AgentConfigError::UnsupportedSpecField {
+            id,
+            field: "event",
+            value: format!("{:?}", event),
+        });
+    }
+    Ok(())
 }

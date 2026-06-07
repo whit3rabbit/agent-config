@@ -249,6 +249,8 @@ pub enum RefusalReason {
     /// current host (for example, a POSIX shell for a `bash`-script hook).
     /// Refused before any mutation.
     UnsupportedPlatform,
+    /// The supplied spec contains a field or value not supported by this integration.
+    UnsupportedSpecField,
 }
 
 /// Advisory warning attached to a plan.

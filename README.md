@@ -281,6 +281,7 @@ fn main() -> agent_config::Result<()> {
     let spec = SkillSpec::builder("my-skill")
         .owner("myapp")
         .description("Use when my app needs custom repository context.")
+        .disable_model_invocation(true)
         .body("# My Skill\n\nFollow the local project conventions.")
         .try_build()?;
 

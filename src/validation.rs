@@ -521,13 +521,14 @@ fn add_backup_issues(issues: &mut Vec<DriftIssue>, status: &StatusReport) {
     }
 
     for warning in &status.warnings {
-        let StatusWarning::BackupExists { path } = warning;
-        let issue = if status.config_path.as_ref().is_some_and(|p| p.exists()) {
-            DriftIssue::BackupCollision { path: path.clone() }
-        } else {
-            DriftIssue::StaleBackup { path: path.clone() }
-        };
-        push_issue(issues, issue);
+        if let StatusWarning::BackupExists { path } = warning {
+            let issue = if status.config_path.as_ref().is_some_and(|p| p.exists()) {
+                DriftIssue::BackupCollision { path: path.clone() }
+            } else {
+                DriftIssue::StaleBackup { path: path.clone() }
+            };
+            push_issue(issues, issue);
+        }
     }
 }
 

@@ -119,6 +119,7 @@ impl Integration for KiloCodeAgent {
         HookSpec::validate_tag(&spec.tag)?;
         // Surface typed UnsupportedScope before rules_dir falls back to PathResolution.
         let _ = self.require_local(scope)?;
+        agent_planning::validate_prompt_only_event(Integration::id(self), &spec.event)?;
         let rules = spec
             .rules
             .as_ref()

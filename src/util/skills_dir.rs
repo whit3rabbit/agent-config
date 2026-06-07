@@ -320,16 +320,50 @@ fn record_outcome(report: &mut InstallReport, outcome: fs_atomic::WriteOutcome) 
 fn render_skill_md(fm: &SkillFrontmatter, body: &str) -> String {
     let mut out = String::new();
     out.push_str("---\n");
-    out.push_str(&format!("name: {}\n", yaml_escape_scalar(&fm.name)));
-    out.push_str(&format!(
-        "description: {}\n",
-        yaml_escape_scalar(&fm.description)
-    ));
+    push_yaml_scalar(&mut out, "name", &fm.name);
+    push_yaml_scalar(&mut out, "description", &fm.description);
+    if let Some(when_to_use) = &fm.when_to_use {
+        push_yaml_scalar(&mut out, "when_to_use", when_to_use);
+    }
+    if let Some(argument_hint) = &fm.argument_hint {
+        push_yaml_scalar(&mut out, "argument-hint", argument_hint);
+    }
+    if let Some(arguments) = &fm.arguments {
+        push_yaml_list(&mut out, "arguments", arguments);
+    }
+    if let Some(disable_model_invocation) = fm.disable_model_invocation {
+        push_yaml_bool(
+            &mut out,
+            "disable-model-invocation",
+            disable_model_invocation,
+        );
+    }
+    if let Some(user_invocable) = fm.user_invocable {
+        push_yaml_bool(&mut out, "user-invocable", user_invocable);
+    }
     if let Some(tools) = &fm.allowed_tools {
-        out.push_str("allowed-tools:\n");
-        for t in tools {
-            out.push_str(&format!("  - {}\n", yaml_escape_scalar(t)));
-        }
+        push_yaml_list(&mut out, "allowed-tools", tools);
+    }
+    if let Some(tools) = &fm.disallowed_tools {
+        push_yaml_list(&mut out, "disallowed-tools", tools);
+    }
+    if let Some(model) = &fm.model {
+        push_yaml_scalar(&mut out, "model", model);
+    }
+    if let Some(effort) = fm.effort {
+        push_yaml_scalar(&mut out, "effort", effort.as_yaml());
+    }
+    if let Some(context) = fm.context {
+        push_yaml_scalar(&mut out, "context", context.as_yaml());
+    }
+    if let Some(agent) = &fm.agent {
+        push_yaml_scalar(&mut out, "agent", agent);
+    }
+    if let Some(paths) = &fm.paths {
+        push_yaml_list(&mut out, "paths", paths);
+    }
+    if let Some(shell) = fm.shell {
+        push_yaml_scalar(&mut out, "shell", shell.as_yaml());
     }
     out.push_str("---\n\n");
     out.push_str(body);
@@ -339,17 +373,26 @@ fn render_skill_md(fm: &SkillFrontmatter, body: &str) -> String {
     out
 }
 
-/// Quote scalars that need it. Heuristic: quote on colon, leading dash,
-/// leading whitespace, or any character outside the safe-bareword set.
+fn push_yaml_scalar(out: &mut String, key: &str, value: &str) {
+    out.push_str(&format!("{key}: {}\n", yaml_escape_scalar(value)));
+}
+
+fn push_yaml_bool(out: &mut String, key: &str, value: bool) {
+    out.push_str(&format!("{key}: {value}\n"));
+}
+
+fn push_yaml_list(out: &mut String, key: &str, values: &[String]) {
+    out.push_str(key);
+    out.push_str(":\n");
+    for value in values {
+        out.push_str(&format!("  - {}\n", yaml_escape_scalar(value)));
+    }
+}
+
+/// Quote scalars that need it. Plain scalars are only used when they are
+/// unlikely to be reinterpreted as booleans, nulls, numbers, or YAML syntax.
 fn yaml_escape_scalar(s: &str) -> String {
-    let needs_quote = s.is_empty()
-        || s.starts_with(' ')
-        || s.starts_with('-')
-        || s.contains(':')
-        || s.contains('#')
-        || s.contains('"')
-        || s.contains('\n');
-    if needs_quote {
+    if yaml_needs_quoted_scalar(s) {
         let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
         format!("\"{escaped}\"")
     } else {
@@ -357,10 +400,83 @@ fn yaml_escape_scalar(s: &str) -> String {
     }
 }
 
+fn yaml_needs_quoted_scalar(s: &str) -> bool {
+    if s.is_empty()
+        || s.chars().next().is_some_and(char::is_whitespace)
+        || s.chars().last().is_some_and(char::is_whitespace)
+        || s.starts_with('-')
+        || s.contains(':')
+        || s.contains('#')
+        || s.contains('"')
+        || s.contains('\n')
+        || s.contains('\r')
+    {
+        return true;
+    }
+
+    if matches!(
+        s.chars().next(),
+        Some('?' | '{' | '}' | '[' | ']' | ',' | '&' | '*' | '!' | '|' | '>' | '@' | '`')
+    ) {
+        return true;
+    }
+
+    let lower = s.to_ascii_lowercase();
+    if matches!(
+        lower.as_str(),
+        "true"
+            | "false"
+            | "null"
+            | "~"
+            | "yes"
+            | "no"
+            | "on"
+            | "off"
+            | "nan"
+            | ".nan"
+            | "inf"
+            | "+inf"
+            | "-inf"
+            | ".inf"
+            | "+.inf"
+            | "-.inf"
+    ) {
+        return true;
+    }
+
+    yaml_number_like(s)
+}
+
+fn yaml_number_like(s: &str) -> bool {
+    let normalized = s.replace('_', "");
+    let unsigned = normalized
+        .strip_prefix('+')
+        .or_else(|| normalized.strip_prefix('-'))
+        .unwrap_or(&normalized);
+
+    let lower = unsigned.to_ascii_lowercase();
+    if let Some(rest) = lower.strip_prefix("0x") {
+        return !rest.is_empty() && rest.chars().all(|c| c.is_ascii_hexdigit());
+    }
+    if let Some(rest) = lower.strip_prefix("0o") {
+        return !rest.is_empty() && rest.chars().all(|c| matches!(c, '0'..='7'));
+    }
+    if let Some(rest) = lower.strip_prefix("0b") {
+        return !rest.is_empty() && rest.chars().all(|c| matches!(c, '0' | '1'));
+    }
+    if let Some(rest) = unsigned.strip_prefix('.') {
+        return !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit());
+    }
+
+    normalized.parse::<i64>().is_ok()
+        || normalized.parse::<u64>().is_ok()
+        || normalized.parse::<f64>().is_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spec::SkillAsset;
+    use crate::spec::{SkillAsset, SkillContext, SkillEffort, SkillShell};
     use std::sync::{Arc, Barrier};
     use std::thread;
     use tempfile::tempdir;
@@ -671,6 +787,60 @@ mod tests {
     }
 
     #[test]
+    fn frontmatter_with_current_claude_fields_serializes() {
+        let spec = SkillSpec::builder("alpha")
+            .owner("myapp")
+            .description("Deploy releases.")
+            .when_to_use("Use when: release is ready")
+            .argument_hint("issue-id")
+            .arguments(["issue", "branch"])
+            .disable_model_invocation(true)
+            .user_invocable(false)
+            .allowed_tools(["Bash", "Read"])
+            .disallowed_tools(["Write"])
+            .model("sonnet")
+            .effort(SkillEffort::XHigh)
+            .context(SkillContext::Fork)
+            .agent("reviewer")
+            .paths(["src/**", "tests:unit"])
+            .shell(SkillShell::Bash)
+            .body("Run it.")
+            .build();
+
+        let rendered = render_skill_md(&spec.frontmatter, &spec.body);
+        assert_eq!(
+            rendered,
+            concat!(
+                "---\n",
+                "name: alpha\n",
+                "description: Deploy releases.\n",
+                "when_to_use: \"Use when: release is ready\"\n",
+                "argument-hint: issue-id\n",
+                "arguments:\n",
+                "  - issue\n",
+                "  - branch\n",
+                "disable-model-invocation: true\n",
+                "user-invocable: false\n",
+                "allowed-tools:\n",
+                "  - Bash\n",
+                "  - Read\n",
+                "disallowed-tools:\n",
+                "  - Write\n",
+                "model: sonnet\n",
+                "effort: xhigh\n",
+                "context: fork\n",
+                "agent: reviewer\n",
+                "paths:\n",
+                "  - src/**\n",
+                "  - \"tests:unit\"\n",
+                "shell: bash\n",
+                "---\n\n",
+                "Run it.\n"
+            )
+        );
+    }
+
+    #[test]
     fn yaml_quoting_handles_colons_in_description() {
         let dir = tempdir().unwrap();
         let spec = SkillSpec::builder("alpha")
@@ -684,6 +854,20 @@ mod tests {
             s.contains(r#"description: "Title: subtitle.""#),
             "got:\n{s}"
         );
+    }
+
+    #[test]
+    fn yaml_quoting_keeps_ambiguous_scalars_as_strings() {
+        assert_eq!(yaml_escape_scalar("true"), "\"true\"");
+        assert_eq!(yaml_escape_scalar("123"), "\"123\"");
+        assert_eq!(yaml_escape_scalar("1.5"), "\"1.5\"");
+        assert_eq!(yaml_escape_scalar("1e3"), "\"1e3\"");
+        assert_eq!(yaml_escape_scalar(".5"), "\".5\"");
+        assert_eq!(yaml_escape_scalar("1_000"), "\"1_000\"");
+        assert_eq!(yaml_escape_scalar("0x10"), "\"0x10\"");
+        assert_eq!(yaml_escape_scalar("null"), "\"null\"");
+        assert_eq!(yaml_escape_scalar("on"), "\"on\"");
+        assert_eq!(yaml_escape_scalar("Bash(git add *)"), "Bash(git add *)");
     }
 
     #[test]

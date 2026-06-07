@@ -8,7 +8,7 @@
 //!     "PreToolUse": [
 //!       {
 //!         "matcher": "Bash",
-//!         "hooks": [{ "type": "command", "command": "..." }],
+//!         "hooks": [{ "type": "command", "command": "myapp", "args": ["hook"] }],
 //!         "_agent_config_tag": "myapp"
 //!       }
 //!     ]
@@ -32,7 +32,7 @@ use crate::integration::{InstallReport, Integration, McpSurface, SkillSurface, U
 use crate::paths;
 use crate::plan::{has_refusal, InstallPlan, PlanTarget, UninstallPlan};
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::{Event, HookSpec, Matcher, McpSpec, SkillSpec};
+use crate::spec::{Event, HookCommand, HookSpec, Matcher, McpSpec, SkillSpec};
 use crate::status::StatusReport;
 use crate::util::{
     file_lock, fs_atomic, json_patch, mcp_json_object, md_block, ownership, planning, safe_fs,
@@ -127,7 +127,7 @@ impl Integration for ClaudeAgent {
         let matcher_str = matcher_to_claude(&spec.matcher);
         let entry = json!({
             "matcher": matcher_str,
-            "hooks": [{ "type": "command", "command": spec.command.render_shell() }],
+            "hooks": [command_hook_to_claude(&spec.command)],
         });
         planning::plan_tagged_json_upsert(
             &mut changes,
@@ -191,7 +191,7 @@ impl Integration for ClaudeAgent {
 
             let entry = json!({
                 "matcher": matcher_str,
-                "hooks": [{ "type": "command", "command": spec.command.render_shell() }],
+                "hooks": [command_hook_to_claude(&spec.command)],
             });
 
             let changed = json_patch::upsert_tagged_array_entry(
@@ -511,6 +511,18 @@ fn event_to_string(e: &Event) -> String {
         Event::PreToolUse => "PreToolUse".into(),
         Event::PostToolUse => "PostToolUse".into(),
         Event::Custom(s) => s.clone(),
+        other => other.as_str().into(),
+    }
+}
+
+fn command_hook_to_claude(command: &HookCommand) -> serde_json::Value {
+    match command {
+        HookCommand::Program { program, args } => {
+            json!({ "type": "command", "command": program, "args": args })
+        }
+        HookCommand::ShellUnchecked { command } => {
+            json!({ "type": "command", "command": command })
+        }
     }
 }
 
@@ -544,7 +556,11 @@ mod tests {
         assert_eq!(v["hooks"]["PreToolUse"][0]["matcher"], json!("Bash"));
         assert_eq!(
             v["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
-            json!("myapp hook")
+            json!("myapp")
+        );
+        assert_eq!(
+            v["hooks"]["PreToolUse"][0]["hooks"][0]["args"],
+            json!(["hook"])
         );
         assert_eq!(
             v["hooks"]["PreToolUse"][0]["hooks"][0]["type"],
@@ -554,6 +570,78 @@ mod tests {
             v["hooks"]["PreToolUse"][0]["_agent_config_tag"],
             json!("alpha")
         );
+    }
+
+    #[test]
+    fn program_hook_with_empty_args_renders_exec_form() {
+        let dir = tempdir().unwrap();
+        let agent = ClaudeAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let spec = HookSpec::builder("alpha")
+            .command_program("noop", [] as [&str; 0])
+            .matcher(Matcher::Bash)
+            .event(Event::PreToolUse)
+            .build();
+        agent.install(&scope, &spec).unwrap();
+
+        let v = read_json(&dir.path().join(".claude/settings.json"));
+        let hook = &v["hooks"]["PreToolUse"][0]["hooks"][0];
+        assert_eq!(hook["type"], json!("command"));
+        assert_eq!(hook["command"], json!("noop"));
+        assert_eq!(hook["args"], json!([]));
+    }
+
+    #[test]
+    fn shell_unchecked_preserves_shell_string_form() {
+        let dir = tempdir().unwrap();
+        let agent = ClaudeAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let spec = HookSpec::builder("alpha")
+            .command_shell_unchecked(r#"myapp hook "$REPO""#)
+            .matcher(Matcher::Bash)
+            .event(Event::PreToolUse)
+            .build();
+        agent.install(&scope, &spec).unwrap();
+
+        let v = read_json(&dir.path().join(".claude/settings.json"));
+        let hook = &v["hooks"]["PreToolUse"][0]["hooks"][0];
+        assert_eq!(hook["type"], json!("command"));
+        assert_eq!(hook["command"], json!(r#"myapp hook "$REPO""#));
+        assert!(hook.get("args").is_none());
+    }
+
+    #[test]
+    fn reinstall_patches_legacy_shell_rendered_owned_hook_to_exec_form() {
+        let dir = tempdir().unwrap();
+        let settings = dir.path().join(".claude/settings.json");
+        std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        std::fs::write(
+            &settings,
+            r#"{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "myapp hook" }],
+        "_agent_config_tag": "alpha"
+      }
+    ]
+  }
+}
+"#,
+        )
+        .unwrap();
+
+        let agent = ClaudeAgent::new();
+        let scope = Scope::Local(dir.path().to_path_buf());
+        let report = agent.install(&scope, &local_spec("alpha")).unwrap();
+
+        assert!(!report.already_installed);
+        assert!(report.patched.iter().any(|p| p == &settings));
+        let v = read_json(&settings);
+        let hook = &v["hooks"]["PreToolUse"][0]["hooks"][0];
+        assert_eq!(hook["command"], json!("myapp"));
+        assert_eq!(hook["args"], json!(["hook"]));
     }
 
     #[test]

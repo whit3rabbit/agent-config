@@ -159,7 +159,8 @@ pub use scope::{Scope, ScopeKind};
 pub use spec::{
     Event, HookCommand, HookSpec, HookSpecBuilder, InstructionPlacement, InstructionSpec,
     InstructionSpecBuilder, Matcher, McpSpec, McpSpecBuilder, McpTransport, RulesBlock,
-    ScriptTemplate, SecretPolicy, SkillAsset, SkillFrontmatter, SkillSpec, SkillSpecBuilder,
+    ScriptTemplate, SecretPolicy, SkillAsset, SkillContext, SkillEffort, SkillFrontmatter,
+    SkillShell, SkillSpec, SkillSpecBuilder,
 };
 pub use status::{
     DriftIssue, InstallStatus, PathStatus, PlanTarget as StatusPlanTarget, StatusReport,

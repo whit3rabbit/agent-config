@@ -3,8 +3,8 @@
 use crate::error::AgentConfigError;
 
 use super::{
-    validate_hook_string, Event, HookCommand, HookSpec, HookStringKind, Matcher, RulesBlock,
-    ScriptTemplate,
+    validate_hook_string, Event, HookCommand, HookRuntimeOptions, HookSpec, HookStringKind,
+    Matcher, RulesBlock, ScriptTemplate,
 };
 
 /// Builder for [`HookSpec`].
@@ -17,6 +17,7 @@ pub struct HookSpecBuilder {
     pub(super) rules: Option<RulesBlock>,
     pub(super) script: Option<ScriptTemplate>,
     pub(super) friendly_name: Option<String>,
+    pub(super) options: HookRuntimeOptions,
 }
 
 impl HookSpecBuilder {
@@ -83,6 +84,42 @@ impl HookSpecBuilder {
         self
     }
 
+    /// Set the hook execution timeout in seconds.
+    pub fn timeout_seconds(mut self, timeout: u64) -> Self {
+        self.options.timeout_seconds = Some(timeout);
+        self
+    }
+
+    /// Set the status message to show during execution.
+    pub fn status_message(mut self, msg: impl Into<String>) -> Self {
+        self.options.status_message = Some(msg.into());
+        self
+    }
+
+    /// Set whether the hook is run asynchronously.
+    pub fn async_run(mut self, val: bool) -> Self {
+        self.options.async_run = Some(val);
+        self
+    }
+
+    /// Set the custom shell to execute the command.
+    pub fn shell(mut self, sh: impl Into<String>) -> Self {
+        self.options.shell = Some(sh.into());
+        self
+    }
+
+    /// Set the Windows-specific command override.
+    pub fn windows_command(mut self, cmd: HookCommand) -> Self {
+        self.options.windows_command = Some(cmd);
+        self
+    }
+
+    /// Set whether Codex should install this hook inline in `config.toml`.
+    pub fn codex_inline_toml(mut self, val: bool) -> Self {
+        self.options.codex_inline_toml = Some(val);
+        self
+    }
+
     /// Finalize the spec, panicking on missing or invalid fields.
     ///
     /// Convenience wrapper around [`try_build()`](Self::try_build) for tests
@@ -145,6 +182,7 @@ impl HookSpecBuilder {
             rules: self.rules,
             script: self.script,
             friendly_name: self.friendly_name,
+            options: self.options,
         })
     }
 }
