@@ -59,10 +59,10 @@ fn vscode_global_storage_lands_under_appdata() {
 }
 
 #[test]
-fn cline_mcp_global_file_resolves_under_appdata() {
+fn legacy_cline_mcp_global_file_resolves_under_appdata() {
     let env = IsolatedGlobalEnv::new();
     std::env::remove_var("XDG_CONFIG_HOME");
-    let p = paths::cline_mcp_global_file().unwrap();
+    let p = paths::legacy_cline_mcp_global_file().unwrap();
     let expected = env
         .appdata_path()
         .join("Code")
@@ -121,8 +121,16 @@ fn codex_home_uses_env_override_on_windows() {
 }
 
 #[test]
-fn windsurf_and_antigravity_mcp_files_resolve_under_userprofile() {
+fn cline_windsurf_and_antigravity_mcp_files_resolve_under_userprofile() {
     let env = IsolatedGlobalEnv::new();
+    assert_eq!(
+        paths::cline_mcp_global_file().unwrap(),
+        env.home_path()
+            .join(".cline")
+            .join("data")
+            .join("settings")
+            .join("cline_mcp_settings.json")
+    );
     assert_eq!(
         paths::windsurf_mcp_global_file().unwrap(),
         env.home_path()

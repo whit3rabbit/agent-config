@@ -39,7 +39,10 @@ pub struct IsolatedGlobalEnv {
 
 impl IsolatedGlobalEnv {
     pub fn new() -> Self {
-        let lock = env_lock().lock().unwrap();
+        let lock = match env_lock().lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         let home = tempfile::tempdir().unwrap();
         let home_canon = fs::canonicalize(home.path()).unwrap();
         let appdata = home_canon.join("AppData").join("Roaming");
