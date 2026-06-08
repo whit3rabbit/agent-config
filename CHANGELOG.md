@@ -6,6 +6,13 @@ follows [SemVer](https://semver.org/) once 1.0 ships.
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-06-07
+
+### Fixed
+
+- Fixed Windows path resolution tests following the Cline directory migration.
+- Hardened global test environments to recover from poisoned mutex locks.
+
 ## [0.3.2] - 2026-06-07
 
 ### Fixed
