@@ -1,6 +1,6 @@
 {
   "_warning": "AUTO-GENERATED. Do not edit by hand. Regenerate on Linux via `cargo run --example gen_schema` or `AGENT_SCHEMA_UPDATE=1 cargo test --test schema_golden`. A few VS Code globalStorage paths are OS-specific; the canonical schema is the Linux view.",
-  "crate_version": "0.3.1",
+  "crate_version": "0.3.2",
   "placeholders": {
     "home": "~",
     "project_root": "<project>",

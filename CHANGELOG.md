@@ -6,6 +6,32 @@ follows [SemVer](https://semver.org/) once 1.0 ships.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-06-07
+
+### Fixed
+
+- Regenerated JSON schema to fix the out-of-date `schema/agents.json` verification test.
+
+## [0.3.1] - 2026-06-07
+
+### Changed
+
+- Upgraded shared hook lifecycle events.
+- Hardened Gemini hooks, instructions, and MCP.
+- Migrated Cline paths from global storage to `.cline/data`.
+- Broadened Codex integration support.
+- Updated Windows Antigravity path test.
+
+## [0.3.0] - 2026-05-30
+
+### Added
+
+- Support dynamic TS plugin hooking in OpenCode.
+
+### Changed
+
+- Refactored agent configuration and hooks storage from `.agent` to `.agents` directory.
+
 ## [0.2.0] - 2026-05-29
 
 ### Added
