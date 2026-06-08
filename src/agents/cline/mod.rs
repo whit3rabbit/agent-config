@@ -32,9 +32,9 @@ use crate::plan::{
     UninstallPlan,
 };
 use crate::scope::{Scope, ScopeKind};
-use crate::spec::HookSpec;
 #[cfg(not(windows))]
-use crate::spec::{Event, ScriptTemplate};
+use crate::spec::ScriptTemplate;
+use crate::spec::{Event, HookSpec};
 use crate::status::{InstallStatus, PathStatus, PlanTarget, StatusReport, StatusWarning};
 #[cfg(not(windows))]
 use crate::util::fs_atomic;
@@ -172,26 +172,27 @@ impl Integration for ClineAgent {
         }
 
         let mut warnings = Vec::new();
-        let status = if rules_exists || new_hook_count > 0 || legacy_rules_exists || legacy_hook_count > 0 {
-            InstallStatus::InstalledOwned {
-                owner: tag.to_string(),
-            }
-        } else {
-            // Surface a backup file if it exists for the rules markdown.
-            for file_path in [&rules_file, &legacy_rules_file] {
-                let mut bak = file_path.clone();
-                if let Some(name) = bak.file_name().map(|n| n.to_os_string()) {
-                    if let Ok(mut s) = name.into_string() {
-                        s.push_str(".bak");
-                        bak.set_file_name(s);
-                        if bak.exists() {
-                            warnings.push(StatusWarning::BackupExists { path: bak });
+        let status =
+            if rules_exists || new_hook_count > 0 || legacy_rules_exists || legacy_hook_count > 0 {
+                InstallStatus::InstalledOwned {
+                    owner: tag.to_string(),
+                }
+            } else {
+                // Surface a backup file if it exists for the rules markdown.
+                for file_path in [&rules_file, &legacy_rules_file] {
+                    let mut bak = file_path.clone();
+                    if let Some(name) = bak.file_name().map(|n| n.to_os_string()) {
+                        if let Ok(mut s) = name.into_string() {
+                            s.push_str(".bak");
+                            bak.set_file_name(s);
+                            if bak.exists() {
+                                warnings.push(StatusWarning::BackupExists { path: bak });
+                            }
                         }
                     }
                 }
-            }
-            InstallStatus::Absent
-        };
+                InstallStatus::Absent
+            };
 
         let chosen_rules = if rules_exists || !legacy_rules_exists {
             rules_file
