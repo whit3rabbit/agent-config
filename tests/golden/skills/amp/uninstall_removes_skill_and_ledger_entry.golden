@@ -6,7 +6,7 @@ uninstall_result:
 Ok(
     UninstallReport {
         removed: [
-            "[ROOT]/.amp/skills/golden-skill",
+            "[ROOT]/.agents/skills/golden-skill",
         ],
         patched: [],
         restored: [],
@@ -21,17 +21,17 @@ Ok(
         },
         status: Absent,
         config_path: Some(
-            "[ROOT]/.amp/skills/golden-skill",
+            "[ROOT]/.agents/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.amp/skills/.agent-config-skills.json",
+            "[ROOT]/.agents/skills/.agent-config-skills.json",
         ),
         files: [
             Missing {
-                path: "[ROOT]/.amp/skills/golden-skill",
+                path: "[ROOT]/.agents/skills/golden-skill",
             },
             Missing {
-                path: "[ROOT]/.amp/skills/golden-skill/SKILL.md",
+                path: "[ROOT]/.agents/skills/golden-skill/SKILL.md",
             },
         ],
         warnings: [],
@@ -58,11 +58,11 @@ Ok(
 
 ROOT tree:
 directories:
-- .amp
-- .amp/skills
-- .amp/skills/sibling-skill
+- .agents
+- .agents/skills
+- .agents/skills/sibling-skill
 files:
-- .amp/skills/.agent-config-skills.json
+- .agents/skills/.agent-config-skills.json
   content:
 ```text
 {
@@ -75,7 +75,7 @@ files:
   "version": 2
 }
 ```
-- .amp/skills/sibling-skill/SKILL.md
+- .agents/skills/sibling-skill/SKILL.md
   content:
 ```text
 ---

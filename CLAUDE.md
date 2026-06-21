@@ -42,6 +42,12 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo publish --locked --dry-run
 ```
 
+When bumping the version, also update the `agent-config = "X.Y"` dependency
+example in `README.md` to match the new minor version, and add the dated
+section to `CHANGELOG.md`. The release workflow only checks the `Cargo.toml`
+version against the tag, so the README and changelog must be kept in sync by
+hand.
+
 If the change affects generated schema paths, regenerate `schema/agents.json`
 for the Linux view before tagging. The macOS `schema_golden` test intentionally
 skips byte comparison, so it can miss this failure. Prefer a Linux host or

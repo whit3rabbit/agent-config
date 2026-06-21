@@ -6,6 +6,41 @@ follows [SemVer](https://semver.org/) once 1.0 ships.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-21
+
+### Changed
+
+- **Amp**: moved global config paths to Amp's documented locations. User MCP
+  settings now write `~/.config/amp/settings.json` (was `~/.amp/settings.json`),
+  global skills write `~/.config/amp/skills/` (was `~/.amp/skills/`), global
+  rules/instructions write `~/.config/AGENTS.md` (was `~/.amp/AGENTS.md`), and
+  native project skills write `<root>/.agents/skills/` (was `<root>/.amp/skills/`).
+  Local MCP (`<root>/.amp/settings.json`) and project rules (`<root>/AGENTS.md`)
+  are unchanged. Added `paths::amp_config_dir()`.
+- **Kilo Code**: rules and standalone instructions now write the current
+  `.kilo/rules` layout instead of the legacy `.kilocode/rules`. MCP
+  (`kilo.jsonc`) is unchanged.
+
+### Documentation
+
+- Marked **Roo Code** retired/EOL (all products shut down 2026-05-15) in the
+  support matrix, README, and per-agent doc. Integration kept for compatibility.
+- Marked **Gemini CLI** legacy/conditional (consumer-tier serving stopped
+  2026-06-18; enterprise and paid API-key users supported) across the same docs.
+- Corrected the **Cline** support-matrix/doc rows to the standalone-CLI global
+  MCP path `~/.cline/data/settings/cline_mcp_settings.json` (the code was already
+  migrated; the docs were stale).
+- Refreshed `path-contract-audit.md` with a 2026-06-21 verification pass:
+  re-verified Roo, Gemini, Amp, Cline, Kilo; disproved a Junie claim
+  (`.junie/AGENTS.md` is the current default, not `.junie/guidelines.md`);
+  logged Qoder global MCP (`~/.qoder.json`) as an open re-audit item.
+
+### Migration notes
+
+- Amp and Kilo path moves change where new config is written; pre-0.4 files at
+  the old locations are left in place (not auto-migrated). Reinstall to populate
+  the new paths; remove old files manually if desired.
+
 ## [0.3.3] - 2026-06-07
 
 ### Fixed

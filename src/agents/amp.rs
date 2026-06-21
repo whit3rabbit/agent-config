@@ -10,7 +10,7 @@
 //!
 //! Hooks are not part of Amp's documented file-config surface.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::agents::planning as agent_planning;
 use crate::error::AgentConfigError;
@@ -39,39 +39,38 @@ impl AmpAgent {
         Self { _private: () }
     }
 
-    fn amp_home_from_home(home: &Path) -> PathBuf {
-        home.join(".amp")
-    }
-
     fn rules_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
-            Scope::Global => Self::amp_home_from_home(&paths::home_dir()?).join("AGENTS.md"),
+            // Amp reads AGENTS.md from cwd up to $HOME; the documented global
+            // personal file is ~/.config/AGENTS.md (shared AGENTS.md convention).
+            Scope::Global => paths::home_dir()?.join(".config").join("AGENTS.md"),
             Scope::Local(p) => p.join("AGENTS.md"),
         })
     }
 
     fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
-            Scope::Global => Self::amp_home_from_home(&paths::home_dir()?).join("settings.json"),
+            Scope::Global => paths::amp_config_dir()?.join("settings.json"),
             Scope::Local(p) => p.join(".amp").join("settings.json"),
         })
     }
 
     fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
-            Scope::Global => Self::amp_home_from_home(&paths::home_dir()?).join("skills"),
-            Scope::Local(p) => p.join(".amp").join("skills"),
+            Scope::Global => paths::amp_config_dir()?.join("skills"),
+            // Amp's native project skill directory is `.agents/skills/`.
+            Scope::Local(p) => p.join(".agents").join("skills"),
         })
     }
 
     /// Directory holding the instruction ownership ledger.
     ///
-    /// Global: `~/.amp/`. Local: `<root>/.amp/` so the ledger sits next to
-    /// the existing MCP/skills sidecars instead of cluttering the project
-    /// root, even though the host file (`AGENTS.md`) lives at the root.
+    /// Global: `~/.config/amp/`. Local: `<root>/.amp/` so the ledger sits next
+    /// to the existing MCP sidecar instead of cluttering the project root, even
+    /// though the host file (`AGENTS.md`) lives at the root.
     fn instruction_config_dir(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
-            Scope::Global => Self::amp_home_from_home(&paths::home_dir()?),
+            Scope::Global => paths::amp_config_dir()?,
             Scope::Local(p) => p.join(".amp"),
         })
     }
@@ -451,7 +450,7 @@ mod tests {
             .build()
     }
 
-    fn read_json(p: &Path) -> Value {
+    fn read_json(p: &std::path::Path) -> Value {
         serde_json::from_slice(&std::fs::read(p).unwrap()).unwrap()
     }
 
@@ -509,7 +508,10 @@ mod tests {
         agent
             .install_skill(&scope, &skill("alpha-skill", "myapp"))
             .unwrap();
-        assert!(dir.path().join(".amp/skills/alpha-skill/SKILL.md").exists());
+        assert!(dir
+            .path()
+            .join(".agents/skills/alpha-skill/SKILL.md")
+            .exists());
     }
 
     #[test]

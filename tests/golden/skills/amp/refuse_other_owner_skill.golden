@@ -23,17 +23,17 @@ Ok(
             owner: "other-owner",
         },
         config_path: Some(
-            "[ROOT]/.amp/skills/golden-skill",
+            "[ROOT]/.agents/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.amp/skills/.agent-config-skills.json",
+            "[ROOT]/.agents/skills/.agent-config-skills.json",
         ),
         files: [
             Exists {
-                path: "[ROOT]/.amp/skills/golden-skill",
+                path: "[ROOT]/.agents/skills/golden-skill",
             },
             Exists {
-                path: "[ROOT]/.amp/skills/golden-skill/SKILL.md",
+                path: "[ROOT]/.agents/skills/golden-skill/SKILL.md",
             },
         ],
         warnings: [],
@@ -58,7 +58,7 @@ Ok(
                     "other-owner",
                 ),
                 path: Some(
-                    "[ROOT]/.amp/skills/.agent-config-skills.json",
+                    "[ROOT]/.agents/skills/.agent-config-skills.json",
                 ),
             },
         ],
@@ -70,11 +70,11 @@ Ok(
 
 ROOT tree:
 directories:
-- .amp
-- .amp/skills
-- .amp/skills/golden-skill
+- .agents
+- .agents/skills
+- .agents/skills/golden-skill
 files:
-- .amp/skills/.agent-config-skills.json
+- .agents/skills/.agent-config-skills.json
   content:
 ```text
 {
@@ -87,7 +87,7 @@ files:
   "version": 2
 }
 ```
-- .amp/skills/golden-skill/SKILL.md
+- .agents/skills/golden-skill/SKILL.md
   content:
 ```text
 ---

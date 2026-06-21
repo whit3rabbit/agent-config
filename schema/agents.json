@@ -1,6 +1,6 @@
 {
   "_warning": "AUTO-GENERATED. Do not edit by hand. Regenerate on Linux via `cargo run --example gen_schema` or `AGENT_SCHEMA_UPDATE=1 cargo test --test schema_golden`. A few VS Code globalStorage paths are OS-specific; the canonical schema is the Linux view.",
-  "crate_version": "0.3.3",
+  "crate_version": "0.4.0",
   "placeholders": {
     "home": "~",
     "project_root": "<project>",
@@ -1364,12 +1364,12 @@
           "scopes": {
             "local": {
               "config_files": [
-                "<project>/.kilocode/rules/placeholder.md"
+                "<project>/.kilo/rules/placeholder.md"
               ],
               "directories": [
                 "<project>",
-                "<project>/.kilocode",
-                "<project>/.kilocode/rules"
+                "<project>/.kilo",
+                "<project>/.kilo/rules"
               ],
               "ledger_files": [],
               "refusals": []
@@ -1454,15 +1454,15 @@
           "scopes": {
             "local": {
               "config_files": [
-                "<project>/.kilocode/rules/PLACEHOLDER.md"
+                "<project>/.kilo/rules/PLACEHOLDER.md"
               ],
               "directories": [
                 "<project>",
-                "<project>/.kilocode",
-                "<project>/.kilocode/rules"
+                "<project>/.kilo",
+                "<project>/.kilo/rules"
               ],
               "ledger_files": [
-                "<project>/.kilocode/.agent-config-instructions.json"
+                "<project>/.kilo/.agent-config-instructions.json"
               ],
               "refusals": []
             }
@@ -1770,10 +1770,10 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.amp/AGENTS.md"
+                "~/.config/AGENTS.md"
               ],
               "directories": [
-                "~/.amp"
+                "~/.config"
               ],
               "ledger_files": [],
               "refusals": []
@@ -1798,13 +1798,14 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.amp/settings.json"
+                "~/.config/amp/settings.json"
               ],
               "directories": [
-                "~/.amp"
+                "~/.config",
+                "~/.config/amp"
               ],
               "ledger_files": [
-                "~/.amp/.agent-config-mcp.json"
+                "~/.config/amp/.agent-config-mcp.json"
               ],
               "refusals": []
             },
@@ -1831,30 +1832,31 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.amp/skills/placeholder/SKILL.md"
+                "~/.config/amp/skills/placeholder/SKILL.md"
               ],
               "directories": [
-                "~/.amp",
-                "~/.amp/skills",
-                "~/.amp/skills/placeholder"
+                "~/.config",
+                "~/.config/amp",
+                "~/.config/amp/skills",
+                "~/.config/amp/skills/placeholder"
               ],
               "ledger_files": [
-                "~/.amp/skills/.agent-config-skills.json"
+                "~/.config/amp/skills/.agent-config-skills.json"
               ],
               "refusals": []
             },
             "local": {
               "config_files": [
-                "<project>/.amp/skills/placeholder/SKILL.md"
+                "<project>/.agents/skills/placeholder/SKILL.md"
               ],
               "directories": [
                 "<project>",
-                "<project>/.amp",
-                "<project>/.amp/skills",
-                "<project>/.amp/skills/placeholder"
+                "<project>/.agents",
+                "<project>/.agents/skills",
+                "<project>/.agents/skills/placeholder"
               ],
               "ledger_files": [
-                "<project>/.amp/skills/.agent-config-skills.json"
+                "<project>/.agents/skills/.agent-config-skills.json"
               ],
               "refusals": []
             }
@@ -1869,13 +1871,14 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.amp/AGENTS.md"
+                "~/.config/AGENTS.md"
               ],
               "directories": [
-                "~/.amp"
+                "~/.config",
+                "~/.config/amp"
               ],
               "ledger_files": [
-                "~/.amp/.agent-config-instructions.json"
+                "~/.config/amp/.agent-config-instructions.json"
               ],
               "refusals": []
             },
