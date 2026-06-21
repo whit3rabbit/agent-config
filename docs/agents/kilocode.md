@@ -12,12 +12,14 @@ Not supported. Prompt-level integration only.
 
 | | |
 | --- | --- |
-| File | `<root>/.kilocode/rules/<tag>.md` |
+| File | `<root>/.kilo/rules/<tag>.md` |
 | Mechanism | One markdown file per consumer |
 | Format | Plain markdown |
 
-Kilo Code can also read root-level `AGENTS.md` and `kilo.jsonc`
-instruction paths, but v0.1 writes only the per-consumer rules directory above.
+`.kilo/rules` is Kilo's current rules layout (referenced from `kilo.jsonc`); the
+legacy `.kilocode/rules` directory still works upstream but is no longer written
+by this crate. Kilo Code can also read root-level `AGENTS.md`, but this crate
+writes only the per-consumer rules directory above.
 
 ### User scope (`Scope::Global`)
 
@@ -33,9 +35,9 @@ include needed.
 
 | | |
 | --- | --- |
-| Instruction file | `<root>/.kilocode/rules/<name>.md` |
+| Instruction file | `<root>/.kilo/rules/<name>.md` |
 | Mechanism | One file per instruction — no host file needed |
-| Ledger | `<root>/.kilocode/.agent-config-instructions.json` |
+| Ledger | `<root>/.kilo/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::StandaloneFile` |
 
 ## MCP servers
@@ -84,7 +86,9 @@ directories in the CLI. `agent-config` writes the native Kilo path.
 
 ## References
 
-- <https://kilo.ai/docs/agent-behavior/agents-md>
+- <https://kilo.ai/docs/customize/agents-md>
 - <https://kilo.ai/docs/customize/custom-rules>
 - <https://kilo.ai/docs/automate/mcp/using-in-kilo-code>
 - <https://kilo.ai/docs/customize/skills>
+
+Accessed: 2026-06-21.

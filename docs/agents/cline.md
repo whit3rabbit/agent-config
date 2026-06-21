@@ -102,14 +102,22 @@ include needed.
 
 | | |
 | --- | --- |
-| File | `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` on macOS |
+| File | `~/.cline/data/settings/cline_mcp_settings.json` |
 | Format | JSON |
 | Key | `mcpServers` |
+| Env override | `CLINE_DATA_DIR` (→ `<dir>/settings/...`) or `CLINE_DIR` (→ `<dir>/data/settings/...`) |
+
+This is the standalone Cline CLI settings location, documented at
+[docs.cline.bot/cline-cli/configuration](https://docs.cline.bot/cline-cli/configuration).
+It is deliberately distinct from the VS Code extension's globalStorage path
+(`.../globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`);
+this crate targets the CLI. The legacy extension path is still resolvable via
+`paths::legacy_cline_mcp_global_file()` for status checks.
 
 ### Project scope (`Scope::Local(<root>)`)
 
-Not supported. Cline's documented MCP settings file is global to the VS Code
-extension.
+Not supported. Cline's global MCP settings file is shared across the CLI, IDE,
+and SDK.
 
 ### Configuration
 
@@ -137,8 +145,11 @@ writes the native `.cline/skills` path.
 
 ## References
 
+- <https://docs.cline.bot/cline-cli/configuration>
 - <https://docs.cline.bot/customization/cline-rules>
 - <https://docs.cline.bot/customization/hooks>
 - <https://docs.cline.bot/customization/skills>
 - <https://docs.cline.bot/mcp/adding-and-configuring-servers>
 - <https://cline.bot/blog/cline-v3-36-hooks>
+
+Accessed: 2026-06-21.

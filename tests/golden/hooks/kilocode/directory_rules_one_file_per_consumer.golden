@@ -6,7 +6,7 @@ install_result:
 Ok(
     InstallReport {
         created: [
-            "[ROOT]/.kilocode/rules/golden-hook.md",
+            "[ROOT]/.kilo/rules/golden-hook.md",
         ],
         patched: [],
         backed_up: [],
@@ -23,12 +23,12 @@ Ok(
             owner: "golden-hook",
         },
         config_path: Some(
-            "[ROOT]/.kilocode/rules/golden-hook.md",
+            "[ROOT]/.kilo/rules/golden-hook.md",
         ),
         ledger_path: None,
         files: [
             Exists {
-                path: "[ROOT]/.kilocode/rules/golden-hook.md",
+                path: "[ROOT]/.kilo/rules/golden-hook.md",
             },
         ],
         warnings: [],
@@ -54,15 +54,15 @@ Ok(
 
 ROOT tree:
 directories:
-- .kilocode
-- .kilocode/rules
+- .kilo
+- .kilo/rules
 files:
-- .kilocode/rules/golden-hook.md
+- .kilo/rules/golden-hook.md
   content:
 ```text
 Use golden hook rules.
 ```
-- .kilocode/rules/sibling-hook.md
+- .kilo/rules/sibling-hook.md
   content:
 ```text
 Use sibling hook rules.

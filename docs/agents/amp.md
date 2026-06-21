@@ -15,12 +15,14 @@ ID: `amp` — `agent_config::by_id("amp")`
 
 | | |
 | --- | --- |
-| User scope file | `~/.amp/AGENTS.md` |
+| User scope file | `~/.config/AGENTS.md` |
 | Project scope file | `<root>/AGENTS.md` |
 | Format | Tagged HTML-comment fence |
 
-Amp falls back to `CLAUDE.md` when `AGENTS.md` is absent. This crate writes
-the canonical `AGENTS.md`. Set `HookSpec::rules` to inject a `RulesBlock`.
+Amp reads `AGENTS.md` from the working directory up to `$HOME`; the documented
+global personal file is `~/.config/AGENTS.md`. Amp falls back to `CLAUDE.md`
+when `AGENTS.md` is absent. This crate writes the canonical `AGENTS.md`. Set
+`HookSpec::rules` to inject a `RulesBlock`.
 
 ## Instructions
 
@@ -33,9 +35,9 @@ fenced block in the existing memory file.
 
 | | |
 | --- | --- |
-| Host file | `~/.amp/AGENTS.md` |
+| Host file | `~/.config/AGENTS.md` |
 | Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
-| Ledger | `~/.amp/.agent-config-instructions.json` |
+| Ledger | `~/.config/amp/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 
 ### Project scope (`Scope::Local(<root>)`)
@@ -51,7 +53,7 @@ fenced block in the existing memory file.
 
 | Scope | File |
 | --- | --- |
-| Global | `~/.amp/settings.json` |
+| Global | `~/.config/amp/settings.json` |
 | Local | `<root>/.amp/settings.json` |
 
 ```json
@@ -71,8 +73,8 @@ Ownership is recorded in a sidecar `<config-dir>/.agent-config-mcp.json` ledger.
 
 | Scope | Path |
 | --- | --- |
-| User | `~/.amp/skills/<name>/` |
-| Project | `<root>/.amp/skills/<name>/` |
+| User | `~/.config/amp/skills/<name>/` |
+| Project | `<root>/.agents/skills/<name>/` |
 
 Each skill is a directory with `SKILL.md` plus optional `scripts/`,
 `references/`, `assets/`. Amp also supports bundling an `mcp.json` alongside
@@ -83,4 +85,4 @@ Each skill is a directory with `SKILL.md` plus optional `scripts/`,
 - <https://ampcode.com/manual>
 - <https://github.com/sourcegraph/amp>
 
-Accessed: 2026-04-26.
+Accessed: 2026-06-21.

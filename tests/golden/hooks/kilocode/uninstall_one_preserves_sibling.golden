@@ -6,7 +6,7 @@ uninstall_result:
 Ok(
     UninstallReport {
         removed: [
-            "[ROOT]/.kilocode/rules/golden-hook.md",
+            "[ROOT]/.kilo/rules/golden-hook.md",
         ],
         patched: [],
         restored: [],
@@ -21,12 +21,12 @@ Ok(
         },
         status: Absent,
         config_path: Some(
-            "[ROOT]/.kilocode/rules/golden-hook.md",
+            "[ROOT]/.kilo/rules/golden-hook.md",
         ),
         ledger_path: None,
         files: [
             Missing {
-                path: "[ROOT]/.kilocode/rules/golden-hook.md",
+                path: "[ROOT]/.kilo/rules/golden-hook.md",
             },
         ],
         warnings: [],
@@ -52,10 +52,10 @@ Ok(
 
 ROOT tree:
 directories:
-- .kilocode
-- .kilocode/rules
+- .kilo
+- .kilo/rules
 files:
-- .kilocode/rules/sibling-hook.md
+- .kilo/rules/sibling-hook.md
   content:
 ```text
 Use sibling hook rules.

@@ -2,6 +2,12 @@
 
 ID: `roo` — `agent_config::by_id("roo")`
 
+> **Retired / EOL.** All Roo Code products (the VS Code extension, Roo Code
+> Cloud, and Roo Code Router) shut down on **2026-05-15** (announced
+> 2026-04-21). The team pivoted to a separate cloud agent. This integration is
+> kept for compatibility and migration off Roo; no further path work is planned.
+> See <https://docs.roocode.com/sunset>.
+
 Roo Code is a Cline fork; despite shared lineage, it uses a distinct rules
 directory and is treated as a separate integration.
 

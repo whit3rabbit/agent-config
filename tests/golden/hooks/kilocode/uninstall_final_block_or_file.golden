@@ -6,7 +6,7 @@ uninstall_result:
 Ok(
     UninstallReport {
         removed: [
-            "[ROOT]/.kilocode/rules/golden-hook.md",
+            "[ROOT]/.kilo/rules/golden-hook.md",
         ],
         patched: [],
         restored: [],
@@ -21,12 +21,12 @@ Ok(
         },
         status: Absent,
         config_path: Some(
-            "[ROOT]/.kilocode/rules/golden-hook.md",
+            "[ROOT]/.kilo/rules/golden-hook.md",
         ),
         ledger_path: None,
         files: [
             Missing {
-                path: "[ROOT]/.kilocode/rules/golden-hook.md",
+                path: "[ROOT]/.kilo/rules/golden-hook.md",
             },
         ],
         warnings: [],

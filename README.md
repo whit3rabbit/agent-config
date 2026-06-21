@@ -63,6 +63,15 @@ Safety guarantees that apply to every integration:
 | [OpenClaw]             | `openclaw`    | -                  | yes (Local)  | Global           | Global + Local   | Local            |
 | [Hermes Agent]         | `hermes`      | -                  | yes (Local)  | Global           | Global           | Local            |
 
+**Lifecycle notes:**
+
+- **Roo Code** (`roo`) is **retired** — all Roo Code products shut down on
+  2026-05-15. The integration is kept for compatibility and migration only.
+- **Gemini CLI** (`gemini`) is **legacy / conditional** — consumer tiers (free,
+  AI Pro, AI Ultra) stopped being served on 2026-06-18; enterprise and paid
+  API-key users remain supported. New consumer-tier work belongs on
+  `antigravitycli`.
+
 [Claude Code]: docs/agents/claude.md
 [Cursor]: docs/agents/cursor.md
 [Gemini CLI]: docs/agents/gemini.md
@@ -116,8 +125,9 @@ The crate runs the same way on every platform it builds for, but the
 
 - **Native macOS / Linux** — fully supported.
 - **Native Windows** — supported for harnesses with a documented Windows
-  config path (e.g. Claude, Cursor, Codex, Gemini, VS Code-extension MCP
-  files for Cline / Roo). `paths::home_dir()` honors `%USERPROFILE%` and
+  config path (e.g. Claude, Cursor, Codex, Gemini, the `~/.cline/` CLI data
+  dir for Cline, the VS Code-extension MCP file for Roo).
+  `paths::home_dir()` honors `%USERPROFILE%` and
   `paths::config_dir()` honors `%APPDATA%`. Cline's hook surface writes a
   `bash`-shebanged executable script and is therefore **refused on native
   Windows** with [`RefusalReason::UnsupportedPlatform`] / the matching
@@ -140,7 +150,7 @@ Add the dependency:
 
 ```toml
 [dependencies]
-agent-config = "0.1"
+agent-config = "0.4"
 ```
 
 Each snippet below has a runnable counterpart under

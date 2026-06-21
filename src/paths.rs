@@ -155,6 +155,17 @@ pub fn kilo_config_file() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".config").join("kilo").join("kilo.jsonc"))
 }
 
+/// `~/.config/amp` — Amp's user config directory. Amp uses `~/.config/amp`
+/// literally on every platform (XDG-style), not the macOS `Application Support`
+/// dir, so this is built from [`home_dir`] rather than [`config_dir`].
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`].
+pub fn amp_config_dir() -> Result<PathBuf, AgentConfigError> {
+    Ok(home_dir()?.join(".config").join("amp"))
+}
+
 /// `~/.claude.json` — Claude Code's user/local MCP config file.
 ///
 /// # Errors

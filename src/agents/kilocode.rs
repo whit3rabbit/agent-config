@@ -2,7 +2,8 @@
 //!
 //! Two surfaces:
 //!
-//! 1. **Rules** — project-local markdown files at `.kilocode/rules/<tag>.md`.
+//! 1. **Rules** — project-local markdown files at `.kilo/rules/<tag>.md`
+//!    (current Kilo standard; legacy `.kilocode/rules` still works upstream).
 //!
 //! 2. **MCP servers** — JSONC config at `~/.config/kilo/kilo.jsonc`
 //!    (Global) or project `kilo.jsonc` / `.kilo/kilo.jsonc` (Local), keyed by
@@ -23,7 +24,7 @@ use crate::spec::{HookSpec, InstructionSpec, McpSpec, SkillSpec};
 use crate::status::StatusReport;
 use crate::util::{instructions_dir, mcp_json_map, ownership, rules_dir, skills_dir};
 
-const RULES_DIR: &str = ".kilocode/rules";
+const RULES_DIR: &str = ".kilo/rules";
 
 /// Kilo Code integration.
 #[derive(Debug, Clone, Copy, Default)]
@@ -329,8 +330,8 @@ impl KiloCodeAgent {
     ) -> Result<instructions_dir::StandaloneLayout, AgentConfigError> {
         let root = self.require_local(scope)?;
         Ok(instructions_dir::StandaloneLayout {
-            config_dir: root.join(".kilocode"),
-            instruction_dir: root.join(".kilocode/rules"),
+            config_dir: root.join(".kilo"),
+            instruction_dir: root.join(".kilo/rules"),
         })
     }
 }
@@ -431,12 +432,12 @@ mod tests {
     }
 
     #[test]
-    fn install_rules_writes_existing_kilocode_rules_path() {
+    fn install_rules_writes_kilo_rules_path() {
         let dir = tempdir().unwrap();
         let agent = KiloCodeAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
         agent.install(&scope, &rules_spec("alpha", "body")).unwrap();
-        assert!(dir.path().join(".kilocode/rules/alpha.md").exists());
+        assert!(dir.path().join(".kilo/rules/alpha.md").exists());
     }
 
     #[test]
@@ -528,7 +529,7 @@ mod tests {
         agent
             .install_instruction(&scope, &instruction_spec("MYAPP", "myapp", "# Use MyApp\n"))
             .unwrap();
-        let instr = dir.path().join(".kilocode/rules/MYAPP.md");
+        let instr = dir.path().join(".kilo/rules/MYAPP.md");
         assert!(instr.exists());
         assert!(std::fs::read_to_string(&instr)
             .unwrap()
@@ -546,7 +547,7 @@ mod tests {
         agent
             .uninstall_instruction(&scope, "MYAPP", "myapp")
             .unwrap();
-        assert!(!dir.path().join(".kilocode/rules/MYAPP.md").exists());
+        assert!(!dir.path().join(".kilo/rules/MYAPP.md").exists());
     }
 
     #[test]

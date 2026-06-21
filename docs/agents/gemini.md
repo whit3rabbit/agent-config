@@ -2,10 +2,16 @@
 
 ID: `gemini` — `agent_config::by_id("gemini")`
 
+> **Legacy / conditional.** As of **2026-06-18**, Gemini CLI stopped serving
+> requests for the free, AI Pro, and AI Ultra tiers; enterprise and paid
+> API-key users remain supported. New consumer-tier work belongs on
+> `antigravitycli`. See the
+> [transition blog](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/).
+
 Historical Gemini CLI support. Google announced the transition from Gemini CLI
-to Antigravity CLI on 2026-05-19 and says individual/free consumer access stops
-serving requests on 2026-06-18. The code paths remain because existing users
-and enterprise environments can still have Gemini CLI config on disk.
+to Antigravity CLI on 2026-05-19 and the consumer-tier request cutoff took
+effect on 2026-06-18. The code paths remain because enterprise and paid
+API-key users, plus existing config on disk, still use them.
 
 Gemini Code Assist IDE extensions are documentation-only for this crate: no
 stable file-backed `SKILL.md` surface was found for the IDE extension.

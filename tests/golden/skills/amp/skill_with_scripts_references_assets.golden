@@ -6,10 +6,10 @@ install_result:
 Ok(
     InstallReport {
         created: [
-            "[ROOT]/.amp/skills/golden-skill/SKILL.md",
-            "[ROOT]/.amp/skills/golden-skill/scripts/run.sh",
-            "[ROOT]/.amp/skills/golden-skill/references/notes.md",
-            "[ROOT]/.amp/skills/golden-skill/assets/sample.txt",
+            "[ROOT]/.agents/skills/golden-skill/SKILL.md",
+            "[ROOT]/.agents/skills/golden-skill/scripts/run.sh",
+            "[ROOT]/.agents/skills/golden-skill/references/notes.md",
+            "[ROOT]/.agents/skills/golden-skill/assets/sample.txt",
         ],
         patched: [],
         backed_up: [],
@@ -26,17 +26,17 @@ Ok(
             owner: "golden-owner",
         },
         config_path: Some(
-            "[ROOT]/.amp/skills/golden-skill",
+            "[ROOT]/.agents/skills/golden-skill",
         ),
         ledger_path: Some(
-            "[ROOT]/.amp/skills/.agent-config-skills.json",
+            "[ROOT]/.agents/skills/.agent-config-skills.json",
         ),
         files: [
             Exists {
-                path: "[ROOT]/.amp/skills/golden-skill",
+                path: "[ROOT]/.agents/skills/golden-skill",
             },
             Exists {
-                path: "[ROOT]/.amp/skills/golden-skill/SKILL.md",
+                path: "[ROOT]/.agents/skills/golden-skill/SKILL.md",
             },
         ],
         warnings: [],
@@ -63,14 +63,14 @@ Ok(
 
 ROOT tree:
 directories:
-- .amp
-- .amp/skills
-- .amp/skills/golden-skill
-- .amp/skills/golden-skill/assets
-- .amp/skills/golden-skill/references
-- .amp/skills/golden-skill/scripts
+- .agents
+- .agents/skills
+- .agents/skills/golden-skill
+- .agents/skills/golden-skill/assets
+- .agents/skills/golden-skill/references
+- .agents/skills/golden-skill/scripts
 files:
-- .amp/skills/.agent-config-skills.json
+- .agents/skills/.agent-config-skills.json
   content:
 ```text
 {
@@ -83,7 +83,7 @@ files:
   "version": 2
 }
 ```
-- .amp/skills/golden-skill/SKILL.md
+- .agents/skills/golden-skill/SKILL.md
   content:
 ```text
 ---
@@ -94,18 +94,18 @@ description: Use during golden snapshot tests with assets.
 ## Goal
 Preserve the full skill directory.
 ```
-- .amp/skills/golden-skill/assets/sample.txt
+- .agents/skills/golden-skill/assets/sample.txt
   content:
 ```text
 asset payload
 ```
-- .amp/skills/golden-skill/references/notes.md
+- .agents/skills/golden-skill/references/notes.md
   content:
 ```text
 # Notes
 Keep this reference.
 ```
-- .amp/skills/golden-skill/scripts/run.sh
+- .agents/skills/golden-skill/scripts/run.sh
   mode: 755
   content:
 ```text
