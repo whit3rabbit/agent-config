@@ -49,7 +49,10 @@ version against the tag, so the README and changelog must be kept in sync by
 hand.
 
 If the change affects generated schema paths, regenerate `schema/agents.json`
-for the Linux view before tagging. The macOS `schema_golden` test intentionally
+for the Linux view before tagging. Bump `Cargo.toml` *first*: the schema embeds
+`crate_version`, so regenerating against an unbumped manifest fails Linux CI's
+`schema_golden` on a version mismatch even when paths are correct. The macOS
+`schema_golden` test intentionally
 skips byte comparison, so it can miss this failure. Prefer a Linux host or
 container; if using macOS only, set `XDG_CONFIG_HOME="$HOME/.config"` when
 running the schema generator and inspect that the diff is only Linux config-dir
@@ -57,6 +60,17 @@ paths:
 
 ```bash
 XDG_CONFIG_HOME="$HOME/.config" cargo run --example gen_schema
+```
+
+The macOS `XDG_CONFIG_HOME` trick is best-effort only (`dirs::config_dir()`
+ignores it on macOS). For a byte-stable Linux regen, run `gen_schema` in the
+same Docker container used for concurrency tests:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" \
+  -e CARGO_HOME=/tmp/cargo -e CARGO_TARGET_DIR=/tmp/agent-config-target \
+  -e HOME=/tmp -v "$PWD":/work -w /work rust:latest \
+  bash -c 'cargo run --example gen_schema'
 ```
 
 Create the release tag only after `main` contains the checked version:
