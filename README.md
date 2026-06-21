@@ -1,28 +1,26 @@
 # agent-config
 
-A Rust library that installs hooks, prompt rules, MCP servers, skills, and
-standalone instruction files into AI coding harnesses.
+**What it does**
 
-Developers don't want to spend time looking up locations for each harness or
-tracking where to install tools. 
+- Installs hooks, prompt rules, MCP servers, skills, and standalone instruction
+  files into AI coding harnesses (Claude Code, Cursor, Codex, Copilot, and 20+
+  more).
+- Centralizes per-harness config locations and shapes. You supply a `HookSpec`,
+  `McpSpec`, `SkillSpec`, or `InstructionSpec`; the library knows where each
+  harness keeps its config, what shape that config takes, and how to write to it
+  safely.
+- A thin, generic installer: ships no default content, embeds no
+  consumer-specific commands, has no CLI binary, does no host detection. Take a
+  spec, produce the right files in the right places, undo that cleanly later.
 
-This library solves that by centralizing the
-per-harness file locations and config shapes so downstream tools do not have
-to reimplement them.
+**Why it's for developers**
 
-You supply a `HookSpec`, `McpSpec`, `SkillSpec`, or `InstructionSpec`. The
-library knows where each harness keeps its config, what shape that config
-takes, and how to write to it safely.
+- Stop looking up config locations for each harness.
+- Stop tracking where every tool gets installed and how to remove it.
+- One spec installs across every supported harness; downstream tools don't
+  reimplement per-harness layout.
 
-## What this is
-
-A thin, generic installer. It does not ship default content, does not embed
-consumer-specific commands, does not include a CLI binary, and does not try
-to detect which harnesses are present on the host. The crate focuses on one
-thing: take a spec, produce the right files in the right places, and undo
-that cleanly later.
-
-Safety guarantees that apply to every integration:
+**Safety guarantees** (every integration):
 
 - **Atomic writes.** Write to a temp file, fsync, rename. No torn files.
 - **First-touch backups.** Any pre-existing file we modify gets a one-time
@@ -35,7 +33,69 @@ Safety guarantees that apply to every integration:
   fences. MCP servers, skills, and instructions use sidecar ledgers. Multiple
   consumers coexist without stepping on each other.
 
-## What is supported
+## Add it to your project
+
+```toml
+[dependencies]
+agent-config = "0.4"
+```
+
+Minimal install: build a spec, look up the harness by id, call `install`.
+
+```rust
+use agent_config::{by_id, Event, HookSpec, Matcher, Scope};
+
+fn main() -> agent_config::Result<()> {
+    let spec = HookSpec::builder("myapp")              // your consumer tag
+        .command_program("myapp", ["hook", "claude"])  // what the harness runs
+        .matcher(Matcher::Bash)                        // filter to shell calls
+        .event(Event::PreToolUse)                      // before each tool call
+        .try_build()?;
+
+    let claude = by_id("claude").expect("claude is registered");
+    let report = claude.install(&Scope::Global, &spec)?;
+
+    println!("created: {:?}", report.created);
+    println!("patched: {:?}", report.patched);
+    println!("backed up: {:?}", report.backed_up);
+    Ok(())
+}
+```
+
+That writes the hook into the harness's config and records it for clean removal.
+Per-surface examples (MCP, skills, instructions, dry-run, uninstall) are in
+[Usage](#usage) below.
+
+> **Tip:** Prefer `.try_build()?` over `.build()` in production code.
+> The `build()` method panics on invalid specs, which is fine for tests
+> but not for a running application.
+
+Each snippet has a runnable counterpart under
+[`examples/`](examples/README.md). Run with `cargo run --example <name>`; every
+example writes into a fresh tempdir so it never touches the host's real config.
+
+## Browse every surface in a TUI
+
+Want to understand what gets installed where before writing any code? A bundled
+ratatui example shows `plan_install_*` outputs across every supported harness
+side-by-side, no code required:
+
+```bash
+cargo run --example tui_dry_run
+```
+
+Four tabs (SKILLS, MCP, HOOKS, INSTRUCTIONS) each list the harnesses that
+support that surface. Move with `↑`/`↓` (or `j`/`k`), check rows with
+`Space`, flip `Local` / `Global` scope with `g`, and press `Enter` for an
+aggregate dry-run across the selection. Press `?` for the full keymap,
+`q` to quit. Nothing is written to disk; only `plan_install_*` runs, so
+flipping to `Global` safely previews real `~/.claude/...`,
+`~/.gemini/...`, etc. paths without touching them.
+
+Runnable: [`examples/tui_dry_run/`](examples/tui_dry_run/main.rs). For
+all bundled examples see [`examples/README.md`](examples/README.md).
+
+## Supported harnesses
 
 | Harness                | ID            | Hooks              | Prompt rules | MCP              | Skills           | Instructions     |
 | ---------------------- | ------------- | ------------------ | ------------ | ---------------- | ---------------- | ---------------- |
@@ -53,9 +113,11 @@ Safety guarantees that apply to every integration:
 | [Antigravity CLI]      | `antigravitycli` | -               | yes          | Global + Local   | -                | Global + Local   |
 | [Amp]                  | `amp`         | -                  | yes          | Global + Local   | Global + Local   | Global + Local   |
 | [CodeBuddy CLI]        | `codebuddy`   | Global + Local     | yes          | -                | Global + Local   | Global + Local   |
+| [Charm Crush]          | `crush`       | Global + Local     | yes          | Global + Local   | Global + Local   | Global + Local   |
 | [Forge]                | `forge`       | -                  | yes          | Global + Local   | Global + Local   | Global + Local   |
 | [iFlow CLI]            | `iflow`       | Global + Local     | -            | Global + Local   | -                | -                |
 | [JetBrains Junie]      | `junie`       | -                  | yes (Local)  | Global + Local   | -                | Local            |
+| [Pi]                   | `pi`          | -                  | yes          | Global + Local   | Global + Local   | Global + Local   |
 | [Qoder CLI]            | `qodercli`    | -                  | yes          | Global + Local   | -                | Global + Local   |
 | [Qwen Code]            | `qwen`        | -                  | yes          | Global + Local   | Global + Local   | Global + Local   |
 | [Tabnine CLI]          | `tabnine`     | Global + Local     | -            | Global + Local   | -                | -                |
@@ -86,9 +148,11 @@ Safety guarantees that apply to every integration:
 [Antigravity CLI]: docs/agents/antigravitycli.md
 [Amp]: docs/agents/amp.md
 [CodeBuddy CLI]: docs/agents/codebuddy.md
+[Charm Crush]: docs/agents/crush.md
 [Forge]: docs/agents/forge.md
 [iFlow CLI]: docs/agents/iflow.md
 [JetBrains Junie]: docs/agents/junie.md
+[Pi]: docs/agents/pi.md
 [Qoder CLI]: docs/agents/qodercli.md
 [Qwen Code]: docs/agents/qwen.md
 [Tabnine CLI]: docs/agents/tabnine.md
@@ -114,76 +178,17 @@ guarantees are described in [`docs/SECURITY.md`](docs/SECURITY.md).
 > Linux for the same reason. Downstream tooling that consumes
 > `schema/agents.json` should either pin to the Linux view or compute
 > per-platform paths client-side.
+
 Native OpenClaw hook/plugin installation is still deferred because upstream
 exposes that as a CLI-managed plugin lifecycle rather than a stable file-backed
 hook contract.
 
-## Supported platforms
+## Usage
 
-The crate runs the same way on every platform it builds for, but the
-*environment* it targets is whatever it is launched in:
+The hook install above is the minimal case. The rest of the surfaces follow the
+same shape: build a spec, look it up by id, call the matching method.
 
-- **Native macOS / Linux** — fully supported.
-- **Native Windows** — supported for harnesses with a documented Windows
-  config path (e.g. Claude, Cursor, Codex, Gemini, the `~/.cline/` CLI data
-  dir for Cline, the VS Code-extension MCP file for Roo).
-  `paths::home_dir()` honors `%USERPROFILE%` and
-  `paths::config_dir()` honors `%APPDATA%`. Cline's hook surface writes a
-  `bash`-shebanged executable script and is therefore **refused on native
-  Windows** with [`RefusalReason::UnsupportedPlatform`] / the matching
-  [`AgentConfigError::UnsupportedPlatform`]. Cline rules and MCP / skill /
-  instruction installs continue to work.
-- **WSL** — treated as a Linux environment. A binary running inside WSL
-  resolves `$HOME` and writes WSL config; it does not magically reach the
-  Windows host profile under `/mnt/c/...`.
-- **Targeting Windows host config from inside WSL** — explicitly out of
-  scope for v1. Future work would gate this behind an opt-in `GlobalTarget`
-  / `PathRoots` API rather than auto-detection.
-
-[`HookCommand::render_shell`] produces POSIX-shell quoting; consumers
-targeting a non-POSIX shell (PowerShell / `cmd.exe`) should construct
-[`HookCommand::ShellUnchecked`] and quote the command themselves.
-
-## How to use it in your Rust app
-
-Add the dependency:
-
-```toml
-[dependencies]
-agent-config = "0.4"
-```
-
-Each snippet below has a runnable counterpart under
-[`examples/`](examples/README.md). Run with `cargo run --example <name>`; every
-example writes into a fresh tempdir so it never touches the host's real config.
-
-### Install a hook
-
-```rust
-use agent_config::{by_id, Event, HookSpec, Matcher, Scope};
-
-fn main() -> agent_config::Result<()> {
-    let spec = HookSpec::builder("myapp")              // your consumer tag
-        .command_program("myapp", ["hook", "claude"])  // what the harness runs
-        .matcher(Matcher::Bash)                        // filter to shell calls
-        .event(Event::PreToolUse)                      // before each tool call
-        .try_build()?;
-
-    let claude = by_id("claude").expect("claude is registered");
-    let report = claude.install(&Scope::Global, &spec)?;
-
-    println!("created: {:?}", report.created);
-    println!("patched: {:?}", report.patched);
-    println!("backed up: {:?}", report.backed_up);
-    Ok(())
-}
-```
-
-> **Tip:** Prefer `.try_build()?` over `.build()` in production code.
-> The `build()` method panics on invalid specs, which is fine for tests
-> but not for a running application.
-
-Runnable: [`examples/hooks_install_uninstall.rs`](examples/hooks_install_uninstall.rs).
+### Scopes and tags
 
 `Scope::Global` writes under the user's harness config dir
 (`~/.claude/`, `~/.cursor/`, etc.). `Scope::Local(PathBuf)` writes inside
@@ -200,6 +205,8 @@ Use `command_program(program, args)` for hook commands by default. It preserves
 program/argument boundaries and shell-quotes arguments for harnesses that only
 accept command strings. Raw shell remains available as
 `command_shell_unchecked(...)` when you intentionally need shell syntax.
+
+Runnable: [`examples/hooks_install_uninstall.rs`](examples/hooks_install_uninstall.rs).
 
 ### Inject prompt rules at the same time
 
@@ -370,8 +377,9 @@ Three placement modes are available; pick the one that matches the harness:
     │                       (Claude — has a documented `@import` syntax)
     │
     ├─ InlineBlock      →  inject body as a fenced block inside the host file (no separate file)
-    │                       (Codex, Gemini, CodeBuddy, Amp, Forge, Qoder, Qwen,
-    │                        Copilot, Junie, Trae, OpenClaw, Hermes)
+    │                       (Codex, Gemini, Antigravity CLI, Copilot, CodeBuddy,
+    │                        Amp, Crush, Forge, Pi, Qoder, Qwen, Junie, Trae,
+    │                        OpenClaw, Hermes)
     │
     └─ StandaloneFile   →  write <name>.md only, no host edit
                             (Cline, Roo, Kilo Code, Windsurf, Antigravity —
@@ -473,26 +481,6 @@ match plan.status {
 
 Runnable: [`examples/dry_run_plan.rs`](examples/dry_run_plan.rs).
 
-### Browse every surface in a TUI
-
-A bundled ratatui example shows `plan_install_*` outputs across every
-supported harness side-by-side, no code required:
-
-```bash
-cargo run --example tui_dry_run
-```
-
-Four tabs (SKILLS, MCP, HOOKS, INSTRUCTIONS) each list the harnesses that
-support that surface. Move with `↑`/`↓` (or `j`/`k`), check rows with
-`Space`, flip `Local` / `Global` scope with `g`, and press `Enter` for an
-aggregate dry-run across the selection. Press `?` for the full keymap,
-`q` to quit. Nothing is written to disk; only `plan_install_*` runs, so
-flipping to `Global` safely previews real `~/.claude/...`,
-`~/.gemini/...`, etc. paths without touching them.
-
-Runnable: [`examples/tui_dry_run/`](examples/tui_dry_run/main.rs). For
-all bundled examples see [`examples/README.md`](examples/README.md).
-
 ### Errors
 
 All operations return `Result<T, AgentConfigError>`. Variants worth handling
@@ -508,6 +496,34 @@ explicitly:
   consumer or was hand-installed without an agent-config ledger entry.
 - `Io` and `JsonInvalid` carry the offending path.
 
+## Supported platforms
+
+The crate runs the same way on every platform it builds for, but the
+*environment* it targets is whatever it is launched in:
+
+- **Native macOS / Linux** — fully supported.
+- **Native Windows** — supported for harnesses with a documented Windows
+  config path (e.g. Claude, Cursor, Codex, Gemini, the `~/.cline/` CLI data
+  dir for Cline, the VS Code-extension MCP file for Roo).
+  `paths::home_dir()` honors `%USERPROFILE%` and
+  `paths::config_dir()` honors `%APPDATA%`. Cline's hook surface writes a
+  `bash`-shebanged executable script and is therefore **refused on native
+  Windows** with [`RefusalReason::UnsupportedPlatform`] / the matching
+  [`AgentConfigError::UnsupportedPlatform`]. Cline rules and MCP / skill /
+  instruction installs continue to work.
+- **WSL** — treated as a Linux environment. A binary running inside WSL
+  resolves `$HOME` and writes WSL config; it does not magically reach the
+  Windows host profile under `/mnt/c/...`.
+- **Targeting Windows host config from inside WSL** — explicitly out of
+  scope for v1. Future work would gate this behind an opt-in `GlobalTarget`
+  / `PathRoots` API rather than auto-detection.
+
+[`HookCommand::render_shell`] produces POSIX-shell quoting; consumers
+targeting a non-POSIX shell (PowerShell / `cmd.exe`) should construct
+[`HookCommand::ShellUnchecked`] and quote the command themselves.
+
 ## License
 
 MIT
+</content>
+</invoke>

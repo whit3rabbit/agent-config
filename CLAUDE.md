@@ -315,6 +315,10 @@ be registered without speculating on a rules file — defer it instead. See
 7. Add or update public smoke tests in `tests/registry.rs`,
    `tests/mcp_registry.rs`, `tests/skill_registry.rs`, or `tests/plan_api.rs`
 8. Add agent doc to `docs/agents/`
+9. Update `README.md`: the harness table AND the `InlineBlock` placement
+   list under "Install an instruction" both duplicate the surface matrix and
+   are not test-enforced, so they drift silently (crush, pi were registered
+   but missing from both until 2026-06-21).
 
 ## Surface coverage
 
