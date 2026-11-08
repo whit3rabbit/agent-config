@@ -1,0 +1,33 @@
+[package]
+name = "skills-cli"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.95"
+license = "MIT"
+description = "The open agent skills ecosystem — install, update, and remove agent skills across every coding agent. Wizard-compatible with vercel-labs/skills."
+repository = "https://github.com/whit3rabbit/agent-config"
+keywords = ["ai", "skills", "cli", "agents"]
+categories = ["command-line-utilities"]
+
+[[bin]]
+name = "skills"
+path = "src/main.rs"
+
+[dependencies]
+skills-store = { path = "../skills-store" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.10"
+crossterm = "0.29"
+ureq = { version = "2", features = ["json", "tls"] }
+flate2 = "1"
+tar = "0.4"
+yaml-rust2 = "0.10"
+tempfile = "3"
+
+[dev-dependencies]
+pretty_assertions = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
