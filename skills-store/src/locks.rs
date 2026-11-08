@@ -14,6 +14,18 @@ const GLOBAL_LOCK_VERSION: u32 = 3;
 const LOCAL_LOCK_FILE: &str = "skills-lock.json";
 const LOCAL_LOCK_VERSION: u32 = 1;
 
+/// A successful placement of a skill within the lockfile's scope.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SkillPlacement {
+    /// Harness registry ID.
+    pub agent: String,
+    /// Eve subagent, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subagent: Option<String>,
+    /// Effective install mode.
+    pub mode: String,
+}
+
 /// One entry of the global lock (`src/skill-lock.ts`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SkillLockEntry {
@@ -26,7 +38,11 @@ pub struct SkillLockEntry {
     #[serde(rename = "sourceUrl")]
     pub source_url: String,
     /// Branch or tag ref used for installation.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "ref",
+        alias = "ref_",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ref_: Option<String>,
     /// Subpath within the source repo, if applicable.
     #[serde(rename = "skillPath", skip_serializing_if = "Option::is_none")]
@@ -52,6 +68,16 @@ pub struct SkillLockEntry {
     /// Set when the user chose copies over symlinks.
     #[serde(rename = "installMode", skip_serializing_if = "Option::is_none")]
     pub install_mode: Option<String>,
+    /// Placements recorded by skillz. Older lockfiles can infer them from disk.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub placements: Vec<SkillPlacement>,
+    /// Content fingerprint for clone or snapshot based update checks.
+    #[serde(
+        default,
+        rename = "computedHash",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub computed_hash: Option<String>,
 }
 
 /// Dismissed-prompt tracking in the global lock.
@@ -97,7 +123,11 @@ pub struct LocalSkillLockEntry {
     #[serde(rename = "sourceUrl", skip_serializing_if = "Option::is_none")]
     pub source_url: Option<String>,
     /// Branch or tag ref used for installation.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "ref",
+        alias = "ref_",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ref_: Option<String>,
     /// The provider/source type.
     #[serde(rename = "sourceType")]
@@ -123,6 +153,9 @@ pub struct LocalSkillLockEntry {
     /// Set when the user chose copies over symlinks.
     #[serde(rename = "installMode", skip_serializing_if = "Option::is_none")]
     pub install_mode: Option<String>,
+    /// Placements recorded by skillz. Older lockfiles can infer them from disk.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub placements: Vec<SkillPlacement>,
 }
 
 /// The project lock file structure (`skills-lock.json`, version 1).
@@ -168,16 +201,18 @@ pub fn read_skill_lock() -> Result<SkillLock, SkillsError> {
 
 /// Read the global lock from an explicit path (testing).
 pub fn read_skill_lock_at(path: &Path) -> Result<SkillLock, SkillsError> {
-    let Ok(content) = std::fs::read_to_string(path) else {
-        return Ok(SkillLock::default());
+    let invalid = |detail: &str| diag::invalid_local_lock(&path.to_string_lossy(), detail);
+    let content = match std::fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(SkillLock::default()),
+        Err(err) => return Err(invalid(&err.to_string())),
     };
-    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
-        return Ok(SkillLock::default());
-    };
+    let parsed: serde_json::Value =
+        serde_json::from_str(&content).map_err(|err| invalid(&err.to_string()))?;
     let version = parsed.get("version").and_then(|v| v.as_u64());
     let has_skills = parsed.get("skills").is_some_and(|s| s.is_object());
     if version.is_none() || !has_skills {
-        return Ok(SkillLock::default());
+        return Err(invalid("expected a version and skills object"));
     }
     // Old formats are wiped (v3 adds skillFolderHash; fresh installs repopulate).
     if version.is_none_or(|v| v < GLOBAL_LOCK_VERSION as u64) {
@@ -204,13 +239,7 @@ pub fn write_skill_lock_at(path: &Path, lock: &SkillLock) -> Result<(), SkillsEr
     }
     let content = serde_json::to_string_pretty(lock)
         .map_err(|err| SkillsError::new("SKILLS_IO", err.to_string()))?;
-    std::fs::write(path, content).map_err(|err| {
-        SkillsError::new(
-            "SKILLS_IO",
-            format!("failed to write {}: {err}", path.display()),
-        )
-    })?;
-    Ok(())
+    write_atomic(path, &content)
 }
 
 /// Read the local (project) lock. Missing files read as empty; unusable files
@@ -285,12 +314,25 @@ pub fn write_local_lock_at(
     }
     let content = serde_json::to_string_pretty(&portable)
         .map_err(|err| SkillsError::new("SKILLS_IO", err.to_string()))?;
-    std::fs::write(path, content + "\n").map_err(|err| {
+    write_atomic(path, &(content + "\n"))
+}
+
+fn write_atomic(path: &Path, content: &str) -> Result<(), SkillsError> {
+    use std::io::Write as _;
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let error = |err| {
         SkillsError::new(
             "SKILLS_IO",
             format!("failed to write {}: {err}", path.display()),
         )
-    })?;
+    };
+    let mut temp = tempfile::NamedTempFile::new_in(parent).map_err(error)?;
+    temp.write_all(content.as_bytes()).map_err(error)?;
+    temp.as_file().sync_all().map_err(error)?;
+    temp.persist(path).map_err(|err| error(err.error))?;
     Ok(())
 }
 
@@ -476,6 +518,8 @@ mod tests {
                 source_base_url: None,
                 well_known_digest: None,
                 install_mode: None,
+                placements: vec![],
+                computed_hash: None,
             },
         );
         write_skill_lock_at(&path, &lock).unwrap();
@@ -528,6 +572,7 @@ mod tests {
                 subagents: None,
                 well_known_digest: None,
                 install_mode: None,
+                placements: vec![],
             },
         );
         write_local_lock(&lock, tmp.path()).unwrap();
@@ -535,8 +580,8 @@ mod tests {
         assert!(content.ends_with('\n'));
         let read = read_local_lock(tmp.path()).unwrap();
         assert_eq!(
-            read.skills["s"].source,
-            tmp.path().join("vendor/skill").to_string_lossy()
+            Path::new(&read.skills["s"].source),
+            tmp.path().join("vendor/skill")
         );
     }
 
@@ -574,6 +619,7 @@ mod tests {
                 subagents: None,
                 well_known_digest: None,
                 install_mode: None,
+                placements: vec![],
             },
         );
         assert_eq!(

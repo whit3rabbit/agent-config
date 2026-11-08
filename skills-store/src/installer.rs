@@ -142,6 +142,10 @@ fn paths_overlap(a: &Path, b: &Path) -> bool {
 pub(crate) fn remove_path_any(path: &Path) -> std::io::Result<()> {
     let meta = std::fs::symlink_metadata(path);
     match meta {
+        #[cfg(windows)]
+        Ok(m) if std::os::windows::fs::FileTypeExt::is_symlink_dir(&m.file_type()) => {
+            std::fs::remove_dir(path)
+        }
         Ok(m) if m.file_type().is_symlink() => std::fs::remove_file(path),
         Ok(m) if m.is_dir() => std::fs::remove_dir_all(path),
         Ok(_) => std::fs::remove_file(path),
@@ -231,7 +235,9 @@ fn resolve_parent_symlinks(path: &Path) -> PathBuf {
     }
 }
 
-/// Minimal `path.relative` for symlink targets.
+/// Minimal `path.relative` for symlink targets. Unix-only: the Windows
+/// branch of `create_symlink` delegates to `symlink_dir` instead.
+#[cfg(not(windows))]
 fn pathdiff(from: &Path, to: &Path) -> PathBuf {
     let from_abs: Vec<_> = from.components().collect();
     let to_abs: Vec<_> = to.components().collect();
@@ -279,7 +285,7 @@ fn create_symlink(target: &Path, link_path: &Path) -> bool {
                         return true;
                     }
                 }
-                let _ = std::fs::remove_file(link_path);
+                let _ = remove_path_any(link_path);
             } else {
                 let _ = remove_path_any(link_path);
             }
@@ -685,11 +691,19 @@ pub fn install_skill_dir(
     options: &InstallOptions,
     warnings: &mut Vec<SkillsError>,
 ) -> InstallOutcome {
-    let raw_name = skill_path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let skill_name = sanitize_name(&raw_name);
+    let name = skill_path.file_name().unwrap_or_default().to_string_lossy();
+    install_named_skill_dir(&name, skill_path, agent, options, warnings)
+}
+
+/// Install an on-disk skill under its discovered or previously recorded name.
+pub fn install_named_skill_dir(
+    name: &str,
+    skill_path: &Path,
+    agent: &AgentConfig,
+    options: &InstallOptions,
+    warnings: &mut Vec<SkillsError>,
+) -> InstallOutcome {
+    let skill_name = sanitize_name(name);
     let source = skill_path.to_path_buf();
     install_for_agent(
         &skill_name,
@@ -1279,42 +1293,63 @@ pub fn remove_skills(
             let _ = remove_path_any(&canonical_path);
         }
 
-        let update_lock = options.lockfile != Some(false) && !is_still_used;
-        let (source, source_type) = if is_global {
-            let lock = crate::locks::read_skill_lock()?;
-            let entry = lock.skills.get(skill_name);
-            (
-                entry
-                    .map(|e| e.source.clone())
-                    .unwrap_or_else(|| "local".to_string()),
-                entry
-                    .map(|e| e.source_type.clone())
-                    .unwrap_or_else(|| "local".to_string()),
-            )
-        } else {
-            let lock = crate::locks::read_local_lock(&cwd)?;
-            let entry = lock.skills.get(skill_name);
-            (
-                entry
-                    .map(|e| e.source.clone())
-                    .unwrap_or_else(|| "local".to_string()),
-                entry
-                    .map(|e| e.source_type.clone())
-                    .unwrap_or_else(|| "local".to_string()),
-            )
+        let track_remove = options.lockfile != Some(false);
+        let prune_placements = |placements: &mut Vec<crate::locks::SkillPlacement>| {
+            let original_len = placements.len();
+            placements.retain(|placement| {
+                let Some(agent) = target_agents
+                    .iter()
+                    .find(|agent| agent.name == placement.agent)
+                else {
+                    return true;
+                };
+                let path = get_install_path(
+                    skill_name,
+                    agent,
+                    is_global,
+                    &cwd,
+                    placement.subagent.as_deref(),
+                );
+                path != canonical_path && path.join("SKILL.md").is_file()
+            });
+            original_len != placements.len()
         };
-
-        if update_lock {
-            if is_global {
-                let mut lock = crate::locks::read_skill_lock()?;
-                lock.skills.remove(skill_name);
-                crate::locks::write_skill_lock(&lock)?;
-            } else {
-                let mut lock = crate::locks::read_local_lock(&cwd)?;
-                lock.skills.remove(skill_name);
-                crate::locks::write_local_lock(&lock, &cwd)?;
+        let (source, source_type) = if is_global {
+            let mut lock = crate::locks::read_skill_lock()?;
+            let entry = lock.skills.get_mut(skill_name);
+            let source = entry
+                .as_ref()
+                .map(|e| (e.source.clone(), e.source_type.clone()));
+            if track_remove {
+                let changed = if is_still_used {
+                    entry.is_some_and(|e| prune_placements(&mut e.placements))
+                } else {
+                    lock.skills.remove(skill_name).is_some()
+                };
+                if changed {
+                    crate::locks::write_skill_lock(&lock)?;
+                }
             }
+            source
+        } else {
+            let mut lock = crate::locks::read_local_lock(&cwd)?;
+            let entry = lock.skills.get_mut(skill_name);
+            let source = entry
+                .as_ref()
+                .map(|e| (e.source.clone(), e.source_type.clone()));
+            if track_remove {
+                let changed = if is_still_used {
+                    entry.is_some_and(|e| prune_placements(&mut e.placements))
+                } else {
+                    lock.skills.remove(skill_name).is_some()
+                };
+                if changed {
+                    crate::locks::write_local_lock(&lock, &cwd)?;
+                }
+            }
+            source
         }
+        .unwrap_or_else(|| ("local".into(), "local".into()));
 
         results.push(RemoveOutcome {
             skill: skill_name.clone(),

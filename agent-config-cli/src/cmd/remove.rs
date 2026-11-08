@@ -4,10 +4,10 @@
 use clap::Args as ClapArgs;
 
 use crate::diag::{codes, CliResult, Diag};
-use crate::engine;
+use crate::engine::{self, OutcomeStatus};
 use crate::lockfile;
 
-use super::{any_failed, confirm, fail, outcome_line, scope_choice};
+use super::{confirm, fail, outcome_line, scope_choice};
 
 /// Arguments for `remove`.
 #[derive(ClapArgs, Debug)]
@@ -44,7 +44,7 @@ fn remove(args: &Args) -> CliResult<i32> {
     let scope = scope_choice(args.global);
     let scope_kind = scope.to_scope();
     let lock_path = lockfile::lockfile_path(args.global)?;
-    let mut lock = lockfile::load(&lock_path)?;
+    let lock = lockfile::load(&lock_path)?;
 
     let found = lock
         .packages
@@ -77,7 +77,16 @@ fn remove(args: &Args) -> CliResult<i32> {
     }
 
     println!("removing {package_name} ({})", entry.source);
-    let planned = engine::plan_uninstall(&items, &package_name, &scope_kind);
+    let shared = engine::shared_removals(&items, &entry.items, &package_name, &scope_kind);
+    let mut planned = engine::plan_uninstall(&items, &package_name, &scope_kind);
+    for (item, outcome) in items.iter().zip(&mut planned) {
+        if shared.contains(item) {
+            outcome.status = OutcomeStatus::WouldChange {
+                changes: vec!["remove tracking row (shared install retained)".into()],
+                refusals: vec![],
+            };
+        }
+    }
     for outcome in &planned {
         println!("{}", outcome_line(outcome));
     }
@@ -89,27 +98,49 @@ fn remove(args: &Args) -> CliResult<i32> {
         return Ok(1);
     }
 
-    let applied = engine::apply_uninstall(&items, &package_name, &scope_kind);
-    for outcome in &applied {
-        println!("{}", outcome_line(outcome));
+    let _guard = lockfile::MutationGuard::acquire(&lock_path)?;
+    let mut lock = lockfile::load(&lock_path)?;
+    if lock.packages.get(&package_name) != Some(&entry) {
+        return Err(Diag::new(
+            codes::IO,
+            "package record changed while preparing removal, retry",
+        ));
     }
-
-    if let Some(pkg) = lock.packages.get_mut(&package_name) {
-        if args.agent.is_empty() {
-            lock.packages.remove(&package_name);
-        } else {
-            pkg.items
-                .retain(|item| !args.agent.iter().any(|a| a == &item.agent));
-            if pkg.items.is_empty() {
-                lock.packages.remove(&package_name);
-            }
+    let shared = engine::shared_removals(&items, &entry.items, &package_name, &scope_kind);
+    let physical: Vec<_> = items
+        .into_iter()
+        .filter(|item| !shared.contains(item))
+        .collect();
+    let applied = engine::apply_uninstall(&physical, &package_name, &scope_kind);
+    let mut completed = shared;
+    for (item, outcome) in physical.into_iter().zip(applied) {
+        println!("{}", outcome_line(&outcome));
+        if matches!(
+            outcome.status,
+            OutcomeStatus::NoOp | OutcomeStatus::Removed { .. }
+        ) {
+            completed.insert(item);
         }
     }
-    lockfile::save(&lock_path, &lock)?;
-
-    if any_failed(&applied) {
-        Ok(1)
-    } else {
-        Ok(0)
+    let failed = planned.len() != completed.len();
+    if !completed.is_empty() {
+        let pkg = lock
+            .packages
+            .get_mut(&package_name)
+            .expect("record was checked");
+        pkg.items.retain(|item| !completed.contains(item));
+        for agent in &args.agent {
+            if completed.iter().any(|item| &item.agent == agent)
+                && !pkg.items.iter().any(|item| &item.agent == agent)
+                && !pkg.excluded_agents.contains(agent)
+            {
+                pkg.excluded_agents.push(agent.clone());
+            }
+        }
+        if pkg.items.is_empty() {
+            lock.packages.remove(&package_name);
+        }
+        lockfile::save(&lock_path, &lock)?;
     }
+    Ok(i32::from(failed))
 }

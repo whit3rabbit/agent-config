@@ -73,10 +73,15 @@ fn non_universal_agent_gets_symlink_when_root_exists() {
         &mut warnings,
     );
     assert!(outcome.success, "{:?}", outcome.error);
-    assert!(!outcome.symlink_failed);
     let agent_dir = cwd.join(".windsurf/skills/linked-skill");
     assert!(agent_dir.join("SKILL.md").exists());
     let meta = std::fs::symlink_metadata(&agent_dir).unwrap();
+    if cfg!(windows) && outcome.symlink_failed {
+        // Windows can require developer mode to create directory symlinks.
+        assert!(meta.is_dir());
+        return;
+    }
+    assert!(!outcome.symlink_failed);
     assert!(meta.file_type().is_symlink());
     let target = std::fs::read_link(&agent_dir).unwrap();
     assert!(
@@ -157,9 +162,7 @@ fn global_install_lands_in_home_agents_skills_for_universal() {
     let cwd = tmp.path();
     let canonical = get_canonical_path("some-skill", true, cwd);
     assert!(canonical.starts_with(skills_store::paths::home_dir()));
-    assert!(canonical
-        .to_string_lossy()
-        .contains(".agents/skills/some-skill"));
+    assert!(canonical.ends_with(Path::new(".agents/skills/some-skill")));
 }
 
 #[test]
@@ -200,6 +203,7 @@ fn remove_cleans_agent_links_then_canonical_and_lock() {
             subagents: None,
             well_known_digest: None,
             install_mode: None,
+            placements: vec![],
         },
     );
     skills_store::write_local_lock(&lock, cwd).unwrap();

@@ -4,8 +4,8 @@ use clap::Args as ClapArgs;
 use serde::Serialize;
 
 use crate::diag::{codes, CliResult, Diag};
-use crate::engine::{self, InstallOptions, ScopeChoice};
-use crate::lockfile::{self, LockItem, LockPackage, Lockfile};
+use crate::engine::{self, InstallOptions, OutcomeStatus, ScopeChoice, TargetOutcome};
+use crate::lockfile::{self, InstallSelection, LockItem, LockPackage, Lockfile};
 use crate::mapping::SurfaceKind;
 use crate::source;
 
@@ -80,13 +80,26 @@ fn add(args: &Args) -> CliResult<i32> {
     let scope = scope_choice(args.global);
     let resolved = source::resolve(&args.source, args.ref_name.as_deref())?;
     let instruction_file = args.instruction_file.as_ref().map(std::path::PathBuf::from);
-    let package = engine::load_package(&resolved.dir, instruction_file.as_deref())?;
+    let package = engine::load_package_with_name(
+        &resolved.dir,
+        instruction_file.as_deref(),
+        &resolved.fallback_name(),
+    )?;
+    let hash = engine::content_hash(&resolved.dir, &package.files)?;
 
     let opts = InstallOptions {
         agent_filter: args.agent.clone(),
         only,
     };
-    let (targets, target_diags) = engine::resolve_targets(&package, &opts, &scope.to_scope())?;
+    let lock_path = lockfile::lockfile_path(args.global)?;
+    let original = lockfile::load(&lock_path)?;
+    let previous = original.packages.get(&package.name);
+    let (mut targets, target_diags) = engine::resolve_targets(&package, &opts, &scope.to_scope())?;
+    if let Some(previous) = previous {
+        targets.retain(|target| {
+            !previous.excluded_agents.contains(&target.agent) || args.agent.contains(&target.agent)
+        });
+    }
 
     if !args.json {
         println!(
@@ -115,6 +128,9 @@ fn add(args: &Args) -> CliResult<i32> {
     }
 
     if args.dry_run {
+        if args.json {
+            print_json(&package, &resolved, &scope, &hash, &planned);
+        }
         return Ok(0);
     }
 
@@ -123,6 +139,14 @@ fn add(args: &Args) -> CliResult<i32> {
         return Ok(1);
     }
 
+    let _guard = lockfile::MutationGuard::acquire(&lock_path)?;
+    let mut lock = lockfile::load(&lock_path)?;
+    if lock.packages.get(&package.name) != previous {
+        return Err(Diag::new(
+            codes::IO,
+            "package record changed while preparing install, retry",
+        ));
+    }
     let applied = engine::apply_install(&targets, &scope.to_scope());
     if !args.json {
         for outcome in &applied {
@@ -130,32 +154,29 @@ fn add(args: &Args) -> CliResult<i32> {
         }
     }
 
-    let hash = engine::content_hash(&resolved.dir, &package.files)?;
-    let mut lock = lockfile::load(&lockfile::lockfile_path(args.global)?)?;
     record_install(
         &mut lock,
-        args.global,
+        &lock_path,
         &LockEntry {
             package: &package,
             resolved: &resolved,
             scope: &scope,
-            opts: &opts,
+            selection: Some(InstallSelection {
+                agents: opts.agent_filter,
+                only: opts
+                    .only
+                    .iter()
+                    .map(|surface| surface.plural().to_string())
+                    .collect(),
+            }),
             instruction_file: args.instruction_file.as_deref(),
             hash: hash.clone(),
         },
-        &targets,
+        &applied,
     )?;
 
     if args.json {
-        let out = AddJson {
-            package: package.name.clone(),
-            source: resolved.source.display.clone(),
-            scope: scope.as_str().to_string(),
-            commit: resolved.commit.clone(),
-            content_hash: hash,
-            outcomes: json_outcomes(&applied),
-        };
-        println!("{}", serde_json::to_string_pretty(&out).expect("json"));
+        print_json(&package, &resolved, &scope, &hash, &applied);
     }
 
     if any_failed(&applied) || all_skipped(&applied) {
@@ -163,6 +184,24 @@ fn add(args: &Args) -> CliResult<i32> {
     } else {
         Ok(0)
     }
+}
+
+fn print_json(
+    package: &engine::Package,
+    resolved: &source::ResolvedSource,
+    scope: &ScopeChoice,
+    hash: &str,
+    outcomes: &[TargetOutcome],
+) {
+    let out = AddJson {
+        package: package.name.clone(),
+        source: resolved.source.display.clone(),
+        scope: scope.as_str().to_string(),
+        commit: resolved.commit.clone(),
+        content_hash: hash.to_string(),
+        outcomes: json_outcomes(outcomes),
+    };
+    println!("{}", serde_json::to_string_pretty(&out).expect("json"));
 }
 
 /// Everything `record_install` needs to write one lockfile entry.
@@ -173,8 +212,8 @@ pub(crate) struct LockEntry<'a> {
     pub resolved: &'a source::ResolvedSource,
     /// Scope the install ran under.
     pub scope: &'a ScopeChoice,
-    /// Install options (agent filter, only-surfaces).
-    pub opts: &'a InstallOptions,
+    /// Explicit selection for an add, or None when replaying existing selections.
+    pub selection: Option<InstallSelection>,
     /// `--instruction-file` used, if any.
     pub instruction_file: Option<&'a str>,
     /// Content hash of the package at install time.
@@ -185,30 +224,86 @@ pub(crate) struct LockEntry<'a> {
 /// resolved source and freshly applied targets.
 pub(crate) fn record_install(
     lock: &mut Lockfile,
-    global: bool,
+    lock_path: &std::path::Path,
     entry: &LockEntry<'_>,
-    targets: &[engine::Target],
+    outcomes: &[TargetOutcome],
 ) -> CliResult<()> {
     let package = entry.package;
     let resolved = entry.resolved;
     let scope = entry.scope;
-    let opts = entry.opts;
     let instruction_file = entry.instruction_file;
-    let hash = entry.hash.clone();
-    let mut items: Vec<LockItem> = targets
+    let previous = lock.packages.get(&package.name);
+    let successes: Vec<_> = outcomes
         .iter()
-        .map(|t| LockItem {
-            surface: engine::lock_surface(t.surface).to_string(),
-            name: t.name.clone(),
-            agent: t.agent.clone(),
+        .filter(|outcome| matches!(outcome.status, OutcomeStatus::Installed { .. }))
+        .map(|outcome| LockItem {
+            surface: engine::lock_surface(outcome.surface).to_string(),
+            name: outcome.name.clone(),
+            agent: outcome.agent.clone(),
         })
         .collect();
+    let mut selections = previous
+        .map(LockPackage::install_selections)
+        .unwrap_or_default();
+    let mut replay_needed = false;
+    if let Some(selection) = &entry.selection {
+        let covers_all = selections.iter().all(|prior| {
+            (selection.agents.is_empty()
+                || (!prior.agents.is_empty()
+                    && prior
+                        .agents
+                        .iter()
+                        .all(|agent| selection.agents.contains(agent))))
+                && (selection.only.is_empty()
+                    || (!prior.only.is_empty()
+                        && prior
+                            .only
+                            .iter()
+                            .all(|surface| selection.only.contains(surface))))
+        });
+        replay_needed = !covers_all
+            && previous.is_some_and(|pkg| pkg.pending || pkg.content_hash != entry.hash);
+        if !selections.contains(selection) {
+            selections.push(selection.clone());
+        }
+    }
+    if successes.is_empty() && !outcomes.is_empty() {
+        if let Some(previous) = lock.packages.get_mut(&package.name) {
+            previous.pending = true;
+            if previous.url == resolved.source.url
+                && previous.git_ref == resolved.source.git_ref
+                && previous.subpath == resolved.source.subpath
+                && (resolved.source.kind == source::SourceKind::Git
+                    || previous.source == resolved.source.display)
+            {
+                previous.selections = selections;
+            }
+            lockfile::save(lock_path, lock)?;
+        }
+        return Ok(());
+    }
+    let mut items = previous.map(|pkg| pkg.items.clone()).unwrap_or_default();
+    let pending = replay_needed || successes.len() < outcomes.len();
+    let mut excluded_agents = previous
+        .map(|pkg| pkg.excluded_agents.clone())
+        .unwrap_or_default();
+    excluded_agents.retain(|agent| !successes.iter().any(|item| &item.agent == agent));
+    items.extend(successes);
+    let first = selections
+        .first()
+        .expect("an install records its selection");
     items.sort();
     items.dedup();
     lock.packages.insert(
         package.name.clone(),
         LockPackage {
-            source: resolved.source.display.clone(),
+            source: if matches!(scope, ScopeChoice::Global)
+                && resolved.source.kind == source::SourceKind::Local
+            {
+                resolved.dir.to_string_lossy().into_owned()
+            } else {
+                resolved.source.display.clone()
+            },
             source_type: match resolved.source.kind {
                 source::SourceKind::Git => "git",
                 source::SourceKind::Local => "local",
@@ -219,13 +314,16 @@ pub(crate) fn record_install(
             commit: resolved.commit.clone(),
             subpath: resolved.source.subpath.clone(),
             instruction_file: instruction_file.map(str::to_string),
-            content_hash: hash,
+            content_hash: entry.hash.clone(),
             installed_at: engine::timestamp_now(),
             scope: scope.as_str().to_string(),
-            agent_filter: opts.agent_filter.clone(),
-            only: opts.only.iter().map(|s| s.plural().to_string()).collect(),
+            pending,
+            agent_filter: first.agents.clone(),
+            only: first.only.clone(),
+            excluded_agents,
+            selections,
             items,
         },
     );
-    lockfile::save(&lockfile::lockfile_path(global)?, lock)
+    lockfile::save(lock_path, lock)
 }

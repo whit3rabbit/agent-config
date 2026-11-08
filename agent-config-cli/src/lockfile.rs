@@ -8,7 +8,9 @@
 //! under the library's control.
 
 use std::collections::BTreeMap;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -68,6 +70,37 @@ pub struct LockPackage {
     pub only: Vec<String>,
     /// Concrete items installed per agent.
     pub items: Vec<LockItem>,
+    /// The last attempt left some targets unapplied.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pending: bool,
+    /// Agents explicitly removed from this package.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded_agents: Vec<String>,
+    /// Agent and surface filters paired as supplied on each add.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selections: Vec<InstallSelection>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// One pair of filters from an install command.
+pub struct InstallSelection {
+    /// Empty selects every capable agent.
+    pub agents: Vec<String>,
+    /// Empty selects every surface.
+    pub only: Vec<String>,
+}
+
+impl LockPackage {
+    pub(crate) fn install_selections(&self) -> Vec<InstallSelection> {
+        if self.selections.is_empty() {
+            vec![InstallSelection {
+                agents: self.agent_filter.clone(),
+                only: self.only.clone(),
+            }]
+        } else {
+            self.selections.clone()
+        }
+    }
 }
 
 /// One installed (surface, name, agent) triple.
@@ -143,16 +176,59 @@ pub fn save(path: &Path, lock: &Lockfile) -> CliResult<()> {
     }
     let mut body = serde_json::to_string_pretty(lock).expect("lockfile serialization cannot fail");
     body.push('\n');
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, body)
-        .map_err(|e| Diag::new(codes::IO, format!("cannot write {}: {e}", tmp.display())))?;
-    std::fs::rename(&tmp, path).map_err(|e| {
-        Diag::new(
-            codes::IO,
-            format!("cannot finalize {}: {e}", path.display()),
-        )
-    })?;
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let io_error = |e| Diag::new(codes::IO, format!("cannot save {}: {e}", path.display()));
+    let mut tmp = tempfile::NamedTempFile::new_in(parent).map_err(io_error)?;
+    tmp.write_all(body.as_bytes()).map_err(io_error)?;
+    tmp.as_file().sync_all().map_err(io_error)?;
+    tmp.persist(path).map_err(|e| io_error(e.error))?;
     Ok(())
+}
+
+/// Serialize harness mutations and lockfile updates for this scope.
+pub(crate) struct MutationGuard(PathBuf);
+
+impl MutationGuard {
+    pub(crate) fn acquire(path: &Path) -> CliResult<Self> {
+        let marker = path.with_extension("json.mutation.lock");
+        let io_error = |e| Diag::new(codes::IO, format!("cannot lock {}: {e}", path.display()));
+        if let Some(parent) = marker
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
+            std::fs::create_dir_all(parent).map_err(io_error)?;
+        }
+        let started = Instant::now();
+        loop {
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&marker)
+            {
+                Ok(mut file) => {
+                    let guard = Self(marker);
+                    writeln!(file, "pid={}", std::process::id()).map_err(io_error)?;
+                    return Ok(guard);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    if started.elapsed() >= Duration::from_secs(10) {
+                        return Err(Diag::with_fix(codes::IO, format!("timed out waiting for {}", marker.display()), "if no agentconfig process is running, remove the stale mutation lock and retry"));
+                    }
+                    std::thread::sleep(Duration::from_millis(25));
+                }
+                Err(e) => return Err(io_error(e)),
+            }
+        }
+    }
+}
+
+impl Drop for MutationGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
 }
 
 #[cfg(test)]
@@ -176,6 +252,9 @@ mod tests {
                 scope: "local".to_string(),
                 agent_filter: vec![],
                 only: vec![],
+                pending: false,
+                excluded_agents: vec![],
+                selections: vec![],
                 items: vec![
                     LockItem {
                         surface: "mcp".to_string(),

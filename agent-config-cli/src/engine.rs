@@ -21,6 +21,7 @@ use crate::diag::{codes, CliResult, Diag};
 use crate::lockfile::LockItem;
 use crate::manifest::{self, Manifest};
 use crate::mapping::{self, Entry, ItemSpec, SurfaceKind};
+use crate::source::{package_path, read_capped, read_text};
 
 /// Install scope chosen on the command line.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -166,16 +167,27 @@ impl OutcomeStatus {
 /// Precedence: `--instruction-file` mode, then `agent.config.toml`, then the
 /// Agent Plugins 1.0.0 layout (`plugin.json` / `mcp.json` / `skills/`).
 pub fn load_package(dir: &Path, instruction_file: Option<&Path>) -> CliResult<Package> {
+    let name = dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(sanitize_kebab);
+    load_package_with_name(dir, instruction_file, name.as_deref().unwrap_or("package"))
+}
+
+pub(crate) fn load_package_with_name(
+    dir: &Path,
+    instruction_file: Option<&Path>,
+    fallback_name: &str,
+) -> CliResult<Package> {
     if let Some(file) = instruction_file {
-        return load_instruction_only(dir, file);
+        return load_instruction_only(dir, file, fallback_name);
     }
-    if let Some(path) = manifest::find_manifest(dir) {
-        let (manifest, parse_diags) = manifest::load(&path)?;
-        let (entries, build_diags) = mapping::build_entries(&manifest, dir);
-        let mut warnings = parse_diags;
+    let native = Path::new(manifest::MANIFEST_FILE);
+    if present(dir, native)? {
+        let (manifest, mut warnings) = manifest::load(&package_path(dir, native)?)?;
+        let (entries, build_diags, mut files) = mapping::build_entries_with_files(&manifest, dir);
         warnings.extend(build_diags);
-        let mut files = vec![PathBuf::from(manifest::MANIFEST_FILE)];
-        files.extend(referenced_files(&manifest, dir)?);
+        files.push(native.to_path_buf());
         return Ok(Package {
             name: manifest.package.name,
             entries,
@@ -183,16 +195,10 @@ pub fn load_package(dir: &Path, instruction_file: Option<&Path>) -> CliResult<Pa
             warnings,
         });
     }
-    if let Some(manifest) = load_foreign_layout(dir)? {
-        let (entries, warnings) = mapping::build_entries(&manifest, dir);
-        let mut files = Vec::new();
-        if dir.join("plugin.json").is_file() {
-            files.push(PathBuf::from("plugin.json"));
-        }
-        if dir.join("mcp.json").is_file() {
-            files.push(PathBuf::from("mcp.json"));
-        }
-        files.extend(referenced_files(&manifest, dir)?);
+    if let Some((manifest, mut files, mut warnings)) = load_foreign_layout(dir, fallback_name)? {
+        let (entries, build_diags, referenced) = mapping::build_entries_with_files(&manifest, dir);
+        files.extend(referenced);
+        warnings.extend(build_diags);
         return Ok(Package {
             name: manifest.package.name,
             entries,
@@ -211,27 +217,29 @@ pub fn load_package(dir: &Path, instruction_file: Option<&Path>) -> CliResult<Pa
     ))
 }
 
-fn load_instruction_only(dir: &Path, file: &Path) -> CliResult<Package> {
-    let abs = if file.is_absolute() {
-        file.to_path_buf()
+fn load_instruction_only(dir: &Path, file: &Path, name: &str) -> CliResult<Package> {
+    let relative;
+    let rel = if file.is_absolute() {
+        let root = dir
+            .canonicalize()
+            .map_err(|err| Diag::new(codes::IO, err.to_string()))?;
+        relative = file.canonicalize().map_err(|err| {
+            Diag::new(codes::IO, format!("cannot read {}: {err}", file.display()))
+        })?;
+        relative.strip_prefix(root).map_err(|_| {
+            Diag::new(
+                codes::INVALID_ENTRY,
+                format!(
+                    "instruction file {} escapes the source directory",
+                    file.display()
+                ),
+            )
+        })?
     } else {
-        dir.join(file)
+        file
     };
-    let body = std::fs::read_to_string(&abs).map_err(|e| {
-        Diag::new(
-            codes::IO,
-            format!("cannot read --instruction-file {}: {e}", abs.display()),
-        )
-    })?;
-    let name = dir
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "package".to_string());
-    let name = sanitize_kebab(&name);
-    let rel = abs
-        .strip_prefix(dir)
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|_| abs.clone());
+    let body = read_text(&package_path(dir, rel)?)?;
+    let name = name.to_string();
     let manifest = Manifest {
         package: manifest::PackageInfo {
             name: name.clone(),
@@ -254,43 +262,100 @@ fn load_instruction_only(dir: &Path, file: &Path) -> CliResult<Package> {
     Ok(Package {
         name,
         entries,
-        files: vec![rel],
+        files: vec![rel.to_path_buf()],
         warnings: diags,
     })
 }
 
 /// Detect an Agent Plugins 1.0.0 layout and synthesize a manifest from it.
 /// Returns `Ok(None)` when no recognizable layout exists.
-fn load_foreign_layout(dir: &Path) -> CliResult<Option<Manifest>> {
-    let plugin_name = plugin_json_name(dir);
-    let mcp_path = dir.join("mcp.json");
-    let has_mcp = mcp_path.is_file();
-    let has_skills = dir.join("skills").is_dir() || dir.join("SKILL.md").is_file();
-    if plugin_name.is_none() && !has_mcp && !has_skills {
-        return Ok(None);
-    }
-    let name = plugin_name
-        .or_else(|| {
-            dir.file_name()
-                .map(|n| sanitize_kebab(&n.to_string_lossy()))
-        })
-        .ok_or_else(|| {
+type ForeignLayout = (Manifest, Vec<PathBuf>, Vec<Diag>);
+
+fn load_foreign_layout(dir: &Path, fallback_name: &str) -> CliResult<Option<ForeignLayout>> {
+    let portable = Path::new("plugin.json");
+    let claude = Path::new(".claude-plugin/plugin.json");
+    let mut files = Vec::new();
+    let mut warnings = Vec::new();
+    let mut name = fallback_name.to_string();
+    let plugin = if present(dir, portable)? {
+        Some(portable)
+    } else if present(dir, claude)? {
+        Some(claude)
+    } else {
+        None
+    };
+    if let Some(plugin) = plugin {
+        let text = read_text(&package_path(dir, plugin)?)?;
+        let value: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
             Diag::new(
-                codes::NO_MANIFEST,
-                "cannot derive a package name from the source directory",
+                codes::INVALID_ENTRY,
+                format!("{} is not valid JSON: {e}", plugin.display()),
             )
         })?;
+        let raw_name = value
+            .get("name")
+            .and_then(|value| value.as_str())
+            .filter(|name| !name.trim().is_empty())
+            .ok_or_else(|| {
+                Diag::new(
+                    codes::INVALID_ENTRY,
+                    format!("{} needs a nonempty name", plugin.display()),
+                )
+            })?;
+        name = sanitize_kebab(raw_name);
+        files.push(plugin.to_path_buf());
+    }
+
+    let mcp_file = Path::new("mcp.json");
+    let mcp_file = if plugin == Some(claude) && !present(dir, mcp_file)? {
+        Path::new(".mcp.json")
+    } else {
+        mcp_file
+    };
+    let has_mcp = present(dir, mcp_file)?;
+    let skills_path = Path::new("skills");
+    let root_skill = Path::new("SKILL.md");
+    let has_skills = present(dir, skills_path)?;
+    let has_root_skill = present(dir, root_skill)?;
+    if plugin.is_none() && !has_mcp && !has_skills && !has_root_skill {
+        return Ok(None);
+    }
 
     let mut mcp = Vec::new();
     if has_mcp {
-        let text = std::fs::read_to_string(&mcp_path)
-            .map_err(|e| Diag::new(codes::IO, format!("cannot read mcp.json: {e}")))?;
-        mcp = parse_foreign_mcp_json(&text)?;
+        match package_path(dir, mcp_file).and_then(|path| read_text(&path)) {
+            Ok(text) => {
+                files.push(mcp_file.to_path_buf());
+                match parse_foreign_mcp_json(
+                    &text,
+                    mcp_file == Path::new(".mcp.json"),
+                    &mut warnings,
+                ) {
+                    Ok(entries) => mcp = entries,
+                    Err(diag) => warnings.push(diag),
+                }
+            }
+            Err(diag) => warnings.push(diag),
+        }
     }
 
     let mut skills = Vec::new();
-    let skills_dir = dir.join("skills");
-    if skills_dir.is_dir() {
+    let skills_dir = if has_skills {
+        match package_path(dir, skills_path) {
+            Ok(path) if path.is_dir() => Some(path),
+            Ok(_) => None,
+            Err(diag) => {
+                warnings.push(diag);
+                None
+            }
+        }
+    } else {
+        None
+    };
+    if let Some(skills_dir) = skills_dir {
+        let source_root = dir
+            .canonicalize()
+            .map_err(|e| Diag::new(codes::IO, e.to_string()))?;
         let mut kids: Vec<PathBuf> = std::fs::read_dir(&skills_dir)
             .map_err(|e| {
                 Diag::new(
@@ -299,15 +364,14 @@ fn load_foreign_layout(dir: &Path) -> CliResult<Option<Manifest>> {
                 )
             })?
             .filter_map(|e| e.map(|e| e.path()).ok())
-            .filter(|p| p.is_dir())
+            .filter(|p| std::fs::symlink_metadata(p).is_ok_and(|meta| meta.is_dir()))
             .collect();
         kids.sort();
         for kid in kids {
-            if kid.join("SKILL.md").is_file() {
+            if present(&kid, root_skill)? {
                 let rel = kid
-                    .strip_prefix(dir)
-                    .map(Path::to_path_buf)
-                    .unwrap_or(kid.clone());
+                    .strip_prefix(&source_root)
+                    .expect("contained skills directory");
                 skills.push(manifest::SkillEntry {
                     path: Some(rel.to_string_lossy().to_string()),
                     name: None,
@@ -318,7 +382,7 @@ fn load_foreign_layout(dir: &Path) -> CliResult<Option<Manifest>> {
                 });
             }
         }
-    } else if dir.join("SKILL.md").is_file() {
+    } else if has_root_skill {
         skills.push(manifest::SkillEntry {
             path: Some(".".to_string()),
             name: None,
@@ -329,43 +393,44 @@ fn load_foreign_layout(dir: &Path) -> CliResult<Option<Manifest>> {
         });
     }
 
-    Ok(Some(Manifest {
-        package: manifest::PackageInfo {
-            name,
-            version: None,
-            description: None,
+    Ok(Some((
+        Manifest {
+            package: manifest::PackageInfo {
+                name,
+                version: None,
+                description: None,
+            },
+            hooks: vec![],
+            instructions: vec![],
+            mcp,
+            skills,
         },
-        hooks: vec![],
-        instructions: vec![],
-        mcp,
-        skills,
-    }))
+        files,
+        warnings,
+    )))
 }
 
-fn plugin_json_name(dir: &Path) -> Option<String> {
-    for candidate in ["plugin.json", ".claude-plugin/plugin.json"] {
-        let path = dir.join(candidate);
-        if !path.is_file() {
-            continue;
-        }
-        let Ok(text) = std::fs::read_to_string(&path) else {
-            continue;
-        };
-        let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
-            continue;
-        };
-        if let Some(name) = value.get("name").and_then(|n| n.as_str()) {
-            return Some(sanitize_kebab(name));
-        }
+fn present(dir: &Path, relative: &Path) -> CliResult<bool> {
+    let path = dir.join(relative);
+    match std::fs::symlink_metadata(&path) {
+        Ok(_) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(Diag::new(
+            codes::IO,
+            format!("cannot inspect {}: {e}", path.display()),
+        )),
     }
-    None
 }
 
 /// Parse a standard `{ "mcpServers": { name: cfg } }` document into manifest
 /// entries. Accepts the Claude/Agent Plugins shapes: `command` (string) +
 /// `args` + `env`, or `url` + optional `type` (`http`, `sse`,
 /// `streamable-http`) + `headers`.
-fn parse_foreign_mcp_json(text: &str) -> CliResult<Vec<manifest::McpEntry>> {
+fn parse_foreign_mcp_json(
+    text: &str,
+    allow_bare: bool,
+    warnings: &mut Vec<Diag>,
+) -> CliResult<Vec<manifest::McpEntry>> {
     let value: serde_json::Value = serde_json::from_str(text).map_err(|e| {
         Diag::with_fix(
             codes::INVALID_ENTRY,
@@ -376,6 +441,11 @@ fn parse_foreign_mcp_json(text: &str) -> CliResult<Vec<manifest::McpEntry>> {
     let servers = value
         .get("mcpServers")
         .and_then(|s| s.as_object())
+        .or_else(|| {
+            (allow_bare && value.get("mcpServers").is_none())
+                .then(|| value.as_object())
+                .flatten()
+        })
         .ok_or_else(|| {
             Diag::with_fix(
                 codes::INVALID_ENTRY,
@@ -384,115 +454,135 @@ fn parse_foreign_mcp_json(text: &str) -> CliResult<Vec<manifest::McpEntry>> {
             )
         })?;
     let mut out = Vec::new();
+    let mut seen = BTreeSet::new();
     for (name, cfg) in servers {
-        let kind = cfg.get("type").and_then(|t| t.as_str()).map(|t| match t {
-            "streamable-http" => "http".to_string(),
-            other => other.to_string(),
-        });
-        let command: Option<Vec<String>> = match cfg.get("command") {
-            Some(serde_json::Value::String(c)) => {
-                let args: Vec<String> = cfg
-                    .get("args")
-                    .and_then(|a| a.as_array())
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|v| v.as_str().map(str::to_string))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                Some(std::iter::once(c.clone()).chain(args).collect())
-            }
-            Some(serde_json::Value::Array(a)) => Some(
-                a.iter()
-                    .filter_map(|v| v.as_str().map(str::to_string))
-                    .collect(),
-            ),
-            _ => None,
-        };
-        let env = cfg.get("env").and_then(|e| e.as_object()).map(|map| {
-            map.iter()
-                .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string())))
-                .collect::<std::collections::BTreeMap<_, _>>()
-        });
-        let headers = cfg.get("headers").and_then(|h| h.as_object()).map(|map| {
-            map.iter()
-                .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string())))
-                .collect::<std::collections::BTreeMap<_, _>>()
-        });
-        out.push(manifest::McpEntry {
-            name: sanitize_kebab(name),
-            kind,
-            command,
-            url: cfg.get("url").and_then(|u| u.as_str()).map(str::to_string),
-            env,
-            headers,
-            friendly_name: None,
-            agents: None,
-            skip: vec![],
-        });
+        match parse_foreign_mcp_entry(name, cfg) {
+            Ok(entry) if seen.insert(entry.name.clone()) => out.push(entry),
+            Ok(_) => warnings.push(Diag::new(
+                codes::INVALID_ENTRY,
+                format!("MCP server {name:?} duplicates a normalized name"),
+            )),
+            Err(diag) => warnings.push(diag),
+        }
     }
     Ok(out)
 }
 
-/// Every file referenced by manifest entries (rules files, instruction
-/// files, skill directories), relative to `dir`. Inline bodies live in the
-/// manifest itself and need no extra entries.
-fn referenced_files(manifest: &Manifest, dir: &Path) -> CliResult<Vec<PathBuf>> {
-    let mut files = Vec::new();
-    for hook in &manifest.hooks {
-        if let Some(rel) = &hook.rules_file {
-            files.push(PathBuf::from(rel));
-        }
-    }
-    for instruction in &manifest.instructions {
-        if let Some(rel) = &instruction.file {
-            files.push(PathBuf::from(rel));
-        }
-    }
-    for skill in &manifest.skills {
-        if let Some(rel) = &skill.path {
-            let root = dir.join(rel);
-            if root.is_dir() {
-                let mut skill_files = Vec::new();
-                source_collect(&root, &root, &mut skill_files)?;
-                for f in skill_files {
-                    files.push(PathBuf::from(rel).join(f));
-                }
-            }
-        }
-    }
-    Ok(files)
-}
-
-// Reuse of `source::collect_files` logic (kept local to avoid widening that
-// module's API): recursive relative-path listing, skipping symlinks and .git.
-fn source_collect(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) -> CliResult<()> {
-    let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)
-        .map_err(|e| Diag::new(codes::IO, format!("cannot read {}: {e}", dir.display())))?
-        .filter_map(|e| e.map(|e| e.path()).ok())
-        .collect();
-    entries.sort();
-    for path in entries {
-        let Ok(meta) = std::fs::symlink_metadata(&path) else {
-            continue;
-        };
-        if meta.is_symlink() {
-            continue;
-        }
-        if meta.is_dir() {
-            if path.file_name().and_then(|n| n.to_str()) == Some(".git") {
-                continue;
-            }
-            source_collect(root, &path, files)?;
+fn parse_foreign_mcp_entry(name: &str, cfg: &serde_json::Value) -> CliResult<manifest::McpEntry> {
+    use serde_json::Value;
+    use std::collections::BTreeMap;
+    let invalid = |detail: &str| {
+        Diag::new(
+            codes::INVALID_ENTRY,
+            format!("MCP server {name:?}: {detail}"),
+        )
+    };
+    let cfg = cfg
+        .as_object()
+        .ok_or_else(|| invalid("expected an object"))?;
+    let string = |key| {
+        cfg.get(key)
+            .map(|v| v.as_str().map(str::to_string).ok_or_else(|| invalid(key)))
+            .transpose()
+    };
+    let list = |v: &Value| -> CliResult<Vec<String>> {
+        v.as_array()
+            .ok_or_else(|| invalid("expected an array of strings"))?
+            .iter()
+            .map(|v| {
+                v.as_str()
+                    .map(str::to_string)
+                    .ok_or_else(|| invalid("expected an array of strings"))
+            })
+            .collect()
+    };
+    let map = |key| -> CliResult<Option<BTreeMap<String, String>>> {
+        cfg.get(key)
+            .map(|v| {
+                v.as_object()
+                    .ok_or_else(|| invalid(key))?
+                    .iter()
+                    .map(|(k, v)| {
+                        v.as_str()
+                            .map(|v| (k.clone(), v.to_string()))
+                            .ok_or_else(|| invalid(key))
+                    })
+                    .collect()
+            })
+            .transpose()
+    };
+    let kind = string("type")?.map(|kind| {
+        if kind == "streamable-http" {
+            "http".to_string()
         } else {
-            files.push(
-                path.strip_prefix(root)
-                    .map(Path::to_path_buf)
-                    .unwrap_or(path),
-            );
+            kind
         }
+    });
+    let command = match cfg.get("command") {
+        Some(Value::String(program)) => {
+            let args = cfg.get("args").map(list).transpose()?.unwrap_or_default();
+            Some(
+                std::iter::once(program.clone())
+                    .chain(args)
+                    .collect::<Vec<_>>(),
+            )
+        }
+        Some(value @ Value::Array(_)) if !cfg.contains_key("args") => Some(list(value)?),
+        Some(_) => {
+            return Err(invalid(
+                "expected a command string and optional args, or one command array",
+            ))
+        }
+        None if cfg.contains_key("args") => return Err(invalid("args require a command")),
+        None => None,
+    };
+    let env = map("env")?;
+    let url = string("url")?;
+    let headers = map("headers")?;
+    let runtime = |s: &str| {
+        [
+            "${PLUGIN_ROOT}",
+            "${PLUGIN_DATA}",
+            "${CLAUDE_PLUGIN_ROOT}",
+            "${CLAUDE_PLUGIN_DATA}",
+            "${user_config.",
+        ]
+        .iter()
+        .any(|token| s.contains(token))
+    };
+    if cfg.contains_key("cwd")
+        || command
+            .as_ref()
+            .and_then(|args| args.first())
+            .is_some_and(|program| {
+                program.contains(['/', '\\']) && !Path::new(program).is_absolute()
+            })
+        || command.iter().flatten().any(|value| runtime(value))
+        || env
+            .iter()
+            .flat_map(|values| values.values())
+            .any(|value| runtime(value))
+        || url.as_deref().is_some_and(runtime)
+        || headers
+            .iter()
+            .flat_map(|values| values.values())
+            .any(|value| runtime(value))
+    {
+        return Err(invalid(
+            "requires a plugin runtime (relative command, working directory, or plugin variable)",
+        ));
     }
-    Ok(())
+    Ok(manifest::McpEntry {
+        name: sanitize_kebab(name),
+        kind,
+        command,
+        url,
+        env,
+        headers,
+        friendly_name: None,
+        agents: None,
+        skip: vec![],
+    })
 }
 
 /// SHA-256 over every contributed file (sorted, length-prefixed), hex
@@ -503,9 +593,7 @@ pub fn content_hash(dir: &Path, files: &[PathBuf]) -> CliResult<String> {
     sorted.dedup();
     let mut hasher = Sha256::new();
     for rel in sorted {
-        let abs = dir.join(rel);
-        let bytes = std::fs::read(&abs)
-            .map_err(|e| Diag::new(codes::IO, format!("cannot read {}: {e}", abs.display())))?;
+        let bytes = read_capped(&package_path(dir, rel)?)?;
         hasher.update((rel.to_string_lossy().len() as u64).to_le_bytes());
         hasher.update(rel.to_string_lossy().as_bytes());
         hasher.update((bytes.len() as u64).to_le_bytes());
@@ -798,8 +886,36 @@ pub fn plan_uninstall(items: &[LockItem], owner: &str, scope: &Scope) -> Vec<Tar
 }
 
 fn plan_uninstall_one(item: &LockItem, owner: &str, scope: &Scope) -> OutcomeStatus {
-    let surface = surface_of(item);
-    let planned = match surface {
+    let planned = uninstall_plan(item, owner, scope);
+    let plan = match planned {
+        Some(Ok(p)) => p,
+        Some(Err(e)) => return OutcomeStatus::Skipped(e.to_string()),
+        None => return OutcomeStatus::Skipped("agent lookup failed".to_string()),
+    };
+    match plan.status {
+        agent_config::PlanStatus::NoOp => OutcomeStatus::NoOp,
+        agent_config::PlanStatus::WillChange => OutcomeStatus::WouldChange {
+            changes: plan
+                .changes
+                .iter()
+                .filter_map(|change| match describe_change(change) {
+                    ChangeLine::Change(line) => Some(line),
+                    _ => None,
+                })
+                .collect(),
+            refusals: Vec::new(),
+        },
+        agent_config::PlanStatus::Refused => OutcomeStatus::Skipped("refused".to_string()),
+        _ => OutcomeStatus::Skipped("unrecognized plan status".to_string()),
+    }
+}
+
+fn uninstall_plan(
+    item: &LockItem,
+    owner: &str,
+    scope: &Scope,
+) -> Option<agent_config::Result<agent_config::UninstallPlan>> {
+    match surface_of(item) {
         SurfaceKind::Hooks => by_id(&item.agent).map(|a| a.plan_uninstall(scope, &item.name)),
         SurfaceKind::Instructions => instruction_by_id(&item.agent)
             .map(|a| a.plan_uninstall_instruction(scope, &item.name, owner)),
@@ -809,32 +925,57 @@ fn plan_uninstall_one(item: &LockItem, owner: &str, scope: &Scope) -> OutcomeSta
         SurfaceKind::Skills => {
             skill_by_id(&item.agent).map(|a| a.plan_uninstall_skill(scope, &item.name, owner))
         }
-    };
-    let plan = match planned {
-        Some(Ok(p)) => p,
-        Some(Err(e)) => return OutcomeStatus::Skipped(e.to_string()),
-        None => return OutcomeStatus::Skipped("agent lookup failed".to_string()),
-    };
-    match plan.status {
-        agent_config::PlanStatus::NoOp => OutcomeStatus::NoOp,
-        agent_config::PlanStatus::WillChange => {
-            let changes = plan
-                .changes
-                .iter()
-                .map(describe_change)
-                .filter_map(|line| match line {
-                    ChangeLine::Change(c) => Some(c),
-                    _ => None,
-                })
-                .collect();
-            OutcomeStatus::WouldChange {
-                changes,
-                refusals: Vec::new(),
-            }
-        }
-        agent_config::PlanStatus::Refused => OutcomeStatus::Skipped("refused".to_string()),
-        _ => OutcomeStatus::Skipped("unrecognized plan status".to_string()),
     }
+}
+
+/// Identify selected rows whose harness files are still used by an unselected agent.
+pub(crate) fn shared_removals(
+    selected: &[LockItem],
+    all: &[LockItem],
+    owner: &str,
+    scope: &Scope,
+) -> BTreeSet<LockItem> {
+    use agent_config::PlannedChange::*;
+    let changes_for = |item: &LockItem| {
+        let plan = uninstall_plan(item, owner, scope)?.ok()?;
+        if plan.status != agent_config::PlanStatus::WillChange {
+            return None;
+        }
+        let changes: Vec<_> = plan
+            .changes
+            .into_iter()
+            .filter(|change| {
+                matches!(
+                    change,
+                    RemoveFile { .. }
+                        | RemoveDir { .. }
+                        | PatchFile { .. }
+                        | RestoreBackup { .. }
+                        | RemoveLedgerEntry { .. }
+                )
+            })
+            .collect();
+        (!changes.is_empty()).then_some(changes)
+    };
+    let remaining: Vec<_> = all
+        .iter()
+        .filter(|item| !selected.contains(item))
+        .filter_map(|item| changes_for(item).map(|changes| (item, changes)))
+        .collect();
+    selected
+        .iter()
+        .filter(|item| {
+            changes_for(item).is_some_and(|changes| {
+                remaining.iter().any(|(other, other_changes)| {
+                    item.surface == other.surface
+                        && item.name == other.name
+                        && changes.len() == other_changes.len()
+                        && changes.iter().all(|change| other_changes.contains(change))
+                })
+            })
+        })
+        .cloned()
+        .collect()
 }
 
 /// Apply an uninstall of lockfile items.

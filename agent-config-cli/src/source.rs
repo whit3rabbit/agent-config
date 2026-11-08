@@ -11,6 +11,7 @@ use std::process::Command;
 use tempfile::TempDir;
 
 use crate::diag::{codes, CliResult, Diag};
+use crate::lockfile::LockPackage;
 
 /// Parsed source reference.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,6 +52,30 @@ pub struct ResolvedSource {
 }
 
 impl ResolvedSource {
+    /// Stable name for manifest-less sources.
+    pub(crate) fn fallback_name(&self) -> String {
+        let name = match &self.source.url {
+            Some(url) => self
+                .source
+                .subpath
+                .as_deref()
+                .unwrap_or(url)
+                .split(['?', '#'])
+                .next()
+                .unwrap_or_default()
+                .trim_end_matches('/')
+                .rsplit(['/', ':'])
+                .next()
+                .unwrap_or_default(),
+            None => self
+                .dir
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("package"),
+        };
+        crate::engine::sanitize_kebab(name.strip_suffix(".git").unwrap_or(name))
+    }
+
     /// Relative paths of files under the resolved directory, sorted,
     /// excluding `.git` internals.
     pub fn tracked_files(&self) -> CliResult<Vec<PathBuf>> {
@@ -137,7 +162,7 @@ fn split_ref(input: &str) -> (&str, Option<&str>) {
     if let Some(pos) = input.rfind('@') {
         let (path, reference) = input.split_at(pos);
         let reference = &reference[1..];
-        if !reference.is_empty() && !reference.contains('/') {
+        if !reference.is_empty() {
             return (path, Some(reference));
         }
     }
@@ -207,7 +232,28 @@ fn expand_tilde(input: &str) -> PathBuf {
 /// Resolve a source to a local directory, cloning git sources into a fresh
 /// tempdir. `extra_ref` (from `--ref`) overrides a shorthand-pinned ref.
 pub fn resolve(input: &str, extra_ref: Option<&str>) -> CliResult<ResolvedSource> {
-    let source = parse(input)?;
+    let mut source = parse(input)?;
+    if source.kind == SourceKind::Git && extra_ref.is_some() {
+        source.git_ref = extra_ref.map(str::to_string);
+    }
+    resolve_source(source)
+}
+
+/// Resolve the recorded source without reparsing its display name.
+pub(crate) fn replay(pkg: &LockPackage) -> CliResult<ResolvedSource> {
+    if let Some(url) = &pkg.url {
+        return resolve_source(Source {
+            display: pkg.source.clone(),
+            kind: SourceKind::Git,
+            url: Some(url.clone()),
+            git_ref: pkg.git_ref.clone(),
+            subpath: pkg.subpath.clone(),
+        });
+    }
+    resolve(&pkg.source, pkg.git_ref.as_deref())
+}
+
+fn resolve_source(source: Source) -> CliResult<ResolvedSource> {
     match source.kind {
         SourceKind::Local => {
             let dir = if source.display.starts_with('~') {
@@ -233,7 +279,7 @@ pub fn resolve(input: &str, extra_ref: Option<&str>) -> CliResult<ResolvedSource
             let temp = TempDir::new()
                 .map_err(|e| Diag::new(codes::IO, format!("cannot create tempdir: {e}")))?;
             let url = source.url.as_deref().expect("git sources carry a url");
-            let git_ref = extra_ref.or(source.git_ref.as_deref());
+            let git_ref = source.git_ref.as_deref();
 
             if let Some(r) =
                 git_ref.filter(|r| r.len() == 40 && r.chars().all(|c| c.is_ascii_hexdigit()))
@@ -245,7 +291,7 @@ pub fn resolve(input: &str, extra_ref: Option<&str>) -> CliResult<ResolvedSource
                 if let Some(r) = git_ref {
                     cmd.arg("--branch").arg(r);
                 }
-                cmd.arg(url).arg(temp.path());
+                cmd.arg("--").arg(url).arg(temp.path());
                 run_git(cmd, format!("clone {url}"))?;
             }
             let commit = git_rev_parse(temp.path()).map_err(|_| {
@@ -257,12 +303,11 @@ pub fn resolve(input: &str, extra_ref: Option<&str>) -> CliResult<ResolvedSource
 
             let dir = match &source.subpath {
                 Some(sub) => {
-                    let dir = temp.path().join(sub);
+                    let dir = package_path(temp.path(), Path::new(sub))?;
                     if !dir.is_dir() {
-                        return Err(Diag::with_fix(
+                        return Err(Diag::new(
                             codes::SOURCE_INVALID,
-                            format!("subpath {sub:?} not found in {url}"),
-                            "check the subpath segment of the source",
+                            format!("subpath {sub:?} is not a directory"),
                         ));
                     }
                     dir
@@ -277,6 +322,81 @@ pub fn resolve(input: &str, extra_ref: Option<&str>) -> CliResult<ResolvedSource
             })
         }
     }
+}
+
+/// Resolve a package-supplied path before opening or traversing it.
+pub(crate) fn package_path(root: &Path, relative: &Path) -> CliResult<PathBuf> {
+    use std::path::Component;
+    if relative
+        .components()
+        .any(|part| !matches!(part, Component::Normal(_) | Component::CurDir))
+    {
+        return Err(Diag::new(
+            codes::INVALID_ENTRY,
+            format!(
+                "package path {} must be relative and stay inside the source",
+                relative.display()
+            ),
+        ));
+    }
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|e| Diag::new(codes::IO, format!("cannot open {}: {e}", root.display())))?;
+    let path = root.join(relative);
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| Diag::new(codes::IO, format!("cannot open {}: {e}", path.display())))?;
+    if !canonical.starts_with(canonical_root) {
+        return Err(Diag::new(
+            codes::INVALID_ENTRY,
+            format!(
+                "package path {} escapes the source directory",
+                relative.display()
+            ),
+        ));
+    }
+    Ok(canonical)
+}
+
+pub(crate) fn read_capped(path: &Path) -> CliResult<Vec<u8>> {
+    use crate::mapping::MAX_FILE_BYTES as LIMIT;
+    use std::io::Read as _;
+    let io_error = |e| Diag::new(codes::IO, format!("cannot read {}: {e}", path.display()));
+    let metadata = std::fs::metadata(path).map_err(io_error)?;
+    if !metadata.is_file() {
+        return Err(Diag::new(
+            codes::INVALID_ENTRY,
+            format!("{} must be a regular file", path.display()),
+        ));
+    }
+    let too_large = || {
+        Diag::new(
+            codes::FILE_TOO_LARGE,
+            format!("{} exceeds the 8 MiB limit", path.display()),
+        )
+    };
+    if metadata.len() > LIMIT {
+        return Err(too_large());
+    }
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)
+        .map_err(io_error)?
+        .take(LIMIT + 1)
+        .read_to_end(&mut bytes)
+        .map_err(io_error)?;
+    if bytes.len() as u64 > LIMIT {
+        return Err(too_large());
+    }
+    Ok(bytes)
+}
+
+pub(crate) fn read_text(path: &Path) -> CliResult<String> {
+    String::from_utf8(read_capped(path)?).map_err(|e| {
+        Diag::new(
+            codes::IO,
+            format!("{} is not valid UTF-8: {e}", path.display()),
+        )
+    })
 }
 
 fn fetch_commit(url: &str, sha: &str, into: &Path) -> CliResult<()> {

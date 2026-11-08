@@ -154,6 +154,9 @@ struct FragmentRef {
 }
 
 fn looks_like_git_source(input: &str) -> bool {
+    if input.starts_with("file://") {
+        return true;
+    }
     if input.starts_with("github:") || input.starts_with("gitlab:") || input.starts_with("git@") {
         return true;
     }

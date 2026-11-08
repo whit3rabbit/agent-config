@@ -198,381 +198,191 @@ pub fn run_install_from_lock(args: &[String]) {
     let frozen = options
         .frozen_lockfile
         .unwrap_or_else(crate::detect_agent::is_ci);
-    let force = options.force;
-    let lock = match locks::read_local_lock(&cwd) {
-        Ok(lock) => lock,
-        Err(err) => {
-            prompt::log_error(&err.plain());
-            std::process::exit(1);
-        }
-    };
-    let skill_entries: Vec<(String, locks::LocalSkillLockEntry)> = lock
-        .skills
-        .iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
-
-    if skill_entries.is_empty() {
-        if frozen {
-            prompt::log_error(
-                "Cannot install with --frozen-lockfile because skills-lock.json is absent or has no skills",
-            );
-            common::set_exit_code_1();
-            return;
-        }
-        prompt::log_warn("No project skills found in skills-lock.json");
-        prompt::log_info(&format!(
-            "Add project-level skills with {} (without {})",
-            color::cyan("skillz add <package>"),
-            color::cyan("-g")
-        ));
-        return;
-    }
-
-    let target_agents = match resolve_restore_agents(&options.agent, &cwd) {
-        Ok(agents) => agents,
-        Err(error) => {
-            prompt::log_error(&error.plain());
-            common::set_exit_code_1();
-            return;
-        }
-    };
-    let linked_agents: Vec<&registry::AgentConfig> = target_agents
-        .iter()
-        .copied()
-        .filter(|a| !a.is_universal())
-        .collect();
-
-    let mut node_module_skills: Vec<String> = Vec::new();
-    let mut already_installed: Vec<String> = Vec::new();
-    let mut failed_skills: Vec<String> = Vec::new();
-    let mut by_source: Vec<(String, bool, bool, Vec<String>)> = Vec::new();
-
-    for (skill_name, entry) in &skill_entries {
-        if entry.source_type == "node_modules" {
-            node_module_skills.push(skill_name.clone());
-            continue;
-        }
-        if !force
-            && installer::get_canonical_path(skill_name, false, &cwd)
-                .join("SKILL.md")
-                .exists()
-        {
-            already_installed.push(skill_name.clone());
-            continue;
-        }
-        let install_source = if entry.source_type == "download" {
-            entry.source_url.clone()
-        } else {
-            crate::update_source::build_local_update_source(entry)
-        };
-        let Some(install_source) = install_source else {
-            prompt::log_error(&diag::lock_missing_source_url(&color::cyan(skill_name)).plain());
-            failed_skills.push(skill_name.clone());
-            continue;
-        };
-        let copy = entry.install_mode.as_deref() == Some("copy");
-        let download = entry.source_type == "download";
-        let key = format!(
-            "{}:{}:{install_source}",
-            if copy { "copy" } else { "symlink" },
-            if download { "download" } else { "source" }
-        );
-        match by_source.iter_mut().find(|(k, _, _, _)| *k == key) {
-            Some((_, _, _, skills)) => skills.push(skill_name.clone()),
-            None => by_source.push((key, copy, download, vec![skill_name.clone()])),
-        }
-    }
-
-    if !already_installed.is_empty() {
-        prompt::log_info(&format!(
-            "{} skill(s) already installed {}",
-            color::cyan(&already_installed.len().to_string()),
-            color::dim("(use --force to reinstall)")
-        ));
-    }
-
-    let remote_count = skill_entries.len() - node_module_skills.len() - already_installed.len();
-    if remote_count > 0 {
-        prompt::log_info(&format!(
-            "{} {} skill(s) from skills-lock.json into {}",
-            if options.dry_run {
-                "Would restore"
-            } else {
-                "Restoring"
-            },
-            color::cyan(&remote_count.to_string()),
-            color::dim(".agents/skills/")
-        ));
-    }
-    if !linked_agents.is_empty() && (remote_count > 0 || !already_installed.is_empty()) {
-        prompt::log_info(&format!(
-            "{} to {}",
-            if options.dry_run {
-                "Would link"
-            } else {
-                "Linking"
-            },
-            linked_agents
-                .iter()
-                .map(|a| a.display_name)
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
-    }
-
-    if options.dry_run {
-        for (source, copy, _, skills) in &by_source {
-            let names: Vec<String> = skills.iter().map(|n| color::cyan(n)).collect();
-            prompt::log_plain(&format!(
-                "{} {}",
-                names.join(", "),
-                color::dim(&format!(
-                    "from {source}{}",
-                    if *copy { " (copy)" } else { "" }
-                ))
-            ));
-        }
-        return;
-    }
-
-    link_installed_skills(&already_installed, &lock, &target_agents, &cwd);
-
-    for (source, copy, download, skills) in &by_source {
-        let parsed = if *download {
-            source_parser_for_download(source)
-        } else {
-            crate::source_parser::parse_source(source)
-        };
-        let result =
-            install_group_from_source(&parsed, skills, *copy, &target_agents, frozen, &lock, &cwd);
-        match result {
-            Ok(installed) => {
-                prompt::log_success(&format!(
-                    "Restored {}",
-                    installed
-                        .iter()
-                        .map(|n| color::cyan(n))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ));
-                let installed_lower: Vec<String> =
-                    installed.iter().map(|n| n.to_lowercase()).collect();
-                let not_found: Vec<&String> = skills
-                    .iter()
-                    .filter(|name| !installed_lower.contains(&name.to_lowercase()))
-                    .collect();
-                if !not_found.is_empty() {
-                    let names = not_found.iter().map(|n| color::cyan(n)).collect::<Vec<_>>();
-                    prompt::log_error(&format!(
-                        "{} not found in {}",
-                        names.join(", "),
-                        color::cyan(source)
-                    ));
-                    failed_skills.extend(not_found.iter().map(|s| (*s).clone()));
-                }
-            }
-            Err(error) => {
-                let names = skills.iter().map(|n| color::cyan(n)).collect::<Vec<_>>();
-                prompt::log_error(&format!(
-                    "Failed to restore {} from {}: {}",
-                    names.join(", "),
-                    color::cyan(source),
-                    error.plain()
-                ));
-                failed_skills.extend(skills.iter().cloned());
-            }
-        }
-    }
-
-    if !node_module_skills.is_empty() {
-        prompt::log_info(&format!(
-            "{} skill(s) from node_modules",
-            color::cyan(&node_module_skills.len().to_string())
-        ));
-        prompt::log_warn(
-            "node_modules skills are synced by `skillz experimental_sync` (run it separately).",
-        );
-        failed_skills.extend(node_module_skills);
-    }
-
-    if !failed_skills.is_empty() {
-        let restored_note = String::new();
-        let _ = restored_note;
-        prompt::log_error(&format!(
-            "Failed to restore {} skill(s) from skills-lock.json: {}",
-            failed_skills.len(),
-            failed_skills
-                .iter()
-                .map(|n| color::cyan(n))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
+    if let Err(error) = restore_from_lock(&cwd, &options, frozen) {
+        prompt::log_error(&error.plain());
         common::set_exit_code_1();
     }
 }
 
-fn source_parser_for_download(url: &str) -> crate::source_parser::ParsedSource {
-    crate::source_parser::ParsedSource {
-        kind: crate::source_parser::SourceKind::Download,
-        url: url.to_string(),
-        subpath: None,
-        local_path: None,
-        ref_: None,
-        skill_filter: None,
-    }
-}
-
-fn install_group_from_source(
-    parsed: &crate::source_parser::ParsedSource,
-    skills: &[String],
-    copy: bool,
-    target_agents: &[&'static registry::AgentConfig],
-    frozen: bool,
-    lock: &locks::LocalSkillLock,
+fn restore_from_lock(
     cwd: &Path,
-) -> Result<Vec<String>, SkillsError> {
-    let resolve_options = crate::resolver::ResolveOptions {
-        full_depth: parsed.kind == crate::source_parser::SourceKind::Download,
-        include_internal: !skills.is_empty(),
-        ..Default::default()
-    };
-    let resolved = crate::resolver::resolve_skills(parsed, &resolve_options, None)?;
-    if crate::resolver::no_skills(&resolved) {
-        return Err(SkillsError::new(
-            "SKILLS_SOURCE_FETCH_FAILED",
-            format!("Could not fetch {}: no skills found", parsed.url),
-        ));
-    }
+    options: &InstallFromLockOptions,
+    frozen: bool,
+) -> Result<(), SkillsError> {
+    use crate::skill_payload::{find_locked, SkillPayload};
+    use crate::update_source;
+    use std::collections::BTreeMap;
 
-    // Frozen lock: refuse changed content before writing.
-    if frozen {
-        let mut changes: Vec<String> = Vec::new();
-        for skill in &resolved.discovery.skills {
-            if !skills
-                .iter()
-                .any(|name| name.eq_ignore_ascii_case(&skill.name))
-            {
-                continue;
-            }
-            if let Ok(hash) = locks::compute_folder_hash(&skill.path) {
-                if let Some(reason) = locks::lock_change_reason(lock, &skill.name, (&hash, None)) {
-                    changes.push(reason);
-                }
-            }
-        }
-        if !changes.is_empty() {
+    let mut lock = locks::read_local_lock(cwd)?;
+    if lock.skills.is_empty() {
+        if frozen {
             return Err(SkillsError::new(
                 "SKILLS_FROZEN_LOCKFILE",
-                locks::frozen_lockfile_error(&changes),
+                "skills-lock.json is absent or has no skills",
             ));
         }
+        prompt::log_warn("No project skills found in skills-lock.json");
+        return Ok(());
     }
-
-    let mut installed_names: Vec<String> = Vec::new();
-    let mode = if copy {
-        installer::InstallMode::Copy
-    } else {
-        installer::InstallMode::Symlink
-    };
-    let mut warnings: Vec<SkillsError> = Vec::new();
-    for skill in &resolved.discovery.skills {
-        if !skills
-            .iter()
-            .any(|name| name.eq_ignore_ascii_case(&skill.name))
-        {
+    let agents = resolve_restore_agents(&options.agent, cwd)?;
+    type RestoreGroup<'a> = (&'a str, &'a str, Option<&'a str>);
+    let mut groups: BTreeMap<RestoreGroup<'_>, Vec<_>> = BTreeMap::new();
+    for (name, entry) in &lock.skills {
+        if entry.source_type == "node_modules" {
+            prompt::log_error(&format!("{name}: restore with skillz experimental_sync"));
+            common::set_exit_code_1();
             continue;
         }
-        let mut any_success = false;
-        for agent in target_agents {
-            let outcome = installer::install_skill_dir(
-                &skill.path,
-                agent,
-                &installer::InstallOptions {
-                    global: installer::Scope::Project,
-                    cwd: Some(cwd.to_path_buf()),
-                    mode: Some(mode),
-                    create_missing_agent_root: true,
-                    ..Default::default()
-                },
-                &mut warnings,
-            );
-            if outcome.success {
-                any_success = true;
-            } else if let Some(error) = outcome.error {
-                prompt::log_error(&format!(
-                    "Failed to install {} for {}: {error}",
-                    color::cyan(&skill.name),
-                    agent.display_name
-                ));
-            }
-        }
-        if any_success {
-            installed_names.push(skill.name.clone());
-            // Update the local lock (unless frozen).
-            if !frozen {
-                if let Ok(hash) = locks::compute_folder_hash(&skill.path) {
-                    if let Ok(mut current) = locks::read_local_lock(cwd) {
-                        if let Some(entry) = current.skills.get(&skill.name).cloned() {
-                            let mut entry = entry;
-                            entry.computed_hash = hash;
-                            current.skills.insert(skill.name.clone(), entry);
-                            let _ = locks::write_local_lock(&current, cwd);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    Ok(installed_names)
-}
-
-/// Give already installed skills the agent links they lack (upstream
-/// `linkInstalledSkills`).
-fn link_installed_skills(
-    skill_names: &[String],
-    lock: &locks::LocalSkillLock,
-    target_agents: &[&'static registry::AgentConfig],
-    cwd: &Path,
-) {
-    for name in skill_names {
-        let path = installer::get_canonical_path(name, false, cwd);
-        let mode = if lock
-            .skills
-            .get(name)
-            .and_then(|e| e.install_mode.as_deref())
-            == Some("copy")
-        {
-            installer::InstallMode::Copy
+        let placements = if options.agent.is_empty() && !entry.placements.is_empty() {
+            entry.placements.clone()
         } else {
-            installer::InstallMode::Symlink
+            restore_placements(&agents, entry)
         };
-        for agent in target_agents {
-            if installer::get_install_path(name, agent, false, cwd, None).exists() {
-                continue;
-            }
-            let mut warnings = Vec::new();
-            let result = installer::install_skill_dir(
-                &path,
-                agent,
-                &installer::InstallOptions {
-                    global: installer::Scope::Project,
-                    cwd: Some(cwd.to_path_buf()),
-                    mode: Some(mode),
-                    create_missing_agent_root: true,
-                    ..Default::default()
-                },
-                &mut warnings,
-            );
-            if !result.success {
-                prompt::log_error(&format!(
-                    "Failed to link {} to {}: {}",
-                    color::cyan(name),
-                    agent.display_name,
-                    result.error.as_deref().unwrap_or("unknown")
-                ));
+        if !options.force
+            && !placements.is_empty()
+            && placements.iter().all(|placement| {
+                registry::agent_by_id(&placement.agent).is_some_and(|agent| {
+                    installer::get_install_path(
+                        name,
+                        agent,
+                        false,
+                        cwd,
+                        placement.subagent.as_deref(),
+                    )
+                    .join("SKILL.md")
+                    .is_file()
+                })
+            })
+        {
+            prompt::log_info(&format!("{name}: already installed"));
+            continue;
+        }
+        match update_source::local_source(entry) {
+            Ok(source) => groups
+                .entry((&entry.source_type, source, entry.ref_.as_deref()))
+                .or_default()
+                .push((name, entry, placements)),
+            Err(error) => {
+                prompt::log_error(&error.plain());
                 common::set_exit_code_1();
             }
         }
     }
+
+    let mut changes = Vec::new();
+    for ((kind, source, git_ref), entries) in groups {
+        if options.dry_run {
+            for (name, _, _) in &entries {
+                let reference = git_ref.map(|r| format!(" @ {r}")).unwrap_or_default();
+                prompt::log_info(&format!("Would restore {name} from {source}{reference}"));
+            }
+            continue;
+        }
+        let fetched = if kind == "well-known" {
+            crate::wellknown::fetch_all_skills(source, true).map(|skills| {
+                (
+                    None,
+                    skills
+                        .into_iter()
+                        .map(SkillPayload::WellKnown)
+                        .collect::<Vec<_>>(),
+                )
+            })
+        } else {
+            update_source::resolve(source, kind, git_ref).map(|resolved| {
+                let payloads = SkillPayload::from_resolved(&resolved);
+                (Some(resolved), payloads)
+            })
+        };
+        let (resolved, payloads) = match fetched {
+            Ok(source) => source,
+            Err(error) => {
+                prompt::log_error(&format!(
+                    "Could not restore from {source}: {}",
+                    error.plain()
+                ));
+                common::set_exit_code_1();
+                continue;
+            }
+        };
+        let root = resolved
+            .as_ref()
+            .and_then(|resolved| resolved.root_dir.as_deref());
+        let mut prepared = Vec::new();
+        let mut refusals = Vec::new();
+        for (name, entry, placements) in entries {
+            match find_locked(&payloads, root, name, entry.skill_path.as_deref())
+                .and_then(|payload| Ok((payload, payload.content_hash()?)))
+            {
+                Ok((payload, hash)) => {
+                    if frozen && hash != entry.computed_hash {
+                        refusals.push(format!("{name}: content hash changed"));
+                    }
+                    prepared.push((name, payload, hash, placements));
+                }
+                Err(error) => refusals.push(error.plain()),
+            }
+        }
+        if !refusals.is_empty() {
+            common::set_exit_code_1();
+            if frozen {
+                prompt::log_error(&locks::frozen_lockfile_error(&refusals));
+                continue;
+            }
+            for refusal in refusals {
+                prompt::log_error(&refusal);
+            }
+        }
+        for (name, payload, hash, placements) in prepared {
+            match crate::cmd_update::install_placements(payload, name, &placements, false, cwd) {
+                Ok(placements) => {
+                    prompt::log_success(&format!("Restored {name}"));
+                    changes.push((name.clone(), hash, payload.source_path(root), placements));
+                }
+                Err(error) => {
+                    prompt::log_error(&format!("{name}: {}", error.plain()));
+                    common::set_exit_code_1();
+                }
+            }
+        }
+    }
+    if !frozen && !changes.is_empty() {
+        for (name, hash, path, placements) in changes {
+            let entry = lock
+                .skills
+                .get_mut(&name)
+                .expect("restore came from lockfile");
+            entry.computed_hash = hash;
+            entry.skill_path = path;
+            entry.placements = placements;
+        }
+        locks::write_local_lock(&lock, cwd)?;
+    }
+    Ok(())
+}
+
+fn restore_placements(
+    agents: &[&registry::AgentConfig],
+    entry: &locks::LocalSkillLockEntry,
+) -> Vec<locks::SkillPlacement> {
+    let mut placements = Vec::new();
+    let mode = entry.install_mode.as_deref().unwrap_or("symlink");
+    for agent in agents {
+        if agent.name == "eve" {
+            if let Some(subagents) = &entry.subagents {
+                placements.extend(subagents.iter().map(|name| locks::SkillPlacement {
+                    agent: agent.name.into(),
+                    subagent: (!name.is_empty()).then(|| name.clone()),
+                    mode: mode.into(),
+                }));
+                continue;
+            }
+        }
+        placements.push(locks::SkillPlacement {
+            agent: agent.name.into(),
+            subagent: None,
+            mode: mode.into(),
+        });
+    }
+    placements
 }

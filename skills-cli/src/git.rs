@@ -291,6 +291,7 @@ pub fn clone_repo(url: &str, ref_: Option<&str>) -> Result<PathBuf, SkillsError>
         clone_args.push("--branch".into());
         clone_args.push(ref_.to_string());
     }
+    clone_args.push("--".into());
     clone_args.push(url.to_string());
     clone_args.push(clone_dir.to_string_lossy().to_string());
 
@@ -380,7 +381,6 @@ pub fn get_head_commit(repo_dir: &Path) -> Option<String> {
 
 /// Resolve the Git tree object hash for a skill folder path (matches the
 /// GitHub Trees API SHA).
-#[allow(dead_code)] // used when re-hashing cloned trees during update
 #[must_use]
 pub fn get_git_tree_hash(repo_dir: &Path, skill_path: &str) -> Option<String> {
     let normalized = skill_path.replace('\\', "/");
