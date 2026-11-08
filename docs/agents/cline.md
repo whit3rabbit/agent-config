@@ -136,12 +136,17 @@ and SDK.
 
 | Scope | Path |
 | --- | --- |
-| User | `~/.cline/skills/<name>/` |
-| Project | `.cline/skills/<name>/` |
+| User | `~/.agents/skills/<name>/` |
+| Project | `.agents/skills/<name>/` |
+| Legacy drain | `~/.cline/skills/<name>/`, `.cline/skills/<name>/` (status/uninstall only) |
 
-Each skill is a directory containing `SKILL.md`. Cline also supports
-`.clinerules/skills` and `.claude/skills` project locations, but `agent-config`
-writes the native `.cline/skills` path.
+Each skill is a directory containing `SKILL.md`. Cline natively loads the
+standard Agent Skills locations (`.agents/skills`, `~/.agents/skills`) since
+cline/cline#9074, so `agent-config` writes those. `.cline/skills/` still loads
+but is legacy; installs there from older releases are still detected and
+removed. Note `~/.agents/skills` is shared with Codex, Cursor, Pi, Copilot,
+and other standard-conforming agents — the per-root ownership ledger keeps
+multi-consumer installs safe.
 
 ## References
 
@@ -151,5 +156,6 @@ writes the native `.cline/skills` path.
 - <https://docs.cline.bot/customization/skills>
 - <https://docs.cline.bot/mcp/adding-and-configuring-servers>
 - <https://cline.bot/blog/cline-v3-36-hooks>
+- <https://github.com/cline/cline/pull/9074>
 
-Accessed: 2026-06-21.
+Accessed: 2026-11-07.

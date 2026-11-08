@@ -2,7 +2,8 @@
 
 **ID:** `hermes`
 
-**Status:** registered for prompt rules, global MCP, and global skills.
+**Status:** registered for prompt rules, global MCP, and skills (global +
+project scope).
 
 ## Prompt
 
@@ -52,16 +53,20 @@ Ownership is recorded in `.agent-config-mcp.json` beside `config.yaml`.
 
 ## Skills
 
-Hermes stores local writable skills under `~/.hermes/skills`, with category
-directories. This crate writes a dedicated category:
+Hermes stores user skills under `$HERMES_HOME/skills` (default `~/.hermes`),
+scanning nested category directories, and reads project skills from
+`<project-root>/.hermes/skills/`. This crate writes a dedicated category in
+both scopes:
 
 | Scope | Root |
 | --- | --- |
-| Global | `~/.hermes/skills/agent-config/<name>/` |
+| Global | `$HERMES_HOME/skills/agent-config/<name>/` (default `~/.hermes/skills/agent-config/<name>/`) |
+| Local | `<root>/.hermes/skills/agent-config/<name>/` |
 
-Local skill install is unsupported. External shared skill directories can be
-configured in Hermes separately, but this crate does not edit
-`skills.external_dirs`.
+The `agent-config` category keeps our installs namespaced inside Hermes'
+skill tree; nested category dirs (e.g. `mlops/axolotl/`) are an official
+Hermes layout. External shared skill directories can be configured in Hermes
+separately, but this crate does not edit `skills.external_dirs`.
 
 ## References
 
@@ -70,4 +75,4 @@ configured in Hermes separately, but this crate does not edit
 - <https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference/>
 - <https://hermes-agent.nousresearch.com/docs/user-guide/features/skills/>
 
-Accessed: 2026-04-25.
+Accessed: 2026-11-07.

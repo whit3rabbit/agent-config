@@ -3,7 +3,7 @@
 //! Public-API smoke test for the skills surface — parallel to
 //! `tests/registry.rs` and `tests/mcp_registry.rs`.
 
-use agent_config::{skill_by_id, skill_capable, Scope, ScopeKind, SkillSpec};
+use agent_config::{skill_by_id, skill_capable, Scope, SkillSpec};
 use std::collections::HashSet;
 
 const SKILL_CAPABLE: &[&str] = &[
@@ -175,29 +175,6 @@ fn skill_install_refuses_owner_mismatch_per_agent() {
             .uninstall_skill(&scope, "owned-skill", "app-a")
             .unwrap();
     }
-}
-
-#[test]
-fn local_skill_install_rejects_global_only_agents() {
-    let dir = tempfile::tempdir().unwrap();
-    let scope = Scope::Local(dir.path().to_path_buf());
-    let spec = SkillSpec::builder("owned-skill")
-        .owner("app-a")
-        .description("A test skill for scope verification.")
-        .body("## Goal\nDo the thing.\n")
-        .build();
-
-    let err = skill_by_id("hermes")
-        .unwrap()
-        .install_skill(&scope, &spec)
-        .unwrap_err();
-    assert!(matches!(
-        err,
-        agent_config::AgentConfigError::UnsupportedScope {
-            scope: ScopeKind::Local,
-            ..
-        }
-    ));
 }
 
 #[test]

@@ -65,12 +65,20 @@ fn env_path(key: &str) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-/// `~/.claude` (all platforms).
+/// `$CLAUDE_CONFIG_DIR` if set, else `~/.claude`.
+///
+/// `CLAUDE_CONFIG_DIR` is Claude Code's documented config-directory override;
+/// when set, all of Claude Code's file config (settings, memory, skills)
+/// lives under that directory instead of `~/.claude`.
 ///
 /// # Errors
 ///
-/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`].
+/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`] when
+/// `CLAUDE_CONFIG_DIR` is unset and the home directory cannot be resolved.
 pub fn claude_home() -> Result<PathBuf, AgentConfigError> {
+    if let Some(dir) = env_path("CLAUDE_CONFIG_DIR") {
+        return Ok(dir);
+    }
     Ok(home_dir()?.join(".claude"))
 }
 
@@ -99,8 +107,8 @@ pub fn gemini_home() -> Result<PathBuf, AgentConfigError> {
 /// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`] when
 /// `CODEX_HOME` is unset and the home directory cannot be resolved.
 pub fn codex_home() -> Result<PathBuf, AgentConfigError> {
-    if let Some(h) = std::env::var_os("CODEX_HOME") {
-        return Ok(PathBuf::from(h));
+    if let Some(h) = env_path("CODEX_HOME") {
+        return Ok(h);
     }
     Ok(home_dir()?.join(".codex"))
 }
@@ -114,12 +122,19 @@ pub fn openclaw_home() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".openclaw"))
 }
 
-/// `~/.hermes` (all platforms).
+/// `$HERMES_HOME` if set, else `~/.hermes`.
+///
+/// `HERMES_HOME` is the Hermes Agent's documented home-directory override;
+/// all of Hermes' file config (config.yaml, skills) lives under it.
 ///
 /// # Errors
 ///
-/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`].
+/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`] when
+/// `HERMES_HOME` is unset and the home directory cannot be resolved.
 pub fn hermes_home() -> Result<PathBuf, AgentConfigError> {
+    if let Some(dir) = env_path("HERMES_HOME") {
+        return Ok(dir);
+    }
     Ok(home_dir()?.join(".hermes"))
 }
 
@@ -359,11 +374,11 @@ mod tests {
     use super::*;
     use std::sync::{Mutex, OnceLock};
 
-    // Serializes env-var mutations across the tests below. CODEX_HOME is the
-    // only var read by these tests, but other tests in the suite that share
-    // the process can mutate HOME / USERPROFILE / APPDATA, so any test that
-    // mutates env vars must hold this mutex to avoid cross-test interference
-    // under parallel execution.
+    // Serializes env-var mutations across the tests below. CLAUDE_CONFIG_DIR,
+    // CODEX_HOME, and HERMES_HOME are read by these tests, but other tests in
+    // the suite that share the process can mutate HOME / USERPROFILE / APPDATA,
+    // so any test that mutates env vars must hold this mutex to avoid
+    // cross-test interference under parallel execution.
     fn env_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(|| Mutex::new(()))
@@ -391,7 +406,38 @@ mod tests {
     }
 
     #[test]
+    fn claude_home_respects_env_var() {
+        let _guard = env_lock().lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_path_buf();
+        let prev = std::env::var_os("CLAUDE_CONFIG_DIR");
+        std::env::set_var("CLAUDE_CONFIG_DIR", &path);
+        let resolved = claude_home().unwrap();
+        match prev {
+            Some(v) => std::env::set_var("CLAUDE_CONFIG_DIR", v),
+            None => std::env::remove_var("CLAUDE_CONFIG_DIR"),
+        }
+        assert_eq!(resolved, path);
+    }
+
+    #[test]
+    fn hermes_home_respects_env_var() {
+        let _guard = env_lock().lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_path_buf();
+        let prev = std::env::var_os("HERMES_HOME");
+        std::env::set_var("HERMES_HOME", &path);
+        let resolved = hermes_home().unwrap();
+        match prev {
+            Some(v) => std::env::set_var("HERMES_HOME", v),
+            None => std::env::remove_var("HERMES_HOME"),
+        }
+        assert_eq!(resolved, path);
+    }
+
+    #[test]
     fn home_dirs_append_correct_suffix() {
+        let _guard = env_lock().lock().unwrap();
         let cases: Vec<(Result<PathBuf, AgentConfigError>, &str)> = vec![
             (claude_home(), ".claude"),
             (cursor_home(), ".cursor"),

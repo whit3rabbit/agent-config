@@ -6,10 +6,10 @@ install_result:
 Ok(
     InstallReport {
         created: [
-            "[HOME]/.hermes/skills/agent-config/golden-skill/SKILL.md",
-            "[HOME]/.hermes/skills/agent-config/golden-skill/scripts/run.sh",
-            "[HOME]/.hermes/skills/agent-config/golden-skill/references/notes.md",
-            "[HOME]/.hermes/skills/agent-config/golden-skill/assets/sample.txt",
+            "[ROOT]/.hermes/skills/agent-config/golden-skill/SKILL.md",
+            "[ROOT]/.hermes/skills/agent-config/golden-skill/scripts/run.sh",
+            "[ROOT]/.hermes/skills/agent-config/golden-skill/references/notes.md",
+            "[ROOT]/.hermes/skills/agent-config/golden-skill/assets/sample.txt",
         ],
         patched: [],
         backed_up: [],
@@ -26,17 +26,17 @@ Ok(
             owner: "golden-owner",
         },
         config_path: Some(
-            "[HOME]/.hermes/skills/agent-config/golden-skill",
+            "[ROOT]/.hermes/skills/agent-config/golden-skill",
         ),
         ledger_path: Some(
-            "[HOME]/.hermes/skills/agent-config/.agent-config-skills.json",
+            "[ROOT]/.hermes/skills/agent-config/.agent-config-skills.json",
         ),
         files: [
             Exists {
-                path: "[HOME]/.hermes/skills/agent-config/golden-skill",
+                path: "[ROOT]/.hermes/skills/agent-config/golden-skill",
             },
             Exists {
-                path: "[HOME]/.hermes/skills/agent-config/golden-skill/SKILL.md",
+                path: "[ROOT]/.hermes/skills/agent-config/golden-skill/SKILL.md",
             },
         ],
         warnings: [],
@@ -47,7 +47,9 @@ Ok(
     ValidationReport {
         target: Skill {
             integration_id: "hermes",
-            scope: Global,
+            scope: Local(
+                "[ROOT]",
+            ),
             name: "golden-skill",
             owner: "golden-owner",
         },
@@ -60,9 +62,6 @@ Ok(
 )
 
 ROOT tree:
-<empty>
-
-HOME tree:
 directories:
 - .hermes
 - .hermes/skills
@@ -114,3 +113,6 @@ Keep this reference.
 #!/bin/sh
 echo golden
 ```
+
+HOME tree:
+<empty>

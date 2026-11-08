@@ -436,7 +436,11 @@ warrant a third shim for one consumer.
 
 - Auto-detecting which harnesses are installed on the host. Consumer's job.
 - Shipping default markdown content. Consumer supplies it.
-- A CLI binary. Lives downstream.
+- A general CLI binary for the `agent-config` library itself (hooks, MCP,
+  prompts). Lives downstream. Skills are the exception: the workspace ships
+  the `skills` CLI (`skills-cli/`) and the `skills-store` engine, both
+  wizard-compatible with vercel-labs/skills. See README "Install skills from
+  the command line".
 - A `ShellKind`/PowerShell rendering abstraction in `HookCommand`. v1 is
   POSIX-only; users targeting non-POSIX shells use `ShellUnchecked`.
 - Auto-targeting Windows host config from inside WSL. A binary running in
@@ -494,21 +498,22 @@ Reachable via existing types but no first-party shim ships:
 
 ### Harnesses
 
-Researched 2026-04-26 against spec-kit's supported list. The following
-harnesses are intentionally not registered. The architecture requires every
-agent in `registry::all()` to implement `Integration` (hooks or prompt rules),
-so harnesses with neither documented surface — even if they have skills or
-MCP — cannot be registered without speculating about file paths.
+Researched 2026-04-26 against spec-kit's supported list; skills-contract
+entries re-audited 2026-11-07 against vercel-labs/skills.
+The following harnesses are intentionally not registered. The architecture
+requires every agent in `registry::all()` to implement `Integration` (hooks or
+prompt rules), so harnesses with neither documented surface — even if they
+have skills or MCP — cannot be registered without speculating about file paths.
 
 | ID       | Reason                                                                 |
 | -------- | ---------------------------------------------------------------------- |
 | auggie   | MCP and prompt-rules file contracts not in public docs                 |
-| bob      | IDE-primary; only MCP partially documented; no skills/hooks contract   |
-| goose    | YAML recipes don't fit the `SkillSurface` model; needs separate design |
-| kimi     | TOML MCP and skills documented, but no rules/hook surface; would need a speculative `Integration` impl |
-| kiro-cli | Hooks live in per-event JSON files and MCP in agent-config files; both shapes need bespoke ledgers |
+| bob      | Skills contract documented as of 2026-11 (`.bob/skills`, `~/.bob/skills`), but still no documented rules/hook surface for a compliant `Integration` impl |
+| goose    | Skills layout documented as of 2026-11 (`.goose/skills`, `~/.config/goose/skills`) in addition to YAML recipes; still no documented rules/hook surface for a compliant `Integration` impl |
+| kimi     | Skills contract certified as of 2026-11 (`.agents/skills`, `~/.agents/skills`); still no rules/hook surface, so registration would still need a speculative `Integration` impl |
+| kiro-cli | Skills contract is now public (`.kiro/skills`, `~/.kiro/skills`; custom agents need a `resources` entry). Hooks (per-event JSON files) and MCP (agent-config files) still need bespoke ledgers |
 | shai     | Per-agent config-file format not publicly documented                   |
-| vibe     | Skills documented, but no rules/hook surface                           |
+| vibe     | Skills documented (`.vibe/skills`, `$VIBE_HOME`-aware, confirmed 2026-11), but no rules/hook surface |
 
 **Pi** was previously deferred here (2026-04-26) as "MCP only via
 `pi-mcp-adapter`". Re-checked 2026-04-28: Pi natively reads `AGENTS.md`

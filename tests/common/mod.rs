@@ -59,6 +59,8 @@ impl IsolatedGlobalEnv {
             "LOCALAPPDATA",
             "XDG_CONFIG_HOME",
             "CODEX_HOME",
+            "CLAUDE_CONFIG_DIR",
+            "HERMES_HOME",
         ];
         let saved = vars
             .into_iter()
@@ -71,6 +73,11 @@ impl IsolatedGlobalEnv {
         env::set_var("LOCALAPPDATA", &localappdata);
         env::set_var("XDG_CONFIG_HOME", &xdg_config);
         env::set_var("CODEX_HOME", home_canon.join(".codex"));
+        // Pinned to the default-under-fake-HOME values so an ambient override
+        // on the host cannot redirect writes, while resolved paths match the
+        // no-override layout the fixtures and assertions expect.
+        env::set_var("CLAUDE_CONFIG_DIR", home_canon.join(".claude"));
+        env::set_var("HERMES_HOME", home_canon.join(".hermes"));
 
         Self {
             _lock: lock,

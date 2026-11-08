@@ -17,8 +17,9 @@
 //!    `Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`,
 //!    keyed by server name under `mcpServers`. Lives in `mcp.rs`.
 //!
-//! 4. **Skills** — directory-scoped skills at `.cline/skills/<name>/`
-//!    (Local) or `~/.cline/skills/<name>/` (Global). Lives in `skills.rs`.
+//! 4. **Skills** — directory-scoped skills at the standard `.agents/skills/`
+//!    (Local) or `~/.agents/skills/` (Global); legacy `.cline/skills/` installs
+//!    are still detected and removed. Lives in `skills.rs`.
 //!
 //! 5. **Instructions** — standalone files in `.clinerules/`. Lives in
 //!    `instructions.rs`.

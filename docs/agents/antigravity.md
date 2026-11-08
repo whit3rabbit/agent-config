@@ -61,7 +61,13 @@ rules directory; no host include is needed.
 | --- | --- |
 | Workspace | `<root>/.agents/skills/<name>/` |
 | Workspace legacy fallback | `<root>/.agent/skills/<name>/` for status and uninstall |
-| Global | `~/.gemini/antigravity/skills/<name>/` |
+| Global | `~/.gemini/config/skills/<name>/` |
+| Global legacy fallback | `~/.gemini/antigravity/skills/<name>/` for status and uninstall |
+
+The global directory is the canonical `~/.gemini/config/skills/`, shared
+across the Antigravity app, IDE, and CLI. `~/.gemini/antigravity/skills/` is
+upstream-documented as a legacy location; installs there from older releases
+are still detected and removed.
 
 ### Format
 

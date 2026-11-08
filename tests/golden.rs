@@ -903,6 +903,8 @@ impl EnvGuard {
             "LOCALAPPDATA",
             "XDG_CONFIG_HOME",
             "CODEX_HOME",
+            "CLAUDE_CONFIG_DIR",
+            "HERMES_HOME",
         ];
         let guard = Self {
             vars: keys
@@ -916,6 +918,10 @@ impl EnvGuard {
         std::env::set_var("LOCALAPPDATA", env.home.join("AppData").join("Local"));
         std::env::set_var("XDG_CONFIG_HOME", &env.xdg);
         std::env::set_var("CODEX_HOME", &env.codex_home);
+        // Pinned to the default-under-fake-HOME values so an ambient override
+        // on the host cannot redirect writes mid-fixture.
+        std::env::set_var("CLAUDE_CONFIG_DIR", env.home.join(".claude"));
+        std::env::set_var("HERMES_HOME", env.home.join(".hermes"));
         guard
     }
 }

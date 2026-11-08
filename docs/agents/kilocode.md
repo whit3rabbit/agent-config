@@ -79,10 +79,13 @@ include needed.
 | Scope | Path |
 | --- | --- |
 | User | `~/.kilo/skills/<name>/` |
-| Project | `.kilo/skills/<name>/` |
+| Project | `.agents/skills/<name>/` |
+| Project legacy drain | `.kilo/skills/<name>/` (status/uninstall only) |
 
-Kilo Code also supports `.claude/skills` and `.agents/skills` compatibility
-directories in the CLI. `agent-config` writes the native Kilo path.
+Current Kilo builds load project skills from the standard `.agents/skills/`
+directory first, so `agent-config` writes that for Local installs. `.kilo/skills/`
+still loads but is legacy; installs there from older releases are still
+detected and removed. The global directory stays `~/.kilo/skills/`.
 
 ## References
 
@@ -91,4 +94,4 @@ directories in the CLI. `agent-config` writes the native Kilo path.
 - <https://kilo.ai/docs/automate/mcp/using-in-kilo-code>
 - <https://kilo.ai/docs/customize/skills>
 
-Accessed: 2026-06-21.
+Accessed: 2026-11-07.

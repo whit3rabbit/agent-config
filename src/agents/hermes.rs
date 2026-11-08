@@ -3,8 +3,9 @@
 //! Implemented surfaces:
 //!
 //! 1. **Prompt rules**: project-local fenced blocks in `.hermes.md`.
-//! 2. **Skills**: global category-scoped folders under
-//!    `~/.hermes/skills/agent-config/<name>`.
+//! 2. **Skills**: category-scoped folders under
+//!    `$HERMES_HOME/skills/agent-config/<name>` (default `~/.hermes`) and
+//!    project-local `<root>/.hermes/skills/agent-config/<name>`.
 //! 3. **MCP servers**: global YAML config at `~/.hermes/config.yaml`, under
 //!    `mcp_servers.<name>`.
 
@@ -55,17 +56,15 @@ impl HermesAgent {
         Ok(Self::require_local(scope)?.join(".hermes.md"))
     }
 
-    fn hermes_home_from_home(home: &Path) -> PathBuf {
-        home.join(".hermes")
-    }
-
-    fn mcp_config_path_from_home(home: &Path) -> PathBuf {
-        Self::hermes_home_from_home(home).join("config.yaml")
+    fn mcp_config_path_from_hermes_home(hermes_home: &Path) -> PathBuf {
+        hermes_home.join("config.yaml")
     }
 
     fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         match scope {
-            Scope::Global => Ok(Self::mcp_config_path_from_home(&paths::home_dir()?)),
+            Scope::Global => Ok(Self::mcp_config_path_from_hermes_home(
+                &paths::hermes_home()?,
+            )),
             Scope::Local(_) => Err(AgentConfigError::UnsupportedScope {
                 id: "hermes",
                 scope: ScopeKind::Local,
@@ -73,19 +72,22 @@ impl HermesAgent {
         }
     }
 
-    fn skills_root_from_home(home: &Path) -> PathBuf {
-        Self::hermes_home_from_home(home)
-            .join("skills")
-            .join(SKILL_CATEGORY)
+    fn skills_root_from_hermes_home(hermes_home: &Path) -> PathBuf {
+        hermes_home.join("skills").join(SKILL_CATEGORY)
     }
 
+    /// Skills root: `$HERMES_HOME/skills/agent-config/` (Global) or
+    /// `<root>/.hermes/skills/agent-config/` (Local).
+    ///
+    /// Hermes reads project skills from `<project-root>/.hermes/skills/` and
+    /// scans nested category directories, so both scopes use the same
+    /// `agent-config` category convention as the global root.
     fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         match scope {
-            Scope::Global => Ok(Self::skills_root_from_home(&paths::home_dir()?)),
-            Scope::Local(_) => Err(AgentConfigError::UnsupportedScope {
-                id: "hermes",
-                scope: ScopeKind::Local,
-            }),
+            Scope::Global => Ok(Self::skills_root_from_hermes_home(
+                &paths::hermes_home()?,
+            )),
+            Scope::Local(p) => Ok(p.join(".hermes").join("skills").join(SKILL_CATEGORY)),
         }
     }
 
@@ -339,7 +341,7 @@ impl SkillSurface for HermesAgent {
     }
 
     fn supported_skill_scopes(&self) -> &'static [ScopeKind] {
-        &[ScopeKind::Global]
+        &[ScopeKind::Global, ScopeKind::Local]
     }
 
     fn skill_status(
@@ -412,6 +414,7 @@ impl SkillSurface for HermesAgent {
         owner_tag: &str,
     ) -> Result<UninstallReport, AgentConfigError> {
         let root = Self::skills_root(scope)?;
+        scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
     }
 }
@@ -596,9 +599,9 @@ mod tests {
 
     #[test]
     fn global_skill_root_uses_agent_config_category() {
-        let home = PathBuf::from("/tmp/home");
+        let hermes_home = PathBuf::from("/tmp/home/.hermes");
         assert_eq!(
-            HermesAgent::skills_root_from_home(&home),
+            HermesAgent::skills_root_from_hermes_home(&hermes_home),
             PathBuf::from("/tmp/home/.hermes/skills/agent-config")
         );
     }
@@ -606,7 +609,7 @@ mod tests {
     #[test]
     fn install_skill_under_category_helper_round_trip() {
         let dir = tempdir().unwrap();
-        let root = HermesAgent::skills_root_from_home(dir.path());
+        let root = HermesAgent::skills_root_from_hermes_home(&dir.path().join(".hermes"));
         skills_dir::install(&root, &skill("alpha-skill", "myapp")).unwrap();
 
         assert!(dir
@@ -623,20 +626,26 @@ mod tests {
     }
 
     #[test]
-    fn local_skill_scope_is_rejected() {
+    fn local_skill_scope_round_trip() {
         let dir = tempdir().unwrap();
         let agent = HermesAgent::new();
         let scope = Scope::Local(dir.path().to_path_buf());
-        let err = agent
+
+        agent
             .install_skill(&scope, &skill("alpha-skill", "myapp"))
-            .unwrap_err();
-        assert!(matches!(
-            err,
-            AgentConfigError::UnsupportedScope {
-                scope: ScopeKind::Local,
-                ..
-            }
-        ));
+            .unwrap();
+        assert!(dir
+            .path()
+            .join(".hermes/skills/agent-config/alpha-skill/SKILL.md")
+            .exists());
+        assert!(agent.is_skill_installed(&scope, "alpha-skill").unwrap());
+        agent
+            .uninstall_skill(&scope, "alpha-skill", "myapp")
+            .unwrap();
+        assert!(!dir
+            .path()
+            .join(".hermes/skills/agent-config/alpha-skill")
+            .exists());
     }
 
     #[test]
@@ -722,10 +731,10 @@ mod tests {
     }
 
     #[test]
-    fn mcp_config_path_from_home_uses_hermes_home() {
-        let home = PathBuf::from("/tmp/home");
+    fn mcp_config_path_uses_hermes_home() {
+        let hermes_home = PathBuf::from("/tmp/home/.hermes");
         assert_eq!(
-            HermesAgent::mcp_config_path_from_home(&home),
+            HermesAgent::mcp_config_path_from_hermes_home(&hermes_home),
             PathBuf::from("/tmp/home/.hermes/config.yaml")
         );
     }

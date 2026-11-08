@@ -73,16 +73,20 @@ Ownership is recorded in a sidecar `<config-dir>/.agent-config-mcp.json` ledger.
 
 | Scope | Path |
 | --- | --- |
-| User | `~/.config/amp/skills/<name>/` |
+| User | `~/.config/agents/skills/<name>/` |
 | Project | `<root>/.agents/skills/<name>/` |
+| Legacy user drain | `~/.config/amp/skills/<name>/` (status/uninstall only) |
 
 Each skill is a directory with `SKILL.md` plus optional `scripts/`,
-`references/`, `assets/`. Amp also supports bundling an `mcp.json` alongside
-`SKILL.md`; this crate writes the standard layout only.
+`references/`, `assets/`. Amp moved global skills from `~/.config/amp/skills/`
+to the shared `~/.config/agents/skills/` standard; `~/.config/amp/` still hosts
+`settings.json` and the instruction ledger. Skills installed at the legacy
+location by older releases are still detected and removed.
 
 ## References
 
 - <https://ampcode.com/manual>
+- <https://ampcode.com/docs/customize/global-plugins-and-skills>
 - <https://github.com/sourcegraph/amp>
 
-Accessed: 2026-06-21.
+Accessed: 2026-11-07.

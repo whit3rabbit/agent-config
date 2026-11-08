@@ -89,8 +89,14 @@ Skills are directory-scoped packages containing `SKILL.md` manifest and optional
 
 | Scope | File |
 | --- | --- |
-| Global | `~/.gemini/antigravity-cli/skills/<name>/` |
+| Global | `~/.gemini/config/skills/<name>/` |
+| Global legacy drain | `~/.gemini/antigravity-cli/skills/<name>/` (status/uninstall only) |
 | Local | `<root>/.agents/skills/<name>/` |
+
+`~/.gemini/config/skills/` is the canonical global shared across the
+Antigravity app, IDE, and CLI. `~/.gemini/antigravity-cli/skills/` is
+CLI-only (the App does not read it); installs there from older releases are
+still detected and removed.
 
 ## References
 

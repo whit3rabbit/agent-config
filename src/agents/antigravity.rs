@@ -6,9 +6,10 @@
 //!    Legacy `.agent/rules/<tag>.md` installs are still detected and removed.
 //!
 //! 2. **Skills** — directory-scoped skills at `.agents/skills/<name>/` (Local)
-//!    or `~/.gemini/antigravity/skills/<name>/` (Global). Each skill is a
+//!    or `~/.gemini/config/skills/<name>/` (Global). Each skill is a
 //!    folder with `SKILL.md` plus optional `scripts/`/`references/`/`assets/`.
-//!    Legacy `.agent/skills/<name>/` installs are still detected and removed.
+//!    Legacy `.agent/skills/<name>/` and global `~/.gemini/antigravity/skills/`
+//!    installs are still detected and removed.
 //!
 //! 3. **MCP servers** — JSON config at `.agents/mcp_config.json` (Local) or
 //!    `~/.gemini/config/mcp_config.json` (Global), keyed by server name
@@ -59,18 +60,23 @@ impl AntigravityAgent {
     }
 
     /// Skills root: `<root>/.agents/skills/` (Local) or
-    /// `~/.gemini/antigravity/skills/` (Global). Both scopes are supported
+    /// `~/.gemini/config/skills/` (Global). Both scopes are supported
     /// for skills.
+    ///
+    /// The canonical global directory is `~/.gemini/config/skills/`, shared
+    /// across the Antigravity app, IDE, and CLI. `~/.gemini/antigravity/skills/`
+    /// is upstream-documented as legacy and remains a status/uninstall drain
+    /// target via [`Self::legacy_skills_root`].
     fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
-            Scope::Global => paths::gemini_home()?.join("antigravity").join("skills"),
+            Scope::Global => paths::gemini_home()?.join("config").join("skills"),
             Scope::Local(p) => p.join(".agents").join("skills"),
         })
     }
 
     fn legacy_skills_root(scope: &Scope) -> Option<PathBuf> {
         match scope {
-            Scope::Global => None,
+            Scope::Global => Some(paths::gemini_home().ok()?.join("antigravity").join("skills")),
             Scope::Local(p) => Some(p.join(".agent").join("skills")),
         }
     }

@@ -16,17 +16,17 @@ Ok(
         },
         status: Absent,
         config_path: Some(
-            "[HOME]/.hermes/skills/agent-config/golden-skill",
+            "[ROOT]/.hermes/skills/agent-config/golden-skill",
         ),
         ledger_path: Some(
-            "[HOME]/.hermes/skills/agent-config/.agent-config-skills.json",
+            "[ROOT]/.hermes/skills/agent-config/.agent-config-skills.json",
         ),
         files: [
             Missing {
-                path: "[HOME]/.hermes/skills/agent-config/golden-skill",
+                path: "[ROOT]/.hermes/skills/agent-config/golden-skill",
             },
             Missing {
-                path: "[HOME]/.hermes/skills/agent-config/golden-skill/SKILL.md",
+                path: "[ROOT]/.hermes/skills/agent-config/golden-skill/SKILL.md",
             },
         ],
         warnings: [],
@@ -37,7 +37,9 @@ Ok(
     ValidationReport {
         target: Skill {
             integration_id: "hermes",
-            scope: Global,
+            scope: Local(
+                "[ROOT]",
+            ),
             name: "golden-skill",
             owner: "golden-owner",
         },

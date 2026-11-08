@@ -1,6 +1,6 @@
 {
   "_warning": "AUTO-GENERATED. Do not edit by hand. Regenerate on Linux via `cargo run --example gen_schema` or `AGENT_SCHEMA_UPDATE=1 cargo test --test schema_golden`. A few VS Code globalStorage paths are OS-specific; the canonical schema is the Linux view.",
-  "crate_version": "0.4.0",
+  "crate_version": "0.5.0",
   "placeholders": {
     "home": "~",
     "project_root": "<project>",
@@ -575,7 +575,8 @@
         },
         "skill": {
           "supported_scopes": [
-            "global"
+            "global",
+            "local"
           ],
           "scopes": {
             "global": {
@@ -590,6 +591,22 @@
               ],
               "ledger_files": [
                 "~/.hermes/skills/agent-config/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.hermes/skills/agent-config/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.hermes",
+                "<project>/.hermes/skills",
+                "<project>/.hermes/skills/agent-config",
+                "<project>/.hermes/skills/agent-config/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.hermes/skills/agent-config/.agent-config-skills.json"
               ],
               "refusals": []
             }
@@ -1087,30 +1104,30 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.cline/skills/placeholder/SKILL.md"
+                "~/.agents/skills/placeholder/SKILL.md"
               ],
               "directories": [
-                "~/.cline",
-                "~/.cline/skills",
-                "~/.cline/skills/placeholder"
+                "~/.agents",
+                "~/.agents/skills",
+                "~/.agents/skills/placeholder"
               ],
               "ledger_files": [
-                "~/.cline/skills/.agent-config-skills.json"
+                "~/.agents/skills/.agent-config-skills.json"
               ],
               "refusals": []
             },
             "local": {
               "config_files": [
-                "<project>/.cline/skills/placeholder/SKILL.md"
+                "<project>/.agents/skills/placeholder/SKILL.md"
               ],
               "directories": [
                 "<project>",
-                "<project>/.cline",
-                "<project>/.cline/skills",
-                "<project>/.cline/skills/placeholder"
+                "<project>/.agents",
+                "<project>/.agents/skills",
+                "<project>/.agents/skills/placeholder"
               ],
               "ledger_files": [
-                "<project>/.cline/skills/.agent-config-skills.json"
+                "<project>/.agents/skills/.agent-config-skills.json"
               ],
               "refusals": []
             }
@@ -1431,16 +1448,16 @@
             },
             "local": {
               "config_files": [
-                "<project>/.kilo/skills/placeholder/SKILL.md"
+                "<project>/.agents/skills/placeholder/SKILL.md"
               ],
               "directories": [
                 "<project>",
-                "<project>/.kilo",
-                "<project>/.kilo/skills",
-                "<project>/.kilo/skills/placeholder"
+                "<project>/.agents",
+                "<project>/.agents/skills",
+                "<project>/.agents/skills/placeholder"
               ],
               "ledger_files": [
-                "<project>/.kilo/skills/.agent-config-skills.json"
+                "<project>/.agents/skills/.agent-config-skills.json"
               ],
               "refusals": []
             }
@@ -1552,16 +1569,16 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.gemini/antigravity/skills/placeholder/SKILL.md"
+                "~/.gemini/config/skills/placeholder/SKILL.md"
               ],
               "directories": [
                 "~/.gemini",
-                "~/.gemini/antigravity",
-                "~/.gemini/antigravity/skills",
-                "~/.gemini/antigravity/skills/placeholder"
+                "~/.gemini/config",
+                "~/.gemini/config/skills",
+                "~/.gemini/config/skills/placeholder"
               ],
               "ledger_files": [
-                "~/.gemini/antigravity/skills/.agent-config-skills.json"
+                "~/.gemini/config/skills/.agent-config-skills.json"
               ],
               "refusals": []
             },
@@ -1688,16 +1705,16 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.gemini/antigravity-cli/skills/placeholder/SKILL.md"
+                "~/.gemini/config/skills/placeholder/SKILL.md"
               ],
               "directories": [
                 "~/.gemini",
-                "~/.gemini/antigravity-cli",
-                "~/.gemini/antigravity-cli/skills",
-                "~/.gemini/antigravity-cli/skills/placeholder"
+                "~/.gemini/config",
+                "~/.gemini/config/skills",
+                "~/.gemini/config/skills/placeholder"
               ],
               "ledger_files": [
-                "~/.gemini/antigravity-cli/skills/.agent-config-skills.json"
+                "~/.gemini/config/skills/.agent-config-skills.json"
               ],
               "refusals": []
             },
@@ -1832,16 +1849,16 @@
           "scopes": {
             "global": {
               "config_files": [
-                "~/.config/amp/skills/placeholder/SKILL.md"
+                "~/.config/agents/skills/placeholder/SKILL.md"
               ],
               "directories": [
                 "~/.config",
-                "~/.config/amp",
-                "~/.config/amp/skills",
-                "~/.config/amp/skills/placeholder"
+                "~/.config/agents",
+                "~/.config/agents/skills",
+                "~/.config/agents/skills/placeholder"
               ],
               "ledger_files": [
-                "~/.config/amp/skills/.agent-config-skills.json"
+                "~/.config/agents/skills/.agent-config-skills.json"
               ],
               "refusals": []
             },

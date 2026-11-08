@@ -13,7 +13,9 @@
 //! 4. **Hooks**: event hooks inside `hooks.json` at `<root>/.agents/hooks.json` (Local)
 //!    or `~/.gemini/antigravity-cli/hooks.json` (Global).
 //! 5. **Skills**: directory-scoped skills at `.agents/skills/<name>/` (Local)
-//!    or `~/.gemini/antigravity-cli/skills/<name>/` (Global).
+//!    or `~/.gemini/config/skills/<name>/` (Global, shared with the
+//!    Antigravity app/IDE). Legacy CLI-only `~/.gemini/antigravity-cli/skills/`
+//!    installs are still detected and removed.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -70,11 +72,48 @@ impl AntigravityCliAgent {
         })
     }
 
+    /// Skills root: `<root>/.agents/skills/` (Local) or
+    /// `~/.gemini/config/skills/` (Global).
+    ///
+    /// `~/.gemini/config/skills/` is the canonical global shared across the
+    /// Antigravity app, IDE, and CLI; `~/.gemini/antigravity-cli/skills/` is
+    /// CLI-only and kept as a status/uninstall drain target via
+    /// [`Self::legacy_skills_root`].
     fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         Ok(match scope {
-            Scope::Global => paths::antigravity_cli_home()?.join("skills"),
+            Scope::Global => paths::gemini_home()?.join("config").join("skills"),
             Scope::Local(p) => p.join(".agents").join("skills"),
         })
+    }
+
+    /// Pre-migration CLI-only global skills root, still probed for status and
+    /// uninstall so previously installed skills drain.
+    fn legacy_skills_root(scope: &Scope) -> Option<PathBuf> {
+        match scope {
+            Scope::Global => Some(paths::antigravity_cli_home().ok()?.join("skills")),
+            Scope::Local(_) => None,
+        }
+    }
+
+    /// Returns the root actually holding `name`: the canonical root when the
+    /// skill directory or its ledger entry exists there, else the legacy
+    /// global root, else the canonical root for new installs.
+    fn existing_skills_root(scope: &Scope, name: &str) -> Result<PathBuf, AgentConfigError> {
+        SkillSpec::validate_name(name)?;
+        let root = Self::skills_root(scope)?;
+        let (dir, _, ledger) = skills_dir::paths_for_status(&root, name);
+        if dir.exists() || ownership::owner_of(&ledger, name)?.is_some() {
+            return Ok(root);
+        }
+
+        if let Some(legacy) = Self::legacy_skills_root(scope) {
+            let (dir, _, ledger) = skills_dir::paths_for_status(&legacy, name);
+            if dir.exists() || ownership::owner_of(&ledger, name)?.is_some() {
+                return Ok(legacy);
+            }
+        }
+
+        Ok(root)
     }
 
     fn instruction_config_dir(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
@@ -383,6 +422,23 @@ impl SkillSurface for AntigravityCliAgent {
         SkillSpec::validate_name(name)?;
         let root = Self::skills_root(scope)?;
         let (dir, manifest, ledger) = skills_dir::paths_for_status(&root, name);
+        if !dir.exists() && ownership::owner_of(&ledger, name)?.is_none() {
+            if let Some(legacy) = Self::legacy_skills_root(scope) {
+                let (legacy_dir, legacy_manifest, legacy_ledger) =
+                    skills_dir::paths_for_status(&legacy, name);
+                if legacy_dir.exists() || ownership::owner_of(&legacy_ledger, name)?.is_some() {
+                    let recorded = ownership::owner_of(&legacy_ledger, name)?;
+                    return Ok(StatusReport::for_skill(
+                        name,
+                        legacy_dir,
+                        legacy_manifest,
+                        legacy_ledger,
+                        expected_owner,
+                        recorded,
+                    ));
+                }
+            }
+        }
         let recorded = ownership::owner_of(&ledger, name)?;
         Ok(StatusReport::for_skill(
             name,
@@ -418,7 +474,7 @@ impl SkillSurface for AntigravityCliAgent {
             scope,
             name,
             owner_tag,
-            Self::skills_root(scope),
+            Self::existing_skills_root(scope, name),
         )
     }
 
@@ -438,7 +494,9 @@ impl SkillSurface for AntigravityCliAgent {
         name: &str,
         owner_tag: &str,
     ) -> Result<UninstallReport, AgentConfigError> {
-        let root = Self::skills_root(scope)?;
+        SkillSpec::validate_name(name)?;
+        HookSpec::validate_tag(owner_tag)?;
+        let root = Self::existing_skills_root(scope, name)?;
         scope.ensure_contained(&root)?;
         skills_dir::uninstall(&root, name, owner_tag)
     }

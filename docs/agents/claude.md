@@ -2,6 +2,10 @@
 
 ID: `claude` — `agent_config::by_id("claude")`
 
+Global-scope paths below resolve under `~/.claude`; when the host sets
+`CLAUDE_CONFIG_DIR` (Claude Code's documented config-directory override),
+every `~/.claude/...` path is rooted at that directory instead.
+
 ## Hooks
 
 ### User scope (`Scope::Global`)
