@@ -1,24 +1,39 @@
 # agent-config
 
-**What it does**
+A Rust library for installing skills, hooks, MCP servers, prompt rules, and
+instruction files into AI coding harnesses (Claude Code, Cursor, Codex,
+Copilot, and 20+ more). Every agent keeps its config in a different place and
+in a different shape.
 
-- Installs hooks, prompt rules, MCP servers, skills, and standalone instruction
-  files into AI coding harnesses (Claude Code, Cursor, Codex, Copilot, and 20+
-  more).
-- Centralizes per-harness config locations and shapes. You supply a `HookSpec`,
-  `McpSpec`, `SkillSpec`, or `InstructionSpec`; the library knows where each
-  harness keeps its config, what shape that config takes, and how to write to it
-  safely.
-- A thin, generic installer: ships no default content, embeds no
-  consumer-specific commands, has no CLI binary, does no host detection. Take a
-  spec, produce the right files in the right places, undo that cleanly later.
+`agent-config` centralizes that knowledge: you supply a `HookSpec`,
+`McpSpec`, `SkillSpec`, or `InstructionSpec`, and the library writes the
+right files in the right places, then undoes that cleanly later.
+
+The library is deliberately thin. It ships no default content, embeds no
+consumer-specific commands, has no CLI binary of its own, and does no host
+detection. One spec installs across every supported harness, so downstream
+tools don't reimplement per-tool layout.
+
+Just want skills installed into your coding agents? Skip the Rust entirely:
+the bundled [`skills` CLI](#install-skills-from-the-command-line) does it from
+your terminal, no code required.
+
+[![crates.io](https://img.shields.io/crates/v/agent-config.svg)](https://crates.io/crates/agent-config)
+[![docs.rs](https://img.shields.io/docsrs/agent-config)](https://docs.rs/agent-config)
+[![CI](https://github.com/whit3rabbit/agent-config/actions/workflows/ci.yml/badge.svg)](https://github.com/whit3rabbit/agent-config/actions/workflows/ci.yml)
+[![MIT licensed](https://img.shields.io/crates/l/agent-config.svg)](LICENSE)
+
+[Install skills](#install-skills-from-the-command-line) •
+[Library](#use-the-library-from-rust) •
+[TUI](#browse-every-surface-in-a-tui) •
+[Harnesses](#supported-harnesses) •
+[Usage](#usage) •
+[License](#license)
 
 **Why it's for developers**
 
 - Stop looking up config locations for each harness.
 - Stop tracking where every tool gets installed and how to remove it.
-- One spec installs across every supported harness; downstream tools don't
-  reimplement per-harness layout.
 
 **Safety guarantees** (every integration):
 
@@ -28,16 +43,156 @@
 - **Idempotent.** Calling `install` twice with the same spec is a no-op
   after the first.
 - **Reversible.** `uninstall` removes only the tagged content. Hook JSON
-  entries carry an `_agent_config_tag` marker; markdown blocks are wrapped in
+  entries carry an `_agent_config_tag` marker. Markdown blocks are wrapped in
   `<!-- BEGIN AGENT-CONFIG:<tag> --> ... <!-- END AGENT-CONFIG:<tag> -->`
   fences. MCP servers, skills, and instructions use sidecar ledgers. Multiple
   consumers coexist without stepping on each other.
 
-## Add it to your project
+## Install skills from the command line
+
+The workspace also ships a drop-in replacement for the
+[`vercel-labs/skills`](https://github.com/vercel-labs/skills) CLI, built on the
+[`skills-store`](skills-store/) engine: install, update, and remove Agent
+Skills across every coding agent through one canonical `.agents/skills`
+directory plus per-agent symlinks.
+
+### Get the binary
+
+From a clone of this repository:
+
+```bash
+cargo install --path skills-cli   # puts `skills` on your PATH
+# or, without installing:
+cargo run -p skills-cli -- add vercel-labs/agent-skills
+```
+
+### Install a skill
+
+`web-design-guidelines` from `vercel-labs/agent-skills` is the most-installed
+skill on [skills.sh](https://skills.sh), so it makes a good first run. From
+your project:
+
+```bash
+skills add vercel-labs/agent-skills
+```
+
+The wizard lists the skills in the repo and the agents detected on your
+machine (searchable, with universal `.agents/skills` agents shown as an
+always-included locked section), then asks for the install scope and method
+before writing anything. Non-interactive equivalent:
+
+```bash
+# One skill, every detected agent, no prompts
+skills add vercel-labs/agent-skills --skill web-design-guidelines -y
+
+# User-level instead of project-level
+skills add vercel-labs/agent-skills --skill web-design-guidelines -g -y
+
+# One skill, one agent
+skills add vercel-labs/agent-skills --skill web-design-guidelines -a claude-code
+```
+
+The `-y` run installs once into the canonical directory and links the agents
+that need their own copy:
+
+```text
+◇  Installed 1 skill ──────────────────────────────────╮
+│                                                      │
+│  ✓ ./.agents/skills/web-design-guidelines            │
+│    universal: Antigravity, Codex, Gemini CLI,        │
+│    GitHub Copilot, OpenCode +16 more                 │
+│    symlinked: Claude Code                            │
+│                                                      │
+╰──────────────────────────────────────────────────────╯
+
+│
+└  Done!  Review skills before use; they run with full agent permissions.
+```
+
+`universal` agents read `.agents/skills` directly, so one copy serves them
+all. Agents with their own skills directory get a symlink into it, and agents
+with no directory in this project are skipped rather than created.
+
+### Other commands
+
+| Command                          | Description                      |
+| -------------------------------- | -------------------------------- |
+| `skills find [query]`            | Search skills.sh                 |
+| `skills list` (`ls`)             | List installed skills            |
+| `skills use <source>@<skill>`    | Use one skill without installing |
+| `skills check`                   | Check for available updates      |
+| `skills update [skills...]`      | Update installed skills          |
+| `skills remove [skills...]`      | Remove installed skills          |
+| `skills experimental_install`    | Restore from `skills-lock.json`  |
+| `skills init [name]`             | Create a new skill               |
+
+`skills list` after the install above:
+
+```text
+Project Skills
+
+  web-design-guidelines ./.agents/skills/web-design-guidelines
+    Agents: Antigravity, Claude Code, Codex, Gemini CLI, GitHub Copilot +4 more  Source: vercel-labs/agent-skills
+```
+
+### Compatibility with the upstream CLI
+
+- The same on-disk model: canonical `.agents/skills` (project) and
+  `~/.agents/skills` (home), relative symlinks for agents that do not read the
+  canonical location, `--copy` mode, and the same
+  `missing-agent-project-directory` skip rules.
+- The same lock files: `skills-lock.json` (project, schema v1, committed) and
+  `.skill-lock.json` (global, schema v3). Skills installed by the upstream CLI
+  are listed and removable by this one, and the other way around. Verified
+  bidirectionally against `skills@1.7.6`.
+- The same command surface (`add`/`a`/`install`/`i`, `use`, `remove`/`rm`/`r`,
+  `list`/`ls`, `find`/`search`/`f`/`s`, `update`/`upgrade`, `check`,
+  `experimental_install`, `init`, `experimental_sync`), the same flags, the
+  same `--json` machine output, and the same interactive wizard (searchable
+  multiselect with the locked universal section, an install-method prompt, a
+  scope prompt, and installation summary notes).
+- The same diagnostics rendering (`[SKILLS_CODE] why` + `fix:` lines) and the
+  same agent registry (79 agents including the neutral `universal` target).
+
+Deliberate divergences: no telemetry is sent anywhere, the Notion pack
+integration is not implemented, and `experimental_sync` covers the core
+node_modules flows (shipped skills, `npm:` entries, and staleness pruning) but
+not remote `skills`-field git sources.
+
+### Embed it from Rust
+
+Install through the library, no CLI needed:
 
 ```toml
 [dependencies]
-agent-config = "0.4"
+skills-store = { path = "skills-store" }   # or a crates.io release when published
+```
+
+```rust,no_run
+use std::path::Path;
+use skills_store::{install_skill_dir, InstallOptions, Scope};
+
+let mut warnings = Vec::new();
+for agent in skills_store::detect_installed_agents(Path::new(".")) {
+    install_skill_dir(
+        Path::new("./my-skill"),
+        agent,
+        &InstallOptions { global: Scope::Project, ..Default::default() },
+        &mut warnings,
+    );
+}
+```
+
+`skills-store` is network-free by design: fetch sources yourself (git clone,
+HTTPS download, and well-known discovery) and hand the material to
+`install_skill_dir` (directory on disk) or `install_skill_files` (in-memory
+files). The `skills` binary in `skills-cli/` wires the two together.
+
+## Use the library from Rust
+
+```toml
+[dependencies]
+agent-config = "0.5"
 ```
 
 Minimal install: build a spec, look up the harness by id, call `install`.
@@ -71,7 +226,7 @@ Per-surface examples (MCP, skills, instructions, dry-run, uninstall) are in
 > but not for a running application.
 
 Each snippet has a runnable counterpart under
-[`examples/`](examples/README.md). Run with `cargo run --example <name>`; every
+[`examples/`](examples/README.md). Run with `cargo run --example <name>`. Every
 example writes into a fresh tempdir so it never touches the host's real config.
 
 ## Browse every surface in a TUI
@@ -87,10 +242,11 @@ cargo run --example tui_dry_run
 Four tabs (SKILLS, MCP, HOOKS, INSTRUCTIONS) each list the harnesses that
 support that surface. Move with `↑`/`↓` (or `j`/`k`), check rows with
 `Space`, flip `Local` / `Global` scope with `g`, and press `Enter` for an
-aggregate dry-run across the selection. Press `?` for the full keymap,
-`q` to quit. Nothing is written to disk; only `plan_install_*` runs, so
-flipping to `Global` safely previews real `~/.claude/...`,
-`~/.gemini/...`, etc. paths without touching them.
+aggregate dry-run across the selection.
+
+Press `?` for the full keymap, `q` to quit. Nothing is written to disk.
+Only `plan_install_*` runs. Flipping to `Global` safely previews real
+`~/.claude/...`, `~/.gemini/...`, etc. paths without touching them.
 
 Runnable: [`examples/tui_dry_run/`](examples/tui_dry_run/main.rs). For
 all bundled examples see [`examples/README.md`](examples/README.md).
@@ -99,76 +255,51 @@ all bundled examples see [`examples/README.md`](examples/README.md).
 
 | Harness                | ID            | Hooks              | Prompt rules | MCP              | Skills           | Instructions     |
 | ---------------------- | ------------- | ------------------ | ------------ | ---------------- | ---------------- | ---------------- |
-| [Claude Code]          | `claude`      | Global + Local     | yes          | Global + Local   | Global + Local   | Global + Local   |
-| [Cursor]               | `cursor`      | Global + Local     | -            | Global + Local   | Global + Local   | -                |
-| [Gemini CLI]           | `gemini`      | Global + Local     | yes          | Global + Local   | Global + Local   | Global + Local   |
-| [Codex CLI]            | `codex`       | Global + Local     | yes          | Global + Local   | Global + Local   | Global + Local   |
-| [GitHub Copilot]       | `copilot`     | Local              | yes          | Global + Local   | Global + Local   | Local            |
-| [OpenCode]             | `opencode`    | Global + Local     | yes          | Global + Local   | Global + Local   | Global + Local   |
-| [Cline]                | `cline`       | Local              | yes          | Global           | Global + Local   | Local            |
-| [Roo Code]             | `roo`         | -                  | yes          | Global + Local   | -                | Local            |
-| [Windsurf]             | `windsurf`    | Local              | yes          | Global + Local   | Global + Local   | Local            |
-| [Kilo Code]            | `kilocode`    | -                  | yes          | Global + Local   | Global + Local   | Local            |
-| [Google Antigravity]   | `antigravity` | -                  | yes          | Global + Local   | Global + Local   | Local            |
-| [Antigravity CLI]      | `antigravitycli` | -               | yes          | Global + Local   | -                | Global + Local   |
-| [Amp]                  | `amp`         | -                  | yes          | Global + Local   | Global + Local   | Global + Local   |
-| [CodeBuddy CLI]        | `codebuddy`   | Global + Local     | yes          | -                | Global + Local   | Global + Local   |
-| [Charm Crush]          | `crush`       | Global + Local     | yes          | Global + Local   | Global + Local   | Global + Local   |
-| [Forge]                | `forge`       | -                  | yes          | Global + Local   | Global + Local   | Global + Local   |
-| [iFlow CLI]            | `iflow`       | Global + Local     | -            | Global + Local   | -                | -                |
-| [JetBrains Junie]      | `junie`       | -                  | yes (Local)  | Global + Local   | -                | Local            |
-| [Pi]                   | `pi`          | -                  | yes          | Global + Local   | Global + Local   | Global + Local   |
-| [Qoder CLI]            | `qodercli`    | -                  | yes          | Global + Local   | -                | Global + Local   |
-| [Qwen Code]            | `qwen`        | -                  | yes          | Global + Local   | Global + Local   | Global + Local   |
-| [Tabnine CLI]          | `tabnine`     | Global + Local     | -            | Global + Local   | -                | -                |
-| [Trae]                 | `trae`        | -                  | yes (Local)  | -                | Global + Local   | Local            |
-| [OpenClaw]             | `openclaw`    | -                  | yes (Local)  | Global           | Global + Local   | Local            |
-| [Hermes Agent]         | `hermes`      | -                  | yes (Local)  | Global           | Global           | Local            |
+| [Claude Code](docs/agents/claude.md)          | `claude`      | Global + Local     | yes          | Global + Local   | Global + Local   | Global + Local   |
+| [Cursor](docs/agents/cursor.md)               | `cursor`      | Global + Local     | -            | Global + Local   | Global + Local   | -                |
+| [Gemini CLI](docs/agents/gemini.md)           | `gemini`      | Global + Local     | yes          | Global + Local   | Global + Local   | Global + Local   |
+| [Codex CLI](docs/agents/codex.md)             | `codex`       | Global + Local     | yes          | Global + Local   | Global + Local   | Global + Local   |
+| [GitHub Copilot](docs/agents/copilot.md)       | `copilot`     | Local              | yes          | Global + Local   | Global + Local   | Local            |
+| [OpenCode](docs/agents/opencode.md)           | `opencode`    | Global + Local     | yes          | Global + Local   | Global + Local   | Global + Local   |
+| [Cline](docs/agents/cline.md)                 | `cline`       | Local              | yes          | Global           | Global + Local   | Local            |
+| [Roo Code](docs/agents/roo.md)                | `roo`         | -                  | yes          | Global + Local   | -                | Local            |
+| [Windsurf](docs/agents/windsurf.md)           | `windsurf`    | Local              | yes          | Global + Local   | Global + Local   | Local            |
+| [Kilo Code](docs/agents/kilocode.md)          | `kilocode`    | -                  | yes          | Global + Local   | Global + Local   | Local            |
+| [Google Antigravity](docs/agents/antigravity.md) | `antigravity` | -                | yes          | Global + Local   | Global + Local   | Local            |
+| [Antigravity CLI](docs/agents/antigravitycli.md) | `antigravitycli` | -             | yes          | Global + Local   | Global + Local   | Global + Local   |
+| [Amp](docs/agents/amp.md)                     | `amp`         | -                  | yes          | Global + Local   | Global + Local   | Global + Local   |
+| [CodeBuddy CLI](docs/agents/codebuddy.md)     | `codebuddy`   | Global + Local     | yes          | -                | Global + Local   | Global + Local   |
+| [Charm Crush](docs/agents/crush.md)           | `crush`       | Global + Local     | yes          | Global + Local   | Global + Local   | Global + Local   |
+| [Forge](docs/agents/forge.md)                 | `forge`       | -                  | yes          | Global + Local   | Global + Local   | Global + Local   |
+| [iFlow CLI](docs/agents/iflow.md)             | `iflow`       | Global + Local     | -            | Global + Local   | -                | -                |
+| [JetBrains Junie](docs/agents/junie.md)       | `junie`       | -                  | yes (Local)  | Global + Local   | -                | Local            |
+| [Pi](docs/agents/pi.md)                       | `pi`          | -                  | yes          | Global + Local   | Global + Local   | Global + Local   |
+| [Qoder CLI](docs/agents/qodercli.md)          | `qodercli`    | -                  | yes          | Global + Local   | -                | Global + Local   |
+| [Qwen Code](docs/agents/qwen.md)              | `qwen`        | -                  | yes          | Global + Local   | Global + Local   | Global + Local   |
+| [Tabnine CLI](docs/agents/tabnine.md)         | `tabnine`     | Global + Local     | -            | Global + Local   | -                | -                |
+| [Trae](docs/agents/trae.md)                   | `trae`        | -                  | yes (Local)  | -                | Global + Local   | Local            |
+| [OpenClaw](docs/agents/openclaw.md)           | `openclaw`    | -                  | yes (Local)  | Global           | Global + Local   | Local            |
+| [Hermes Agent](docs/agents/hermes.md)         | `hermes`      | -                  | yes (Local)  | Global           | Global + Local   | Local            |
 
 **Lifecycle notes:**
 
-- **Roo Code** (`roo`) is **retired** — all Roo Code products shut down on
+- **Roo Code** (`roo`) is **retired**. All Roo Code products shut down on
   2026-05-15. The integration is kept for compatibility and migration only.
-- **Gemini CLI** (`gemini`) is **legacy / conditional** — consumer tiers (free,
-  AI Pro, AI Ultra) stopped being served on 2026-06-18; enterprise and paid
+- **Gemini CLI** (`gemini`) is **legacy / conditional**. Consumer tiers (free,
+  AI Pro, AI Ultra) stopped being served on 2026-06-18. Enterprise and paid
   API-key users remain supported. New consumer-tier work belongs on
   `antigravitycli`.
 
-[Claude Code]: docs/agents/claude.md
-[Cursor]: docs/agents/cursor.md
-[Gemini CLI]: docs/agents/gemini.md
-[Codex CLI]: docs/agents/codex.md
-[GitHub Copilot]: docs/agents/copilot.md
-[OpenCode]: docs/agents/opencode.md
-[Cline]: docs/agents/cline.md
-[Roo Code]: docs/agents/roo.md
-[Windsurf]: docs/agents/windsurf.md
-[Kilo Code]: docs/agents/kilocode.md
-[Google Antigravity]: docs/agents/antigravity.md
-[Antigravity CLI]: docs/agents/antigravitycli.md
-[Amp]: docs/agents/amp.md
-[CodeBuddy CLI]: docs/agents/codebuddy.md
-[Charm Crush]: docs/agents/crush.md
-[Forge]: docs/agents/forge.md
-[iFlow CLI]: docs/agents/iflow.md
-[JetBrains Junie]: docs/agents/junie.md
-[Pi]: docs/agents/pi.md
-[Qoder CLI]: docs/agents/qodercli.md
-[Qwen Code]: docs/agents/qwen.md
-[Tabnine CLI]: docs/agents/tabnine.md
-[Trae]: docs/agents/trae.md
-[OpenClaw]: docs/agents/openclaw.md
-[Hermes Agent]: docs/agents/hermes.md
-
-Per-harness install paths, JSON shapes, and event/matcher mappings are
-documented in [`docs/agents/`](docs/agents/README.md). The release support
-contract is summarized in [`docs/support-matrix.md`](docs/support-matrix.md).
-A machine-readable manifest of every agent's surfaces, paths, ledger files,
-and marker conventions lives at [`schema/agents.json`](schema/agents.json),
-auto-generated by [`examples/gen_schema.rs`](examples/gen_schema.rs) from
-the live registry. Runnable end-to-end examples for every surface live in
-[`examples/`](examples/README.md). The security model and ownership-ledger
-guarantees are described in [`docs/SECURITY.md`](docs/SECURITY.md).
+- Per-harness install paths, JSON shapes, and event/matcher mappings:
+  [`docs/agents/`](docs/agents/README.md)
+- Release support contract: [`docs/support-matrix.md`](docs/support-matrix.md)
+- Machine-readable manifest of surfaces, paths, ledger files, and marker
+  conventions: [`schema/agents.json`](schema/agents.json), auto-generated by
+  [`examples/gen_schema.rs`](examples/gen_schema.rs) from the live registry
+- Runnable end-to-end examples for every surface:
+  [`examples/`](examples/README.md)
+- Security model and ownership-ledger guarantees:
+  [`docs/SECURITY.md`](docs/SECURITY.md)
 
 > **Schema platform note.** `schema/agents.json` is the **Linux-canonical**
 > view. Several agents (Cline, Roo) resolve their global MCP path through
@@ -185,14 +316,14 @@ hook contract.
 
 ## Usage
 
-The hook install above is the minimal case. The rest of the surfaces follow the
+The hook install above is the minimal case. Every other surface follows the
 same shape: build a spec, look it up by id, call the matching method.
 
 ### Scopes and tags
 
-`Scope::Global` writes under the user's harness config dir
+`Scope::Global` writes under the user's config dir
 (`~/.claude/`, `~/.cursor/`, etc.). `Scope::Local(PathBuf)` writes inside
-a specific project root. For the scope-gating contract (which harnesses
+a specific project root. For the scope-gating contract (which tools
 accept which scopes) see
 [`examples/scopes_local_vs_global.rs`](examples/scopes_local_vs_global.rs).
 
@@ -221,7 +352,7 @@ let spec = HookSpec::builder("myapp")
 
 For Claude this lands as a fenced block inside `~/.claude/CLAUDE.md` (or
 `<root>/CLAUDE.md` for `Scope::Local`). Each harness uses its own memory
-file; the fence shape is identical.
+file. The fence shape is identical.
 
 ### Uninstall
 
@@ -368,7 +499,7 @@ What that writes:
                                                                (ownership ledger)
 ```
 
-Three placement modes are available; pick the one that matches the harness:
+Three placement modes are available. Pick the one that matches the harness:
 
 ```text
   InstructionPlacement
@@ -386,7 +517,7 @@ Three placement modes are available; pick the one that matches the harness:
                              agents whose memory model is a per-file rules dir)
 ```
 
-Uninstall is keyed on `(name, owner_tag)`, mirroring MCP and skills:
+Uninstall is keyed on `(name, owner_tag)`. This mirrors MCP and skills:
 
 ```rust
 let claude = agent_config::instruction_by_id("claude").unwrap();
@@ -404,18 +535,19 @@ Instructions are a separate surface from `HookSpec::rules`:
   hook. Tied to the hook's lifecycle (uninstall the hook, the block goes away).
   Best for short usage notes that travel with a tool's hook integration.
 - **`InstructionSpec`**: a standalone, named instruction with an independent
-  lifecycle, ledger-tracked ownership, and (for ReferencedFile placements) a
-  separate file that the harness loads via `@import`. Best for long-lived
+  lifecycle and ledger-tracked ownership. ReferencedFile placements also write
+  a separate file that the harness loads via `@import`. Best for long-lived
   toolchain instructions that should remain even when no hooks are installed.
 
 #### Naming caveat
 
 For `ReferencedFile` and `InlineBlock` placements, the instruction's `name` is
 also the markdown fence tag (`<!-- BEGIN AGENT-CONFIG:<name> --> ... -->`).
-If you install both a hook with `tag = "T"` and an instruction with
-`name = "T"` into the same memory file, the second upsert silently replaces
-the first. Pick a name that does not collide with any of your hook tags
-(prefix it, e.g. `instr-myapp`, or use `StandaloneFile` placement).
+A hook with `tag = "T"` and an instruction with `name = "T"` in the same
+memory file collide. The second upsert silently replaces the first.
+
+Pick a name that does not collide with any of your hook tags (prefix it,
+e.g. `instr-myapp`, or use `StandaloneFile` placement).
 
 ### Iterate every supported harness
 
@@ -447,7 +579,7 @@ for instr in instruction_capable() {
 ```
 
 `Integration::supported_scopes()` tells you which scopes a given harness
-accepts. Copilot, for example, is `Local` only; calling `install` on it
+accepts. Copilot, for example, is `Local` only. Calling `install` on it
 with `Scope::Global` returns `AgentConfigError::UnsupportedScope`.
 
 Use `mcp_capable()` / `mcp_by_id()` for MCP, `skill_capable()` /
@@ -462,10 +594,10 @@ For a runnable version of the above, see
 
 Every install/uninstall has a side-effect-free planner: `plan_install`,
 `plan_uninstall`, `plan_install_mcp`, `plan_install_skill`,
-`plan_install_instruction` (and the matching uninstall variants). They return
+`plan_install_instruction` (and the matching uninstall variants). Each returns
 an `InstallPlan` / `UninstallPlan` whose `status` is `WillChange`, `NoOp`, or
-`Refused`, and whose `changes` enumerate every file write, ledger entry,
-backup, and permission change the real call would perform, without touching
+`Refused`. Its `changes` enumerate every file write, ledger entry, backup, and
+permission change the real call would perform, without touching
 the filesystem.
 
 ```rust
@@ -501,8 +633,8 @@ explicitly:
 The crate runs the same way on every platform it builds for, but the
 *environment* it targets is whatever it is launched in:
 
-- **Native macOS / Linux** — fully supported.
-- **Native Windows** — supported for harnesses with a documented Windows
+- **Native macOS / Linux**: fully supported.
+- **Native Windows**: supported for harnesses with a documented Windows
   config path (e.g. Claude, Cursor, Codex, Gemini, the `~/.cline/` CLI data
   dir for Cline, the VS Code-extension MCP file for Roo).
   `paths::home_dir()` honors `%USERPROFILE%` and
@@ -511,19 +643,19 @@ The crate runs the same way on every platform it builds for, but the
   Windows** with [`RefusalReason::UnsupportedPlatform`] / the matching
   [`AgentConfigError::UnsupportedPlatform`]. Cline rules and MCP / skill /
   instruction installs continue to work.
-- **WSL** — treated as a Linux environment. A binary running inside WSL
-  resolves `$HOME` and writes WSL config; it does not magically reach the
+- **WSL**: treated as a Linux environment. A binary running inside WSL
+  resolves `$HOME` and writes WSL config. It does not magically reach the
   Windows host profile under `/mnt/c/...`.
-- **Targeting Windows host config from inside WSL** — explicitly out of
+- **Targeting Windows host config from inside WSL**: explicitly out of
   scope for v1. Future work would gate this behind an opt-in `GlobalTarget`
   / `PathRoots` API rather than auto-detection.
 
-[`HookCommand::render_shell`] produces POSIX-shell quoting; consumers
+[`HookCommand::render_shell`] produces POSIX-shell quoting. Consumers
 targeting a non-POSIX shell (PowerShell / `cmd.exe`) should construct
 [`HookCommand::ShellUnchecked`] and quote the command themselves.
 
 ## License
 
-MIT
+MIT licensed. See [LICENSE](LICENSE).
 </content>
 </invoke>
