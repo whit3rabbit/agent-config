@@ -173,9 +173,11 @@ impl SkillPayload {
 
     fn description(&self) -> String {
         match self {
-            SkillPayload::Disk(path) => skills_store::skills::parse_skill_md(&path.join("SKILL.md"))
-                .map(|skill| skill.description)
-                .unwrap_or_default(),
+            SkillPayload::Disk(path) => {
+                skills_store::skills::parse_skill_md(&path.join("SKILL.md"))
+                    .map(|skill| skill.description)
+                    .unwrap_or_default()
+            }
             SkillPayload::Blob(skill) => skill.description.clone(),
             SkillPayload::WellKnown(skill) => skill.description.clone(),
         }
@@ -184,7 +186,8 @@ impl SkillPayload {
     fn plugin_name(&self) -> Option<String> {
         match self {
             SkillPayload::Disk(path) => {
-                skills_store::skills::parse_skill_md(&path.join("SKILL.md")).and_then(|s| s.plugin_name)
+                skills_store::skills::parse_skill_md(&path.join("SKILL.md"))
+                    .and_then(|s| s.plugin_name)
             }
             _ => None,
         }
@@ -212,14 +215,20 @@ fn install_payload_for_target(
     warnings: &mut Vec<SkillsError>,
 ) -> TargetInstallResult {
     let options = installer::InstallOptions {
-        global: if global { installer::Scope::Global } else { installer::Scope::Project },
+        global: if global {
+            installer::Scope::Global
+        } else {
+            installer::Scope::Project
+        },
         mode: Some(mode),
         cwd: Some(cwd.to_path_buf()),
         eve_subagent: target.subagent.clone(),
         create_missing_agent_root,
     };
     let outcome = match payload {
-        SkillPayload::Disk(path) => installer::install_skill_dir(path, target.agent, &options, warnings),
+        SkillPayload::Disk(path) => {
+            installer::install_skill_dir(path, target.agent, &options, warnings)
+        }
         SkillPayload::Blob(skill) => installer::install_skill_snapshot(
             &skill.name,
             &skill.files,
@@ -228,9 +237,18 @@ fn install_payload_for_target(
             warnings,
         ),
         SkillPayload::WellKnown(skill) => {
-            let files: Vec<(String, Vec<u8>)> =
-                skill.files.iter().map(|(path, content)| (path.clone(), content.as_bytes())).collect();
-            installer::install_skill_files(&skill.install_name, &files, target.agent, &options, warnings)
+            let files: Vec<(String, Vec<u8>)> = skill
+                .files
+                .iter()
+                .map(|(path, content)| (path.clone(), content.as_bytes()))
+                .collect();
+            installer::install_skill_files(
+                &skill.install_name,
+                &files,
+                target.agent,
+                &options,
+                warnings,
+            )
         }
     };
     TargetInstallResult {
@@ -275,10 +293,16 @@ fn build_install_targets(
     for agent in target_agents {
         if agent.name == "eve" {
             for subagent in eve_subagent_targets {
-                targets.push(InstallTarget { agent, subagent: subagent.clone() });
+                targets.push(InstallTarget {
+                    agent,
+                    subagent: subagent.clone(),
+                });
             }
         } else {
-            targets.push(InstallTarget { agent, subagent: None });
+            targets.push(InstallTarget {
+                agent,
+                subagent: None,
+            });
         }
     }
     targets
@@ -295,7 +319,9 @@ fn exit_installation_cancelled() -> ! {
 
 fn select_agents_interactive(global: Option<bool>) -> Option<Vec<&'static AgentConfig>> {
     let supports_global = |agent: &'static AgentConfig| -> bool {
-        global.map(|g| !g || global_dir_supported(agent)).unwrap_or(true)
+        global
+            .map(|g| !g || global_dir_supported(agent))
+            .unwrap_or(true)
     };
     let universal_agents: Vec<&'static AgentConfig> = registry::universal_agents()
         .into_iter()
@@ -343,11 +369,16 @@ fn select_agents_interactive(global: Option<bool>) -> Option<Vec<&'static AgentC
         })
         .collect();
 
-    let last_selected = locks::read_skill_lock().ok().and_then(|lock| lock.last_selected_agents);
+    let last_selected = locks::read_skill_lock()
+        .ok()
+        .and_then(|lock| lock.last_selected_agents);
     let initial_selected: Vec<String> = last_selected
         .unwrap_or_default()
         .into_iter()
-        .filter(|name| other_agents.iter().any(|a| a.name == name) && !universal_agents.iter().any(|a| a.name == name))
+        .filter(|name| {
+            other_agents.iter().any(|a| a.name == name)
+                && !universal_agents.iter().any(|a| a.name == name)
+        })
         .collect();
 
     let selected = crate::search_multiselect::search_multiselect(&SearchMultiselectOptions {
@@ -358,7 +389,9 @@ fn select_agents_interactive(global: Option<bool>) -> Option<Vec<&'static AgentC
         locked_section: Some(LockedSection {
             title: "Universal (.agents/skills)".to_string(),
             items: locked_items,
-            hidden_count: universal_agents.len().saturating_sub(visible_universal.len()),
+            hidden_count: universal_agents
+                .len()
+                .saturating_sub(visible_universal.len()),
         }),
         searchable: true,
         show_detail: false,
@@ -405,10 +438,19 @@ pub fn run_add(sources: Vec<String>, mut options: AddOptions) {
         );
         println!();
         println!("{}", color::dim("  Usage:"));
-        println!("    {} {} {}", color::cyan("skills add"), color::yellow("<source>"), color::dim("[options]"));
+        println!(
+            "    {} {} {}",
+            color::cyan("skills add"),
+            color::yellow("<source>"),
+            color::dim("[options]")
+        );
         println!();
         println!("{}", color::dim("  Example:"));
-        println!("    {} {}", color::cyan("skills add"), color::yellow("vercel-labs/agent-skills"));
+        println!(
+            "    {} {}",
+            color::cyan("skills add"),
+            color::yellow("vercel-labs/agent-skills")
+        );
         println!();
         if options.json {
             println!("[]");
@@ -435,8 +477,10 @@ pub fn run_add(sources: Vec<String>, mut options: AddOptions) {
             if let Some(name) = &agent_result.agent {
                 if let Some(agent_id) = detect_agent::get_agent_type(name) {
                     if let Some(agent) = registry::agent_by_id(agent_id) {
-                        options.agent =
-                            common::ensure_universal_agents(vec![agent]).iter().map(|a| a.name.to_string()).collect();
+                        options.agent = common::ensure_universal_agents(vec![agent])
+                            .iter()
+                            .map(|a| a.name.to_string())
+                            .collect();
                     }
                 }
             }
@@ -477,7 +521,13 @@ pub fn run_add(sources: Vec<String>, mut options: AddOptions) {
             .cloned()
             .collect();
         if !invalid.is_empty() {
-            let error = diag::invalid_agents(&invalid, &valid_agent_ids.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+            let error = diag::invalid_agents(
+                &invalid,
+                &valid_agent_ids
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>(),
+            );
             prompt::log_error(&error.plain());
             if options.json {
                 println!("[]");
@@ -487,7 +537,12 @@ pub fn run_add(sources: Vec<String>, mut options: AddOptions) {
     }
 
     let mut options = options;
-    let result = run_add_inner(&source, &mut options, &explicitly_selected_agents, &mut json_results);
+    let result = run_add_inner(
+        &source,
+        &mut options,
+        &explicitly_selected_agents,
+        &mut json_results,
+    );
     if let Err(error) = result {
         let is_clone_error = matches!(
             error.code,
@@ -523,7 +578,10 @@ pub fn run_add(sources: Vec<String>, mut options: AddOptions) {
                 reason: None,
                 error: Some(error.plain()),
             });
-            println!("{}", serde_json::to_string_pretty(&json_results).unwrap_or_else(|_| "[]".to_string()));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json_results).unwrap_or_else(|_| "[]".to_string())
+            );
         }
         std::process::exit(1);
     }
@@ -558,8 +616,16 @@ fn run_add_inner(
                 .to_string(),
             _ => parsed.url.clone(),
         },
-        parsed.ref_.as_ref().map(|r| format!(" @ {}", color::yellow(r))).unwrap_or_default(),
-        parsed.subpath.as_ref().map(|s| format!(" ({s})")).unwrap_or_default(),
+        parsed
+            .ref_
+            .as_ref()
+            .map(|r| format!(" @ {}", color::yellow(r)))
+            .unwrap_or_default(),
+        parsed
+            .subpath
+            .as_ref()
+            .map(|s| format!(" ({s})"))
+            .unwrap_or_default(),
         parsed
             .skill_filter
             .as_ref()
@@ -595,7 +661,10 @@ fn run_add_inner(
 
     if parsed.kind == SourceKind::Local {
         spinner.message("Validating local path…");
-        let local_path = parsed.local_path.clone().unwrap_or_else(|| PathBuf::from(&parsed.url));
+        let local_path = parsed
+            .local_path
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(&parsed.url));
         if !local_path.exists() {
             spinner.stop(&color::red("Path not found"));
             let error = diag::local_path_not_found(&local_path.to_string_lossy());
@@ -609,7 +678,11 @@ fn run_add_inner(
     let mut payloads: Vec<SkillPayload> = Vec::new();
     let mut blob_result: Option<crate::blob::BlobInstallResult> = None;
     if let Some(skills) = &well_known_skills {
-        payloads = skills.clone().into_iter().map(SkillPayload::WellKnown).collect();
+        payloads = skills
+            .clone()
+            .into_iter()
+            .map(SkillPayload::WellKnown)
+            .collect();
     } else {
         let resolve_options = ResolveOptions {
             include_internal,
@@ -617,7 +690,8 @@ fn run_add_inner(
             include_duplicate_names: false,
             skill_filter: parsed.skill_filter.clone(),
         };
-        let resolved: ResolvedSkills = resolver::resolve_skills(&parsed, &resolve_options, Some(&spinner))?;
+        let resolved: ResolvedSkills =
+            resolver::resolve_skills(&parsed, &resolve_options, Some(&spinner))?;
         let empty = resolver::no_skills(&resolved);
         blob_result = resolved.blob_result;
         if empty {
@@ -716,7 +790,10 @@ fn run_add_inner(
                 exact
             };
             for skill in matches {
-                if !selected.iter().any(|p| p.display_name() == skill.display_name()) {
+                if !selected
+                    .iter()
+                    .any(|p| p.display_name() == skill.display_name())
+                {
                     selected.push(match skill {
                         SkillPayload::Disk(path) => SkillPayload::Disk(path.clone()),
                         SkillPayload::Blob(b) => SkillPayload::Blob(b.clone()),
@@ -748,8 +825,7 @@ fn run_add_inner(
             }
         }
         if selected.is_empty() {
-            let available: Vec<String> =
-                payloads.iter().map(|p| p.display_name()).collect();
+            let available: Vec<String> = payloads.iter().map(|p| p.display_name()).collect();
             let error = diag::no_matching_skills(&options.skill, &available);
             prompt::log_error(&error.plain());
             if options.json {
@@ -780,7 +856,10 @@ fn run_add_inner(
                 (Some(_pa), None) => std::cmp::Ordering::Less,
                 (None, Some(_pb)) => std::cmp::Ordering::Greater,
                 (Some(pa), Some(pb)) if pa != pb => pa.cmp(&pb),
-                _ => a.display_name().to_lowercase().cmp(&b.display_name().to_lowercase()),
+                _ => a
+                    .display_name()
+                    .to_lowercase()
+                    .cmp(&b.display_name().to_lowercase()),
             }
         });
         let has_groups = sorted.iter().any(|p| p.plugin_name().is_some());
@@ -796,7 +875,10 @@ fn run_add_inner(
             .collect();
         let selected = crate::search_multiselect::search_multiselect(&SearchMultiselectOptions {
             message: if has_groups {
-                format!("Select skills to install {}", color::dim("(space to toggle)"))
+                format!(
+                    "Select skills to install {}",
+                    color::dim("(space to toggle)")
+                )
             } else {
                 "Select skills to install".to_string()
             },
@@ -901,12 +983,16 @@ fn run_add_inner(
                 prompt::SelectOption {
                     value: "project".to_string(),
                     label: "Project".to_string(),
-                    hint: Some("Install in current directory (committed with your project)".to_string()),
+                    hint: Some(
+                        "Install in current directory (committed with your project)".to_string(),
+                    ),
                 },
                 prompt::SelectOption {
                     value: "global".to_string(),
                     label: "Global".to_string(),
-                    hint: Some("Install in home directory (available across all projects)".to_string()),
+                    hint: Some(
+                        "Install in home directory (available across all projects)".to_string(),
+                    ),
                 },
             ],
             None,
@@ -1004,11 +1090,15 @@ fn run_add_inner(
     {
         let audit_source = source_parser::get_owner_repo(&parsed);
         if let Some(owner_repo) = audit_source {
-            let slugs: Vec<String> =
-                selected_payloads.iter().map(|p| p.display_name()).collect();
+            let slugs: Vec<String> = selected_payloads.iter().map(|p| p.display_name()).collect();
             if let Some(audit) = crate::find_api::fetch_audit_data(&owner_repo, &slugs) {
                 let mut security_lines: Vec<String> = Vec::new();
-                let name_width = slugs.iter().map(|s| s.chars().count()).max().unwrap_or(0).min(36);
+                let name_width = slugs
+                    .iter()
+                    .map(|s| s.chars().count())
+                    .max()
+                    .unwrap_or(0)
+                    .min(36);
                 let pad = |text: &str, width: usize| {
                     let visible = color::visible_len(text);
                     format!("{text}{}", " ".repeat(width.saturating_sub(visible)))
@@ -1099,23 +1189,24 @@ fn run_add_inner(
         results.iter().filter(|(_, _, r)| r.success).collect();
     let failed: Vec<&(String, String, TargetInstallResult)> =
         results.iter().filter(|(_, _, r)| !r.success).collect();
-    let successful_names: HashSet<&String> =
-        successful.iter().map(|(name, _, _)| name).collect();
+    let successful_names: HashSet<&String> = successful.iter().map(|(name, _, _)| name).collect();
 
     // Lock files.
     let normalized_source = match parsed.kind {
         SourceKind::Local => None,
         _ => source_parser::get_owner_repo(&parsed),
     };
-    let json_source = normalized_source.clone().unwrap_or_else(|| match parsed.kind {
-        SourceKind::Local => parsed
-            .local_path
-            .clone()
-            .unwrap_or_else(|| PathBuf::from(&parsed.url))
-            .to_string_lossy()
-            .to_string(),
-        _ => parsed.url.clone(),
-    });
+    let json_source = normalized_source
+        .clone()
+        .unwrap_or_else(|| match parsed.kind {
+            SourceKind::Local => parsed
+                .local_path
+                .clone()
+                .unwrap_or_else(|| PathBuf::from(&parsed.url))
+                .to_string_lossy()
+                .to_string(),
+            _ => parsed.url.clone(),
+        });
 
     if !successful.is_empty() && install_globally {
         record_global_lock(&parsed, &selected_payloads, &successful_names);
@@ -1152,10 +1243,14 @@ fn run_add_inner(
     if options.json {
         for payload in &selected_payloads {
             let name = payload.display_name();
-            let skill_results: Vec<&(String, String, TargetInstallResult)> =
-                results.iter().filter(|(skill, _, _)| skill == &name).collect();
-            let failures: Vec<&&(String, String, TargetInstallResult)> =
-                skill_results.iter().filter(|(_, _, r)| !r.success).collect();
+            let skill_results: Vec<&(String, String, TargetInstallResult)> = results
+                .iter()
+                .filter(|(skill, _, _)| skill == &name)
+                .collect();
+            let failures: Vec<&&(String, String, TargetInstallResult)> = skill_results
+                .iter()
+                .filter(|(_, _, r)| !r.success)
+                .collect();
             if !failures.is_empty() {
                 json_results.push(AddJsonResult {
                     name: Some(name),
@@ -1185,7 +1280,11 @@ fn run_add_inner(
                 path: first
                     .and_then(|r| r.canonical_path.clone().or_else(|| Some(r.path.clone())))
                     .map(|p| p.to_string_lossy().to_string()),
-                scope: Some(if install_globally { "global" } else { "project" }),
+                scope: Some(if install_globally {
+                    "global"
+                } else {
+                    "project"
+                }),
                 agents: Some(
                     skill_results
                         .iter()
@@ -1193,7 +1292,11 @@ fn run_add_inner(
                         .map(|(_, agent, _)| agent.clone())
                         .collect(),
                 ),
-                mode: Some(first.map(|r| r.mode.as_str()).unwrap_or(install_mode.as_str())),
+                mode: Some(
+                    first
+                        .map(|r| r.mode.as_str())
+                        .unwrap_or(install_mode.as_str()),
+                ),
                 reason: None,
                 error: None,
             });
@@ -1251,12 +1354,16 @@ fn run_add_inner(
                         result_lines.push(format!("{} {}", color::green("\u{2713}"), skill_name));
                     }
                 }
-                let target_agent_names: Vec<&AgentConfig> =
-                    target_agents.to_vec();
+                let target_agent_names: Vec<&AgentConfig> = target_agents.to_vec();
                 let tuple_results: Vec<(String, bool, bool, Option<String>)> = skill_results
                     .iter()
                     .map(|(_, agent, r)| {
-                        (agent.clone(), r.symlink_failed, r.skipped, r.skip_reason.map(str::to_string))
+                        (
+                            agent.clone(),
+                            r.symlink_failed,
+                            r.skipped,
+                            r.skip_reason.map(str::to_string),
+                        )
                     })
                     .collect();
                 result_lines.extend(common::build_result_lines(
@@ -1325,7 +1432,9 @@ fn log_auto_selected(payloads: &[SkillPayload]) {
 }
 
 fn prompt_for_agents(message: &str, items: Vec<SearchItem>) -> Option<Vec<&'static AgentConfig>> {
-    let last_selected = locks::read_skill_lock().ok().and_then(|lock| lock.last_selected_agents);
+    let last_selected = locks::read_skill_lock()
+        .ok()
+        .and_then(|lock| lock.last_selected_agents);
     let valid: HashSet<&str> = items.iter().map(|item| item.value.as_str()).collect();
     let defaults = ["claude-code", "opencode", "codex", "grok"];
     let initial: Vec<String> = match last_selected {
@@ -1356,7 +1465,12 @@ fn prompt_for_agents(message: &str, items: Vec<SearchItem>) -> Option<Vec<&'stat
         lock.last_selected_agents = Some(selected.clone());
         let _ = locks::write_skill_lock(&lock);
     }
-    Some(selected.iter().filter_map(|name| registry::agent_by_id(name)).collect())
+    Some(
+        selected
+            .iter()
+            .filter_map(|name| registry::agent_by_id(name))
+            .collect(),
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1395,13 +1509,12 @@ fn record_global_lock(
             _ => payload_disk_repo_path(parsed, payload),
         };
         let skill_folder_hash = match payload {
-            SkillPayload::Blob(blob) => {
-                tree.as_ref()
-                    .and_then(|tree| {
-                        crate::blob::get_skill_folder_hash_from_tree(tree, &blob.repo_path)
-                    })
-                    .unwrap_or_default()
-            }
+            SkillPayload::Blob(blob) => tree
+                .as_ref()
+                .and_then(|tree| {
+                    crate::blob::get_skill_folder_hash_from_tree(tree, &blob.repo_path)
+                })
+                .unwrap_or_default(),
             _ => tree
                 .as_ref()
                 .zip(skill_path.as_ref())
@@ -1409,7 +1522,11 @@ fn record_global_lock(
                 .unwrap_or_default(),
         };
         let entry = locks::SkillLockEntry {
-            source: lock_source.clone().unwrap_or_else(|| normalized_source.clone().unwrap_or_else(|| parsed.url.clone())),
+            source: lock_source.clone().unwrap_or_else(|| {
+                normalized_source
+                    .clone()
+                    .unwrap_or_else(|| parsed.url.clone())
+            }),
             source_type: parsed.kind.as_str().to_string(),
             source_url: parsed.url.clone(),
             ref_: parsed.ref_.clone(),
@@ -1433,13 +1550,18 @@ fn payload_disk_repo_path(
     parsed: &source_parser::ParsedSource,
     payload: &SkillPayload,
 ) -> Option<String> {
-    if parsed.kind != SourceKind::GitHub && parsed.kind != SourceKind::GitLab && parsed.kind != SourceKind::Git {
+    if parsed.kind != SourceKind::GitHub
+        && parsed.kind != SourceKind::GitLab
+        && parsed.kind != SourceKind::Git
+    {
         return None;
     }
     match payload {
         SkillPayload::Disk(path) => Some(format!(
             "{}/SKILL.md",
-            path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
+            path.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default()
         )),
         _ => None,
     }
@@ -1450,27 +1572,26 @@ fn lock_entry_for_payload(
     payload: &SkillPayload,
     computed_hash: &str,
 ) -> locks::LocalSkillLockEntry {
-    let source_url = matches!(
-        parsed.kind,
-        SourceKind::Git | SourceKind::GitLab
-    )
-    .then(|| parsed.url.clone());
+    let source_url =
+        matches!(parsed.kind, SourceKind::Git | SourceKind::GitLab).then(|| parsed.url.clone());
     locks::LocalSkillLockEntry {
         source: if parsed.kind == SourceKind::WellKnown {
             crate::wellknown::get_source_identifier(&parsed.url)
         } else {
-            get_lock_source(&parsed.url, source_parser::get_owner_repo(parsed).as_deref())
-                .unwrap_or_else(|| parsed.url.clone())
+            get_lock_source(
+                &parsed.url,
+                source_parser::get_owner_repo(parsed).as_deref(),
+            )
+            .unwrap_or_else(|| parsed.url.clone())
         },
         source_url,
         ref_: parsed.ref_.clone(),
         source_type: parsed.kind.as_str().to_string(),
         skill_path: match payload {
-            SkillPayload::Disk(path) => payload_disk_repo_path(parsed, payload)
-                .or_else(|| {
-                    path.file_name()
-                        .map(|name| format!("{}/SKILL.md", name.to_string_lossy()))
-                }),
+            SkillPayload::Disk(path) => payload_disk_repo_path(parsed, payload).or_else(|| {
+                path.file_name()
+                    .map(|name| format!("{}/SKILL.md", name.to_string_lossy()))
+            }),
             SkillPayload::Blob(blob) => Some(blob.repo_path.clone()),
             SkillPayload::WellKnown(_) => None,
         },
@@ -1583,7 +1704,9 @@ fn prompt_for_find_skills(options: &AddOptions, target_agents: &[&'static AgentC
         return;
     }
     println!();
-    prompt::log_plain(&color::dim("One-time prompt - you won't be asked again if you dismiss."));
+    prompt::log_plain(&color::dim(
+        "One-time prompt - you won't be asked again if you dismiss.",
+    ));
     match prompt::confirm(
         &format!(
             "Install the {} skill? It helps your agent discover and suggest skills.",

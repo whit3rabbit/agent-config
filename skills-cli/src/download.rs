@@ -32,7 +32,10 @@ struct DownloadLimits {
 impl DownloadLimits {
     fn from_env() -> Self {
         Self {
-            download_max_bytes: positive_env("SKILLS_DOWNLOAD_MAX_BYTES", DEFAULT_DOWNLOAD_MAX_BYTES),
+            download_max_bytes: positive_env(
+                "SKILLS_DOWNLOAD_MAX_BYTES",
+                DEFAULT_DOWNLOAD_MAX_BYTES,
+            ),
             extract_max_bytes: positive_env("SKILLS_EXTRACT_MAX_BYTES", DEFAULT_EXTRACT_MAX_BYTES),
             extract_max_files: positive_env("SKILLS_EXTRACT_MAX_FILES", DEFAULT_EXTRACT_MAX_FILES),
         }
@@ -55,7 +58,10 @@ fn is_valid_skill_markdown(path: &Path) -> bool {
     };
     let fm = parse_frontmatter(&content);
     fm.data.get("name").is_some_and(|v| v.as_str().is_some())
-        && fm.data.get("description").is_some_and(|v| v.as_str().is_some())
+        && fm
+            .data
+            .get("description")
+            .is_some_and(|v| v.as_str().is_some())
 }
 
 /// Download `url` and unpack it into a temp dir (upstream `downloadSource`).
@@ -63,7 +69,10 @@ pub fn download_source(url: &str) -> Result<DownloadedSource, SkillsError> {
     let limits = DownloadLimits::from_env();
     let temp_path = std::env::temp_dir().join(format!(
         "skills-download-{}",
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
     ));
     std::fs::create_dir_all(&temp_path)
         .map_err(|err| SkillsError::new("SKILLS_IO", format!("tempdir: {err}")))?;
@@ -140,8 +149,13 @@ pub fn download_source(url: &str) -> Result<DownloadedSource, SkillsError> {
 
         match extracted {
             Ok(true) => {
-                let root_dir = single_top_level_directory(&extract_dir).unwrap_or(extract_dir.clone());
-                Ok(DownloadedSource { root_dir, temp_dir: temp_path.clone(), kind: "archive" })
+                let root_dir =
+                    single_top_level_directory(&extract_dir).unwrap_or(extract_dir.clone());
+                Ok(DownloadedSource {
+                    root_dir,
+                    temp_dir: temp_path.clone(),
+                    kind: "archive",
+                })
             }
             Ok(false) => Err(diag::download_not_a_skill()),
             Err(err) => Err(err),
@@ -167,7 +181,10 @@ fn single_top_level_directory(dir: &Path) -> Option<PathBuf> {
         return None;
     }
     let only = visible.into_iter().next()?;
-    only.file_type().ok().filter(|t| t.is_dir()).map(|_| only.path())
+    only.file_type()
+        .ok()
+        .filter(|t| t.is_dir())
+        .map(|_| only.path())
 }
 
 fn lexical_join(base: &Path, relative: &str) -> PathBuf {

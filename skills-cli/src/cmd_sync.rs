@@ -46,14 +46,15 @@ pub fn parse_sync_options(args: &[String]) -> SyncOptions {
     let mut options = SyncOptions::default();
     let mut index = 0;
     while index < args.len() {
-        let take_values = |options: &mut SyncOptions, field: fn(&mut SyncOptions, String), index: &mut usize| {
-            *index += 1;
-            while *index < args.len() && !args[*index].starts_with('-') {
-                field(options, args[*index].clone());
+        let take_values =
+            |options: &mut SyncOptions, field: fn(&mut SyncOptions, String), index: &mut usize| {
                 *index += 1;
-            }
-            *index = index.saturating_sub(1);
-        };
+                while *index < args.len() && !args[*index].starts_with('-') {
+                    field(options, args[*index].clone());
+                    *index += 1;
+                }
+                *index = index.saturating_sub(1);
+            };
         match args[index].as_str() {
             "-y" | "--yes" => options.yes = true,
             "--copy" => options.copy = true,
@@ -94,7 +95,10 @@ fn discover_package_skills(pkg_dir: &Path, package_name: &str, depth: usize) -> 
     let Some(pkg) = read_package_json(pkg_dir) else {
         return Vec::new();
     };
-    let version = pkg.get("version").and_then(|v| v.as_str()).map(str::to_string);
+    let version = pkg
+        .get("version")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
 
     if skills_store::skills::has_skill_md(pkg_dir) {
         if let Some(skill) = skills_store::skills::parse_skill_md(&pkg_dir.join("SKILL.md")) {
@@ -149,8 +153,12 @@ fn find_installed_package(from: &Path, name: &str) -> Option<PathBuf> {
     }
 }
 
-const DEPENDENCY_FIELDS: [&str; 4] =
-    ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
+const DEPENDENCY_FIELDS: [&str; 4] = [
+    "dependencies",
+    "devDependencies",
+    "optionalDependencies",
+    "peerDependencies",
+];
 
 /// Discover skills shipped by dependencies plus `npm:` targets (upstream
 /// `discoverNodeModuleSkills`, simplified to its core: project + remotes).
@@ -166,10 +174,11 @@ fn discover_node_module_skills(
 
     let mut seen = std::collections::HashSet::new();
     let add = |found: Vec<PackageSkill>,
-                  skills: &mut Vec<PackageSkill>,
-                  seen: &mut std::collections::HashSet<PathBuf>| {
+               skills: &mut Vec<PackageSkill>,
+               seen: &mut std::collections::HashSet<PathBuf>| {
         for skill in found {
-            let key = std::fs::canonicalize(&skill.skill.path).unwrap_or_else(|_| skill.skill.path.clone());
+            let key = std::fs::canonicalize(&skill.skill.path)
+                .unwrap_or_else(|_| skill.skill.path.clone());
             if seen.contains(&key) {
                 continue;
             }
@@ -178,7 +187,8 @@ fn discover_node_module_skills(
         }
     };
 
-    let mut declarers: Vec<(String, PathBuf, usize)> = vec![(".".to_string(), cwd.to_path_buf(), 0)];
+    let mut declarers: Vec<(String, PathBuf, usize)> =
+        vec![(".".to_string(), cwd.to_path_buf(), 0)];
 
     // Direct dependencies.
     let mut deps: Vec<String> = Vec::new();
@@ -191,7 +201,11 @@ fn discover_node_module_skills(
     }
     for name in &deps {
         if let Some(dir) = find_installed_package(cwd, name) {
-            add(discover_package_skills(&dir, name, 0), &mut skills, &mut seen);
+            add(
+                discover_package_skills(&dir, name, 0),
+                &mut skills,
+                &mut seen,
+            );
             declarers.push((name.clone(), dir, 1));
         }
     }
@@ -213,10 +227,18 @@ fn discover_node_module_skills(
                         }
                     }
                 }
-                add(discover_package_skills(&workspace, &name, 1), &mut skills, &mut seen);
+                add(
+                    discover_package_skills(&workspace, &name, 1),
+                    &mut skills,
+                    &mut seen,
+                );
                 for dep in deps {
                     if let Some(dir) = find_installed_package(&workspace, &dep) {
-                        add(discover_package_skills(&dir, &dep, 1), &mut skills, &mut seen);
+                        add(
+                            discover_package_skills(&dir, &dep, 1),
+                            &mut skills,
+                            &mut seen,
+                        );
                     }
                 }
             }
@@ -227,13 +249,19 @@ fn discover_node_module_skills(
     // the caller through the add engine).
     let mut visited = std::collections::HashSet::new();
     for (name, dir, depth) in declarers {
-        let Ok(real_dir) = std::fs::canonicalize(&dir) else { continue };
+        let Ok(real_dir) = std::fs::canonicalize(&dir) else {
+            continue;
+        };
         if visited.contains(&real_dir) {
             continue;
         }
         visited.insert(real_dir);
-        let Some(declarer_pkg) = read_package_json(&dir) else { continue };
-        let Some(field) = declarer_pkg.get("skills") else { continue };
+        let Some(declarer_pkg) = read_package_json(&dir) else {
+            continue;
+        };
+        let Some(field) = declarer_pkg.get("skills") else {
+            continue;
+        };
         let Some(entries) = field.as_array() else {
             if name == "." {
                 warnings.push(diag_skills_not_array());
@@ -241,7 +269,9 @@ fn discover_node_module_skills(
             continue;
         };
         for raw in entries {
-            let source = raw.as_str().or_else(|| raw.get("source").and_then(|s| s.as_str()));
+            let source = raw
+                .as_str()
+                .or_else(|| raw.get("source").and_then(|s| s.as_str()));
             let Some(source) = source else { continue };
             if let Some(package) = source.strip_prefix("npm:") {
                 let target = find_installed_package(&dir, package);
@@ -268,7 +298,10 @@ fn discover_node_module_skills(
 }
 
 fn diag_skills_not_array() -> SkillsError {
-    SkillsError::new("SKILLS_PACKAGE_SKILLS_NOT_ARRAY", "package.json: \"skills\" must be an array")
+    SkillsError::new(
+        "SKILLS_PACKAGE_SKILLS_NOT_ARRAY",
+        "package.json: \"skills\" must be an array",
+    )
 }
 
 fn find_workspace_packages(cwd: &Path, pkg: &serde_json::Value) -> Vec<PathBuf> {
@@ -308,7 +341,9 @@ fn find_workspace_packages(cwd: &Path, pkg: &serde_json::Value) -> Vec<PathBuf> 
         // Support simple `packages/*`-style globs without full glob semantics.
         if let Some((prefix, _)) = pattern.split_once('*') {
             let base = cwd.join(prefix.trim_end_matches('/'));
-            let Ok(entries) = std::fs::read_dir(&base) else { continue };
+            let Ok(entries) = std::fs::read_dir(&base) else {
+                continue;
+            };
             for entry in entries.flatten() {
                 if entry.path().join("package.json").exists() {
                     dirs.insert(entry.path());
@@ -321,10 +356,7 @@ fn find_workspace_packages(cwd: &Path, pkg: &serde_json::Value) -> Vec<PathBuf> 
     dirs.into_iter().collect()
 }
 
-fn matches_skill(
-    skill: &PackageSkill,
-    patterns: &[String],
-) -> bool {
+fn matches_skill(skill: &PackageSkill, patterns: &[String]) -> bool {
     patterns.iter().any(|pattern| {
         let (package_pattern, skill_pattern) = match pattern.split_once('#') {
             Some((package, skill)) => (package.to_string(), skill.to_string()),
@@ -333,8 +365,8 @@ fn matches_skill(
         let package_matches = package_pattern == "**"
             || package_pattern == skill.package_name
             || glob_simple(&package_pattern, &skill.package_name);
-        let skill_matches = skill_pattern == "**"
-            || glob_simple(&skill_pattern, &sanitize_name(&skill.skill.name));
+        let skill_matches =
+            skill_pattern == "**" || glob_simple(&skill_pattern, &sanitize_name(&skill.skill.name));
         package_matches && skill_matches
     })
 }
@@ -368,13 +400,13 @@ fn glob_simple(pattern: &str, value: &str) -> bool {
 }
 
 fn allowed_by_filters(skill: &PackageSkill, options: &SyncOptions) -> bool {
-    (!options.include.iter().any(|p| !p.contains('#'))
-        || matches_skill(skill, &options.include))
+    (!options.include.iter().any(|p| !p.contains('#')) || matches_skill(skill, &options.include))
         && !(!options.exclude.is_empty() && matches_skill(skill, &options.exclude))
 }
 
 fn is_under_node_modules(path: &Path) -> bool {
-    path.components().any(|component| component.as_os_str() == "node_modules")
+    path.components()
+        .any(|component| component.as_os_str() == "node_modules")
 }
 
 fn foreign_destination(
@@ -400,8 +432,9 @@ fn foreign_destination(
             common::shorten_path(&resolved, cwd)
         ));
     }
-    let installed_by_sync =
-        lock_entry.map(|entry| entry.source_type == "node_modules" || entry.via.is_some()).unwrap_or(false);
+    let installed_by_sync = lock_entry
+        .map(|entry| entry.source_type == "node_modules" || entry.via.is_some())
+        .unwrap_or(false);
     if installed_by_sync {
         return None;
     }
@@ -412,7 +445,9 @@ fn foreign_destination(
 }
 
 fn installed_by_sync(entry: Option<&locks::LocalSkillLockEntry>) -> bool {
-    entry.map(|entry| entry.source_type == "node_modules" || entry.via.is_some()).unwrap_or(false)
+    entry
+        .map(|entry| entry.source_type == "node_modules" || entry.via.is_some())
+        .unwrap_or(false)
 }
 
 fn blocked_reason(
@@ -432,7 +467,12 @@ fn blocked_reason(
         destinations.push(installer::get_install_path(name, agent, false, cwd, None));
     }
     for dest in destinations {
-        if let Some(reason) = foreign_destination(&dest, &installer::get_canonical_path(name, false, cwd), lock_entry, cwd) {
+        if let Some(reason) = foreign_destination(
+            &dest,
+            &installer::get_canonical_path(name, false, cwd),
+            lock_entry,
+            cwd,
+        ) {
             return Some(reason);
         }
     }
@@ -478,8 +518,10 @@ pub fn run_sync(_args: &[String], mut options: SyncOptions) {
 
     let spinner = Spinner::start("Scanning node_modules for skills…");
     let (discovered, warnings) = discover_node_module_skills(&cwd, options.recursive);
-    let discovered: Vec<PackageSkill> =
-        discovered.into_iter().filter(|skill| allowed_by_filters(skill, &options)).collect();
+    let discovered: Vec<PackageSkill> = discovered
+        .into_iter()
+        .filter(|skill| allowed_by_filters(skill, &options))
+        .collect();
     let stop_message = if discovered.is_empty() {
         color::yellow("No skills found")
     } else {
@@ -506,8 +548,7 @@ pub fn run_sync(_args: &[String], mut options: SyncOptions) {
             .skills
             .iter()
             .filter(|(name, entry)| {
-                installed_by_sync(Some(entry))
-                    && !keep.contains(&sanitize_name(name))
+                installed_by_sync(Some(entry)) && !keep.contains(&sanitize_name(name))
             })
             .map(|(name, _)| sanitize_name(name))
             .filter(|name| !keep.contains(name))
@@ -569,13 +610,20 @@ pub fn run_sync(_args: &[String], mut options: SyncOptions) {
             prompt::log_error(
                 &diag::invalid_agents(
                     &invalid,
-                    &valid_agent_ids.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+                    &valid_agent_ids
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>(),
                 )
                 .plain(),
             );
             std::process::exit(1);
         }
-        target_agents = options.agent.iter().filter_map(|name| registry::agent_by_id(name)).collect();
+        target_agents = options
+            .agent
+            .iter()
+            .filter_map(|name| registry::agent_by_id(name))
+            .collect();
     } else {
         let spinner = Spinner::start("Loading agents…");
         let installed_agents = registry::detect_installed_agents(&cwd);
@@ -593,7 +641,9 @@ pub fn run_sync(_args: &[String], mut options: SyncOptions) {
         } else {
             let choices = registry::non_universal_agents()
                 .into_iter()
-                .filter(|a| installed_agents.is_empty() || installed_agents.iter().any(|i| i.name == a.name))
+                .filter(|a| {
+                    installed_agents.is_empty() || installed_agents.iter().any(|i| i.name == a.name)
+                })
                 .collect::<Vec<_>>();
             let items: Vec<SearchItem> = choices
                 .iter()
@@ -605,44 +655,50 @@ pub fn run_sync(_args: &[String], mut options: SyncOptions) {
                     detail: None,
                 })
                 .collect();
-            let last = locks::read_skill_lock().ok().and_then(|lock| lock.last_selected_agents);
+            let last = locks::read_skill_lock()
+                .ok()
+                .and_then(|lock| lock.last_selected_agents);
             let remembered: Vec<String> = last
                 .unwrap_or_default()
                 .into_iter()
                 .filter(|name| choices.iter().any(|a| a.name == name))
                 .collect();
-            let selected = crate::search_multiselect::search_multiselect(&SearchMultiselectOptions {
-                message: "Which agents do you want to install to?".to_string(),
-                items,
-                initial_selected: remembered,
-                required: true,
-                locked_section: Some(LockedSection {
-                    title: "Universal (.agents/skills)".to_string(),
-                    items: registry::visible_universal_agents()
-                        .iter()
-                        .map(|a| SearchItem {
-                            value: a.name.to_string(),
-                            label: a.display_name.to_string(),
-                            hint: None,
-                            group: None,
-                            detail: None,
-                        })
-                        .collect(),
-                    hidden_count: registry::universal_agents().len()
-                        - registry::visible_universal_agents().len(),
-                }),
-                searchable: true,
-                show_detail: false,
-                show_selected_summary: true,
-                select_groups: false,
-                select_all: false,
-                max_visible: 8,
-            });
+            let selected =
+                crate::search_multiselect::search_multiselect(&SearchMultiselectOptions {
+                    message: "Which agents do you want to install to?".to_string(),
+                    items,
+                    initial_selected: remembered,
+                    required: true,
+                    locked_section: Some(LockedSection {
+                        title: "Universal (.agents/skills)".to_string(),
+                        items: registry::visible_universal_agents()
+                            .iter()
+                            .map(|a| SearchItem {
+                                value: a.name.to_string(),
+                                label: a.display_name.to_string(),
+                                hint: None,
+                                group: None,
+                                detail: None,
+                            })
+                            .collect(),
+                        hidden_count: registry::universal_agents().len()
+                            - registry::visible_universal_agents().len(),
+                    }),
+                    searchable: true,
+                    show_detail: false,
+                    show_selected_summary: true,
+                    select_groups: false,
+                    select_all: false,
+                    max_visible: 8,
+                });
             let Some(selected) = selected else {
                 prompt::cancel("Sync cancelled");
                 std::process::exit(0);
             };
-            target_agents = selected.iter().filter_map(|name| registry::agent_by_id(name)).collect();
+            target_agents = selected
+                .iter()
+                .filter_map(|name| registry::agent_by_id(name))
+                .collect();
             if let Ok(mut lock) = locks::read_skill_lock() {
                 lock.last_selected_agents = Some(selected);
                 let _ = locks::write_skill_lock(&lock);
@@ -665,8 +721,7 @@ pub fn run_sync(_args: &[String], mut options: SyncOptions) {
         let closest: Vec<&&PackageSkill> =
             candidates.iter().filter(|c| c.depth == min_depth).collect();
         if closest.len() > 1 {
-            let packages: Vec<String> =
-                closest.iter().map(|c| c.package_name.clone()).collect();
+            let packages: Vec<String> = closest.iter().map(|c| c.package_name.clone()).collect();
             prompt::log_warn(&format!(
                 "Skipped {} {}: shipped by {}; drop one with --exclude",
                 color::cyan(name),
@@ -676,12 +731,7 @@ pub fn run_sync(_args: &[String], mut options: SyncOptions) {
             continue;
         }
         let skill = closest[0];
-        let reason = blocked_reason(
-            name,
-            &target_agents,
-            local_lock.skills.get(name),
-            &cwd,
-        );
+        let reason = blocked_reason(name, &target_agents, local_lock.skills.get(name), &cwd);
         match reason {
             Some(reason) => prompt::log_warn(&format!(
                 "Skipped {} {}: {reason}",
@@ -780,7 +830,9 @@ pub fn run_sync(_args: &[String], mut options: SyncOptions) {
                 if !installed.iter().any(|(name, _)| name == &skill.skill.name) {
                     continue;
                 }
-                let Ok(hash) = locks::compute_folder_hash(&skill.skill.path) else { continue };
+                let Ok(hash) = locks::compute_folder_hash(&skill.skill.path) else {
+                    continue;
+                };
                 lock.skills.insert(
                     skill.skill.name.clone(),
                     locks::LocalSkillLockEntry {
@@ -830,7 +882,10 @@ pub fn run_sync(_args: &[String], mut options: SyncOptions) {
     if !failures.is_empty() {
         common::set_exit_code_1();
         println!();
-        prompt::log_error(&color::red(&format!("Failed to install {}", failures.len())));
+        prompt::log_error(&color::red(&format!(
+            "Failed to install {}",
+            failures.len()
+        )));
         for (name, error) in &failures {
             prompt::log_plain(&format!(
                 "  {} {}: {}",

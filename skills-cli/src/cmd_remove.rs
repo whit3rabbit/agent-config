@@ -85,8 +85,11 @@ pub fn remove_command(skill_names: Vec<String>, mut options: RemoveOptions) {
         skill_names.retain(|name| name != "*");
     }
 
-    let named_skills: Vec<String> =
-        skill_names.iter().filter(|name| name.as_str() != "*").cloned().collect();
+    let named_skills: Vec<String> = skill_names
+        .iter()
+        .filter(|name| name.as_str() != "*")
+        .cloned()
+        .collect();
     if options.all && !named_skills.is_empty() {
         prompt::log_error(&diag::remove_all_with_names(&named_skills[0]).plain());
         std::process::exit(1);
@@ -97,7 +100,10 @@ pub fn remove_command(skill_names: Vec<String>, mut options: RemoveOptions) {
 
     let spinner = prompt::Spinner::start("Scanning for installed skills…");
     let installed_skills = installer::scan_installed_skill_names(is_global, &cwd);
-    spinner.stop(&format!("Found {} unique installed skill(s)", installed_skills.len()));
+    spinner.stop(&format!(
+        "Found {} unique installed skill(s)",
+        installed_skills.len()
+    ));
 
     let lock_entries: HashMap<String, (String, String)> = if is_global {
         locks::read_skill_lock()
@@ -165,7 +171,10 @@ pub fn remove_command(skill_names: Vec<String>, mut options: RemoveOptions) {
             prompt::log_error(
                 &diag::invalid_agents(
                     &invalid,
-                    &valid_agent_ids.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+                    &valid_agent_ids
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>(),
                 )
                 .plain(),
             );
@@ -179,9 +188,7 @@ pub fn remove_command(skill_names: Vec<String>, mut options: RemoveOptions) {
     } else if !skill_names.is_empty() {
         selected_skills = resolved_requested;
         if selected_skills.is_empty() {
-            prompt::log_error(
-                &diag::no_matching_skills(&skill_names, &[]).plain(),
-            );
+            prompt::log_error(&diag::no_matching_skills(&skill_names, &[]).plain());
             return;
         }
     } else {
@@ -194,7 +201,10 @@ pub fn remove_command(skill_names: Vec<String>, mut options: RemoveOptions) {
             })
             .collect();
         let selected = prompt::multiselect(
-            &format!("Select skills to remove {}", color::dim("(space to toggle)")),
+            &format!(
+                "Select skills to remove {}",
+                color::dim("(space to toggle)")
+            ),
             &choices,
             &[],
             true,
@@ -224,7 +234,9 @@ pub fn remove_command(skill_names: Vec<String>, mut options: RemoveOptions) {
 
     if selected_skills.is_empty() {
         if options.all && is_global {
-            prompt::outro(&color::yellow("No globally managed skills found to remove."));
+            prompt::outro(&color::yellow(
+                "No globally managed skills found to remove.",
+            ));
         } else {
             prompt::outro(&color::yellow("No skills found to remove."));
         }
@@ -234,7 +246,10 @@ pub fn remove_command(skill_names: Vec<String>, mut options: RemoveOptions) {
     let target_agents: Vec<String> = if !options.agent.is_empty() {
         options.agent.clone()
     } else {
-        registry::agents().iter().map(|a| a.name.to_string()).collect()
+        registry::agents()
+            .iter()
+            .map(|a| a.name.to_string())
+            .collect()
     };
 
     if !options.yes {
@@ -245,7 +260,10 @@ pub fn remove_command(skill_names: Vec<String>, mut options: RemoveOptions) {
         }
         println!();
         match prompt::confirm(
-            &format!("Are you sure you want to uninstall {} skill(s)?", selected_skills.len()),
+            &format!(
+                "Are you sure you want to uninstall {} skill(s)?",
+                selected_skills.len()
+            ),
             true,
         ) {
             Some(true) => {}
@@ -261,7 +279,11 @@ pub fn remove_command(skill_names: Vec<String>, mut options: RemoveOptions) {
     let results = installer::remove_skills(
         &selected_skills,
         &installer::RemoveOptions {
-            global: if is_global { installer::Scope::Global } else { installer::Scope::Project },
+            global: if is_global {
+                installer::Scope::Global
+            } else {
+                installer::Scope::Project
+            },
             cwd: Some(cwd.clone()),
             target_agents,
             lockfile: Some(true),
@@ -282,10 +304,15 @@ pub fn remove_command(skill_names: Vec<String>, mut options: RemoveOptions) {
     let failed: Vec<&installer::RemoveOutcome> = results.iter().filter(|r| !r.success).collect();
 
     if successful > 0 {
-        prompt::log_success(&color::green(&format!("Successfully removed {successful} skill(s)")));
+        prompt::log_success(&color::green(&format!(
+            "Successfully removed {successful} skill(s)"
+        )));
     }
     if !failed.is_empty() {
-        prompt::log_error(&color::red(&format!("Failed to remove {} skill(s)", failed.len())));
+        prompt::log_error(&color::red(&format!(
+            "Failed to remove {} skill(s)",
+            failed.len()
+        )));
         for result in failed {
             prompt::log_plain(&format!(
                 "  {} {}: {}",

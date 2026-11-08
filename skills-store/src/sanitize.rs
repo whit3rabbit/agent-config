@@ -189,7 +189,10 @@ mod tests {
         assert_eq!(strip_terminal_escapes("\x1b7save"), "save");
         assert_eq!(strip_terminal_escapes("a\u{0093}b"), "ab");
         assert_eq!(strip_terminal_escapes("a\x07b\x08c"), "abc");
-        assert_eq!(strip_terminal_escapes("keep\ttab\nnewline"), "keep\ttab\nnewline");
+        assert_eq!(
+            strip_terminal_escapes("keep\ttab\nnewline"),
+            "keep\ttab\nnewline"
+        );
     }
 
     #[test]
@@ -205,13 +208,19 @@ mod tests {
         assert_eq!(sanitize_name("My Cool Skill!"), "my-cool-skill");
         assert_eq!(sanitize_name("../etc/passwd"), "etc-passwd");
         assert_eq!(sanitize_name("---.--"), "unnamed-skill");
-        assert_eq!(sanitize_name("Git Review: Before Commit"), "git-review-before-commit");
+        assert_eq!(
+            sanitize_name("Git Review: Before Commit"),
+            "git-review-before-commit"
+        );
         assert_eq!(sanitize_name("ce:review"), "ce-review");
     }
 
     #[test]
     fn slugs() {
-        assert_eq!(to_skill_slug("React Best Practices"), "react-best-practices");
+        assert_eq!(
+            to_skill_slug("React Best Practices"),
+            "react-best-practices"
+        );
         assert_eq!(to_skill_slug("vercel_optimize!"), "vercel-optimize");
     }
 }

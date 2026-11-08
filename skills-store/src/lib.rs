@@ -63,7 +63,8 @@ pub use locks::{
     LocalSkillLock, LocalSkillLockEntry, SkillLock, SkillLockEntry,
 };
 pub use registry::{
-    agent_by_id, agents, detect_installed_agents, agent_project_skill_dirs, AgentConfig, DetectContext,
+    agent_by_id, agent_project_skill_dirs, agents, detect_installed_agents, AgentConfig,
+    DetectContext,
 };
 pub use skills::{discover_skills, filter_skills, parse_skill_md, DiscoverOptions, Skill};
 

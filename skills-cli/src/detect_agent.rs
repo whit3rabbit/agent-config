@@ -18,7 +18,9 @@ fn cached() -> &'static AgentResult {
 }
 
 fn has_strong_cursor_agent_signal() -> bool {
-    std::env::var("CURSOR_AGENT").ok().is_some_and(|v| !v.trim().is_empty())
+    std::env::var("CURSOR_AGENT")
+        .ok()
+        .is_some_and(|v| !v.trim().is_empty())
         || std::env::var("CURSOR_EXTENSION_HOST_ROLE").as_deref() == Ok("agent-exec")
 }
 
@@ -26,55 +28,98 @@ fn determine_agent() -> AgentResult {
     if let Ok(name) = std::env::var("AI_AGENT") {
         let name = name.trim().to_string();
         if !name.is_empty() {
-            return AgentResult { is_agent: true, agent: Some(name) };
+            return AgentResult {
+                is_agent: true,
+                agent: Some(name),
+            };
         }
     }
     if std::env::var_os("CURSOR_TRACE_ID").is_some() {
-        return AgentResult { is_agent: true, agent: Some("cursor".into()) };
+        return AgentResult {
+            is_agent: true,
+            agent: Some("cursor".into()),
+        };
     }
     if std::env::var_os("CURSOR_AGENT").is_some()
         || std::env::var("CURSOR_EXTENSION_HOST_ROLE").as_deref() == Ok("agent-exec")
     {
-        return AgentResult { is_agent: true, agent: Some("cursor-cli".into()) };
+        return AgentResult {
+            is_agent: true,
+            agent: Some("cursor-cli".into()),
+        };
     }
     if std::env::var_os("GEMINI_CLI").is_some() {
-        return AgentResult { is_agent: true, agent: Some("gemini".into()) };
+        return AgentResult {
+            is_agent: true,
+            agent: Some("gemini".into()),
+        };
     }
     if std::env::var_os("CODEX_SANDBOX").is_some()
         || std::env::var_os("CODEX_CI").is_some()
         || std::env::var_os("CODEX_THREAD_ID").is_some()
     {
-        return AgentResult { is_agent: true, agent: Some("codex".into()) };
+        return AgentResult {
+            is_agent: true,
+            agent: Some("codex".into()),
+        };
     }
     if std::env::var_os("ANTIGRAVITY_AGENT").is_some() {
-        return AgentResult { is_agent: true, agent: Some("antigravity".into()) };
+        return AgentResult {
+            is_agent: true,
+            agent: Some("antigravity".into()),
+        };
     }
     if std::env::var_os("AUGMENT_AGENT").is_some() {
-        return AgentResult { is_agent: true, agent: Some("augment-cli".into()) };
+        return AgentResult {
+            is_agent: true,
+            agent: Some("augment-cli".into()),
+        };
     }
-    if std::env::var("OPENCODE").as_deref() == Ok("1") || std::env::var_os("OPENCODE_CLIENT").is_some()
+    if std::env::var("OPENCODE").as_deref() == Ok("1")
+        || std::env::var_os("OPENCODE_CLIENT").is_some()
     {
-        return AgentResult { is_agent: true, agent: Some("opencode".into()) };
+        return AgentResult {
+            is_agent: true,
+            agent: Some("opencode".into()),
+        };
     }
     if std::env::var_os("CLAUDECODE").is_some() || std::env::var_os("CLAUDE_CODE").is_some() {
         if std::env::var_os("CLAUDE_CODE_IS_COWORK").is_some() {
-            return AgentResult { is_agent: true, agent: Some("cowork".into()) };
+            return AgentResult {
+                is_agent: true,
+                agent: Some("cowork".into()),
+            };
         }
-        return AgentResult { is_agent: true, agent: Some("claude".into()) };
+        return AgentResult {
+            is_agent: true,
+            agent: Some("claude".into()),
+        };
     }
     if std::env::var_os("REPL_ID").is_some() {
-        return AgentResult { is_agent: true, agent: Some("replit".into()) };
+        return AgentResult {
+            is_agent: true,
+            agent: Some("replit".into()),
+        };
     }
     if std::env::var_os("COPILOT_MODEL").is_some()
         || std::env::var_os("COPILOT_ALLOW_ALL").is_some()
         || std::env::var_os("COPILOT_GITHUB_TOKEN").is_some()
     {
-        return AgentResult { is_agent: true, agent: Some("github-copilot".into()) };
+        return AgentResult {
+            is_agent: true,
+            agent: Some("github-copilot".into()),
+        };
     }
     if std::path::Path::new("/opt/.devin").exists() {
-        return AgentResult { is_agent: true, agent: Some("devin".into()) };
+        return AgentResult {
+            is_agent: true,
+            agent: Some("devin".into()),
+        };
     }
-    AgentResult { is_agent: false, agent: None }
+    AgentResult {
+        is_agent: false,
+        agent: None,
+    }
 }
 
 /// Detect (and refine) whether we run inside an agent; results are cached.
@@ -91,10 +136,16 @@ fn refine_agent_result(result: AgentResult) -> AgentResult {
     let name = result.agent.clone().unwrap_or_default();
     if name == "cursor" || name == "cursor-cli" {
         if !has_strong_cursor_agent_signal() {
-            return AgentResult { is_agent: false, agent: None };
+            return AgentResult {
+                is_agent: false,
+                agent: None,
+            };
         }
         if name == "cursor" {
-            return AgentResult { is_agent: true, agent: Some("cursor-cli".into()) };
+            return AgentResult {
+                is_agent: true,
+                agent: Some("cursor-cli".into()),
+            };
         }
     }
     result

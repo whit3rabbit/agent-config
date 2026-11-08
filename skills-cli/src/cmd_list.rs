@@ -63,16 +63,14 @@ pub fn run_list(args: &[String]) {
             .cloned()
             .collect();
         if !invalid.is_empty() {
-            println!(
-                "{}",
-                diag_invalid_agents(&invalid, &valid_agent_ids)
-            );
+            println!("{}", diag_invalid_agents(&invalid, &valid_agent_ids));
             std::process::exit(1);
         }
         Some(options.agent.clone())
     };
 
-    let installed_skills = installer::list_installed_skills(Some(scope), &cwd, agent_filter.as_deref());
+    let installed_skills =
+        installer::list_installed_skills(Some(scope), &cwd, agent_filter.as_deref());
 
     let locked_skills: HashMap<String, LockEntry> = if scope {
         locks::read_skill_lock()
@@ -123,11 +121,15 @@ pub fn run_list(args: &[String]) {
         .map(|(name, entry)| (sanitize_name(name), entry))
         .collect();
     let get_lock_entry = |skill_name: &str| -> Option<&LockEntry> {
-        locked_skills.get(skill_name).or_else(|| lock_by_sanitized.get(&sanitize_name(skill_name)).copied())
+        locked_skills
+            .get(skill_name)
+            .or_else(|| lock_by_sanitized.get(&sanitize_name(skill_name)).copied())
     };
 
-    let installed_names: std::collections::HashSet<String> =
-        installed_skills.iter().map(|skill| sanitize_name(&skill.name)).collect();
+    let installed_names: std::collections::HashSet<String> = installed_skills
+        .iter()
+        .map(|skill| sanitize_name(&skill.name))
+        .collect();
     let missing_skills: Vec<(&String, &LockEntry)> = if agent_filter.is_some() {
         Vec::new()
     } else {
@@ -179,48 +181,72 @@ pub fn run_list(args: &[String]) {
 
     let scope_label = if scope { "Global" } else { "Project" };
     if installed_skills.is_empty() && missing_skills.is_empty() {
-        println!("{}No {} skills found.{}", color::dim(""), scope_label.to_lowercase(), color::reset(""));
+        println!(
+            "{}No {} skills found.{}",
+            color::dim(""),
+            scope_label.to_lowercase(),
+            color::reset("")
+        );
         if scope {
-            println!("{}Try listing project skills without -g{}", color::dim(""), color::reset(""));
+            println!(
+                "{}Try listing project skills without -g{}",
+                color::dim(""),
+                color::reset("")
+            );
         } else {
-            println!("{}Try listing global skills with -g{}", color::dim(""), color::reset(""));
+            println!(
+                "{}Try listing global skills with -g{}",
+                color::dim(""),
+                color::reset("")
+            );
         }
         return;
     }
 
-    let print_skill = |skill: &installer::InstalledSkill, indent: bool, name_width: usize, path_width: usize| {
-        let prefix = if indent { "  " } else { "" };
-        let short_path = common::shorten_path(&skill.canonical_path, &cwd);
-        let agent_names: Vec<String> = skill.agents.iter().map(|a| display_name_of(a)).collect();
-        let agent_info = if !skill.agents.is_empty() {
-            common::format_list(&agent_names, 5)
-        } else {
-            color::yellow("not linked")
+    let print_skill =
+        |skill: &installer::InstalledSkill, indent: bool, name_width: usize, path_width: usize| {
+            let prefix = if indent { "  " } else { "" };
+            let short_path = common::shorten_path(&skill.canonical_path, &cwd);
+            let agent_names: Vec<String> =
+                skill.agents.iter().map(|a| display_name_of(a)).collect();
+            let agent_info = if !skill.agents.is_empty() {
+                common::format_list(&agent_names, 5)
+            } else {
+                color::yellow("not linked")
+            };
+            let padded_name = format!(
+                "{:<width$}",
+                sanitize_metadata(&skill.name),
+                width = name_width
+            );
+            let padded_path = format!("{:<width$}", short_path, width = path_width);
+
+            let entry = get_lock_entry(&skill.name);
+            let source_label = entry
+                .map(|e| sanitize_metadata(&e.source))
+                .unwrap_or_else(|| color::yellow("untracked"));
+
+            println!(
+                "{prefix}{} {} {}",
+                color::cyan(&padded_name),
+                color::dim(&padded_path),
+                color::reset("")
+            );
+            println!(
+                "{prefix}  {}: {}  {}: {}",
+                color::dim("Agents"),
+                agent_info,
+                color::dim("Source"),
+                source_label
+            );
         };
-        let padded_name = format!("{:<width$}", sanitize_metadata(&skill.name), width = name_width);
-        let padded_path = format!("{:<width$}", short_path, width = path_width);
 
-        let entry = get_lock_entry(&skill.name);
-        let source_label = entry
-            .map(|e| sanitize_metadata(&e.source))
-            .unwrap_or_else(|| color::yellow("untracked"));
-
-        println!(
-            "{prefix}{} {} {}",
-            color::cyan(&padded_name),
-            color::dim(&padded_path),
-            color::reset("")
-        );
-        println!(
-            "{prefix}  {}: {}  {}: {}",
-            color::dim("Agents"),
-            agent_info,
-            color::dim("Source"),
-            source_label
-        );
-    };
-
-    println!("{}{} Skills{}", color::bold(""), scope_label, color::reset(""));
+    println!(
+        "{}{} Skills{}",
+        color::bold(""),
+        scope_label,
+        color::reset("")
+    );
     println!();
 
     let mut grouped: std::collections::BTreeMap<String, Vec<&installer::InstalledSkill>> =
@@ -247,7 +273,12 @@ pub fn run_list(args: &[String]) {
 
     if !grouped.is_empty() {
         for (group, skills) in &grouped {
-            println!("{}{}{}", color::bold(""), common::kebab_to_title(group), color::reset(""));
+            println!(
+                "{}{}{}",
+                color::bold(""),
+                common::kebab_to_title(group),
+                color::reset("")
+            );
             print_group(skills);
             println!();
         }

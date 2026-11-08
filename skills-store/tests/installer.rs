@@ -5,7 +5,7 @@ use std::path::Path;
 
 use skills_store::installer::{
     default_install_mode, get_canonical_path, get_install_path, install_skill_dir,
-    list_installed_skills, remove_skills, InstallOptions, InstallMode, RemoveOptions, Scope,
+    list_installed_skills, remove_skills, InstallMode, InstallOptions, RemoveOptions, Scope,
 };
 use skills_store::registry::agent_by_id;
 
@@ -31,7 +31,11 @@ fn universal_agent_installs_into_canonical_without_symlink() {
     let outcome = install_skill_dir(
         &skill,
         cursor,
-        &InstallOptions { global: Scope::Project, cwd: Some(cwd.to_path_buf()), ..Default::default() },
+        &InstallOptions {
+            global: Scope::Project,
+            cwd: Some(cwd.to_path_buf()),
+            ..Default::default()
+        },
         &mut warnings,
     );
     assert!(outcome.success, "{:?}", outcome.error);
@@ -42,7 +46,9 @@ fn universal_agent_installs_into_canonical_without_symlink() {
     // Listed in project scope. Agent attribution depends on which agents the
     // host detects, so only assert the skill surfaced.
     let listed = list_installed_skills(Some(false), cwd, None);
-    assert!(listed.iter().any(|s| s.name == "my-skill" && s.scope == Scope::Project));
+    assert!(listed
+        .iter()
+        .any(|s| s.name == "my-skill" && s.scope == Scope::Project));
 }
 
 #[test]
@@ -73,7 +79,10 @@ fn non_universal_agent_gets_symlink_when_root_exists() {
     let meta = std::fs::symlink_metadata(&agent_dir).unwrap();
     assert!(meta.file_type().is_symlink());
     let target = std::fs::read_link(&agent_dir).unwrap();
-    assert!(target.ends_with(".agents/skills/linked-skill"), "{target:?}");
+    assert!(
+        target.ends_with(".agents/skills/linked-skill"),
+        "{target:?}"
+    );
 }
 
 #[test]
@@ -88,7 +97,11 @@ fn project_symlink_skipped_without_agent_root() {
     let outcome = install_skill_dir(
         &skill,
         windsurf,
-        &InstallOptions { global: Scope::Project, cwd: Some(cwd.to_path_buf()), ..Default::default() },
+        &InstallOptions {
+            global: Scope::Project,
+            cwd: Some(cwd.to_path_buf()),
+            ..Default::default()
+        },
         &mut warnings,
     );
     assert!(outcome.success);
@@ -144,7 +157,9 @@ fn global_install_lands_in_home_agents_skills_for_universal() {
     let cwd = tmp.path();
     let canonical = get_canonical_path("some-skill", true, cwd);
     assert!(canonical.starts_with(skills_store::paths::home_dir()));
-    assert!(canonical.to_string_lossy().contains(".agents/skills/some-skill"));
+    assert!(canonical
+        .to_string_lossy()
+        .contains(".agents/skills/some-skill"));
 }
 
 #[test]
@@ -232,7 +247,8 @@ fn get_install_path_respects_agent_layout() {
     let windsurf = agent_by_id("windsurf").unwrap();
     let amp = agent_by_id("amp").unwrap();
     // Project: non-universal agents read their own dir; universal read canonical.
-    assert!(get_install_path("x", windsurf, false, cwd, None)
-        .starts_with(cwd.join(".windsurf/skills")));
+    assert!(
+        get_install_path("x", windsurf, false, cwd, None).starts_with(cwd.join(".windsurf/skills"))
+    );
     assert!(get_install_path("x", amp, false, cwd, None).starts_with(cwd.join(".agents/skills")));
 }

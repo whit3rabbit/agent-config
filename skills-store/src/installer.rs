@@ -165,7 +165,10 @@ pub fn get_canonical_skills_dir(global: bool, cwd: &Path) -> PathBuf {
 /// Eve subagent skills dir: `agent/subagents/<name>/skills`.
 #[must_use]
 pub fn get_eve_subagent_skills_dir(subagent: &str, cwd: &Path) -> PathBuf {
-    cwd.join("agent").join("subagents").join(sanitize_name(subagent)).join("skills")
+    cwd.join("agent")
+        .join("subagents")
+        .join(sanitize_name(subagent))
+        .join("skills")
 }
 
 /// Eve subagent directory names under `agent/subagents/`, sorted.
@@ -193,7 +196,11 @@ pub fn get_agent_base_dir(
     eve_subagent: Option<&str>,
 ) -> PathBuf {
     let ctx = DetectContext::from_env(cwd);
-    if if global { agent.reads_canonical_globally() } else { agent.is_universal() } {
+    if if global {
+        agent.reads_canonical_globally()
+    } else {
+        agent.is_universal()
+    } {
         return get_canonical_skills_dir(global, cwd);
     }
     if agent.name == "eve" {
@@ -214,7 +221,10 @@ pub fn get_agent_base_dir(
 /// Resolve a path's parent through symlinks, keeping the final component.
 fn resolve_parent_symlinks(path: &Path) -> PathBuf {
     let dir = path.parent().unwrap_or(Path::new("/"));
-    let base = path.file_name().map(|n| n.to_os_string()).unwrap_or_default();
+    let base = path
+        .file_name()
+        .map(|n| n.to_os_string())
+        .unwrap_or_default();
     match std::fs::canonicalize(dir) {
         Ok(real_dir) => real_dir.join(base),
         Err(_) => path.to_path_buf(),
@@ -251,8 +261,7 @@ fn create_symlink(target: &Path, link_path: &Path) -> bool {
 
     let real_target =
         std::fs::canonicalize(&resolved_target).unwrap_or_else(|_| resolved_target.clone());
-    let real_link =
-        std::fs::canonicalize(&resolved_link).unwrap_or_else(|_| resolved_link.clone());
+    let real_link = std::fs::canonicalize(&resolved_link).unwrap_or_else(|_| resolved_link.clone());
     if real_target == real_link {
         return true;
     }
@@ -334,7 +343,10 @@ pub fn copy_directory(
     dest: &Path,
     warnings: &mut Vec<SkillsError>,
 ) -> Result<(), SkillsError> {
-    let mut ctx = CopyCtx { root: src.to_path_buf(), ancestors: HashSet::new() };
+    let mut ctx = CopyCtx {
+        root: src.to_path_buf(),
+        ancestors: HashSet::new(),
+    };
     copy_directory_inner(src, dest, &mut ctx, warnings)
 }
 
@@ -356,7 +368,9 @@ fn copy_directory_inner(
     ctx.ancestors.insert(real_src.clone());
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        let Ok(file_type) = entry.file_type() else { continue };
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
         let src_path = entry.path();
         let dest_path = dest.join(&name);
 
@@ -451,8 +465,10 @@ pub fn install_for_agent(
     warnings: &mut Vec<SkillsError>,
 ) -> InstallOutcome {
     let is_global = options.global.is_global();
-    let cwd =
-        options.cwd.clone().unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let cwd = options
+        .cwd
+        .clone()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
     let install_mode = options.mode.unwrap_or_default();
 
     let agent_ctx = DetectContext::from_env(&cwd);
@@ -546,7 +562,11 @@ pub fn install_for_agent(
     }
 
     let source_is_canonical = source_path
-        .map(|s| std::fs::canonicalize(s).map(|c| c == canonical_dir).unwrap_or(false))
+        .map(|s| {
+            std::fs::canonicalize(s)
+                .map(|c| c == canonical_dir)
+                .unwrap_or(false)
+        })
         .unwrap_or(false);
     if !source_is_canonical {
         if let Some(source) = source_path {
@@ -580,7 +600,10 @@ pub fn install_for_agent(
             }
         } else {
             if clean_and_create_directory(&canonical_dir).is_err() {
-                return fail(agent_dir, "failed to create canonical directory".to_string());
+                return fail(
+                    agent_dir,
+                    "failed to create canonical directory".to_string(),
+                );
             }
             if let Err(err) = write_files(&canonical_dir, warnings) {
                 return fail(agent_dir, err.plain());
@@ -740,7 +763,11 @@ pub fn is_skill_installed(
     eve_subagent: Option<&str>,
 ) -> bool {
     let sanitized = sanitize_name(skill_name);
-    if global && agent.global_skills_dir(&DetectContext::from_env(cwd)).is_none() {
+    if global
+        && agent
+            .global_skills_dir(&DetectContext::from_env(cwd))
+            .is_none()
+    {
         return false;
     }
     let target_base = if global {
@@ -833,7 +860,10 @@ pub fn list_installed_skills(
             } else {
                 cwd.join(agent.skills_dir)
             };
-            if !scopes.iter().any(|s| s.path == agent_dir && s.global == is_global) {
+            if !scopes
+                .iter()
+                .any(|s| s.path == agent_dir && s.global == is_global)
+            {
                 scopes.push(ScanScope {
                     global: is_global,
                     path: agent_dir,
@@ -843,7 +873,10 @@ pub fn list_installed_skills(
             if agent.name == "eve" && !is_global {
                 for subagent in eve_subagent_names(cwd) {
                     let dir = get_eve_subagent_skills_dir(&subagent, cwd);
-                    if !scopes.iter().any(|s| s.path == dir && s.global == is_global) {
+                    if !scopes
+                        .iter()
+                        .any(|s| s.path == dir && s.global == is_global)
+                    {
                         scopes.push(ScanScope {
                             global: is_global,
                             path: dir,
@@ -872,7 +905,10 @@ pub fn list_installed_skills(
             } else {
                 cwd.join(agent.skills_dir)
             };
-            if scopes.iter().any(|s| s.path == agent_dir && s.global == is_global) {
+            if scopes
+                .iter()
+                .any(|s| s.path == agent_dir && s.global == is_global)
+            {
                 continue;
             }
             if agent_dir.exists() {
@@ -891,11 +927,15 @@ pub fn list_installed_skills(
             continue;
         };
         for entry in entries.flatten() {
-            let Ok(file_type) = entry.file_type() else { continue };
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
             let skill_dir = entry.path();
             let is_dir = file_type.is_dir()
                 || (file_type.is_symlink()
-                    && std::fs::metadata(&skill_dir).map(|m| m.is_dir()).unwrap_or(false));
+                    && std::fs::metadata(&skill_dir)
+                        .map(|m| m.is_dir())
+                        .unwrap_or(false));
             if !is_dir {
                 continue;
             }
@@ -905,7 +945,11 @@ pub fn list_installed_skills(
             let Some(skill) = parse_skill_md(&skill_dir.join("SKILL.md")) else {
                 continue;
             };
-            let scope_key = if scope.global { Scope::Global } else { Scope::Project };
+            let scope_key = if scope.global {
+                Scope::Global
+            } else {
+                Scope::Project
+            };
             let skill_key = format!(
                 "{}:{}",
                 if scope.global { "global" } else { "project" },
@@ -966,7 +1010,9 @@ pub fn list_installed_skills(
                 if !found {
                     if let Ok(agent_entries) = std::fs::read_dir(&agent_base) {
                         for agent_entry in agent_entries.flatten() {
-                            let Ok(ft) = agent_entry.file_type() else { continue };
+                            let Ok(ft) = agent_entry.file_type() else {
+                                continue;
+                            };
                             let candidate = agent_entry.path();
                             let candidate_is_dir = ft.is_dir()
                                 || (ft.is_symlink()
@@ -1091,7 +1137,9 @@ pub fn scan_installed_skill_names(is_global: bool, cwd: &Path) -> Vec<String> {
             return;
         };
         for entry in entries.flatten() {
-            let Ok(file_type) = entry.file_type() else { continue };
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
             let name = entry.file_name().to_string_lossy().to_string();
             if !file_type.is_dir() || name.starts_with('.') {
                 continue;
@@ -1147,7 +1195,9 @@ pub fn find_globally_tracked_skills(
         .collect();
     Ok(selected
         .iter()
-        .filter(|s| !lock_entries.skills.contains_key(*s) && global_names.contains(&sanitize_name(s)))
+        .filter(|s| {
+            !lock_entries.skills.contains_key(*s) && global_names.contains(&sanitize_name(s))
+        })
         .cloned()
         .collect())
 }
@@ -1160,8 +1210,10 @@ pub fn remove_skills(
     warnings: &mut Vec<SkillsError>,
 ) -> Result<Vec<RemoveOutcome>, SkillsError> {
     let is_global = options.global.is_global();
-    let cwd =
-        options.cwd.clone().unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let cwd = options
+        .cwd
+        .clone()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
     let ctx = DetectContext::from_env(&cwd);
     let target_agents: Vec<&AgentConfig> = if options.target_agents.is_empty() {
         registry::agents().iter().collect()
@@ -1202,10 +1254,7 @@ pub fn remove_skills(
                     if let Err(err) = remove_path_any(path_to_cleanup) {
                         warnings.push(SkillsError::new(
                             "SKILLS_IO",
-                            format!(
-                                "Could not remove skill from {}: {err}",
-                                agent.display_name
-                            ),
+                            format!("Could not remove skill from {}: {err}", agent.display_name),
                         ));
                     }
                 }
@@ -1215,7 +1264,10 @@ pub fn remove_skills(
         // Only remove the canonical copy when no other installed agent uses it.
         let installed_agents = registry::detect_installed_agents(&cwd);
         let mut is_still_used = false;
-        for agent in installed_agents.iter().filter(|a| !target_agents.iter().any(|t| t.name == a.name)) {
+        for agent in installed_agents
+            .iter()
+            .filter(|a| !target_agents.iter().any(|t| t.name == a.name))
+        {
             let path = get_install_path(skill_name, agent, is_global, &cwd, None);
             if std::fs::symlink_metadata(&path).is_ok() {
                 is_still_used = true;
@@ -1232,15 +1284,23 @@ pub fn remove_skills(
             let lock = crate::locks::read_skill_lock()?;
             let entry = lock.skills.get(skill_name);
             (
-                entry.map(|e| e.source.clone()).unwrap_or_else(|| "local".to_string()),
-                entry.map(|e| e.source_type.clone()).unwrap_or_else(|| "local".to_string()),
+                entry
+                    .map(|e| e.source.clone())
+                    .unwrap_or_else(|| "local".to_string()),
+                entry
+                    .map(|e| e.source_type.clone())
+                    .unwrap_or_else(|| "local".to_string()),
             )
         } else {
             let lock = crate::locks::read_local_lock(&cwd)?;
             let entry = lock.skills.get(skill_name);
             (
-                entry.map(|e| e.source.clone()).unwrap_or_else(|| "local".to_string()),
-                entry.map(|e| e.source_type.clone()).unwrap_or_else(|| "local".to_string()),
+                entry
+                    .map(|e| e.source.clone())
+                    .unwrap_or_else(|| "local".to_string()),
+                entry
+                    .map(|e| e.source_type.clone())
+                    .unwrap_or_else(|| "local".to_string()),
             )
         };
 

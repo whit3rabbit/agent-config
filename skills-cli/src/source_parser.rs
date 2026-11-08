@@ -188,11 +188,15 @@ fn looks_like_git_source(input: &str) -> bool {
 fn shorthand_shape(input: &str) -> bool {
     // ^([^/]+)/([^/]+)(?:/(.+)|@(.+))?$
     let mut parts = input.splitn(3, '/');
-    let Some(owner) = parts.next() else { return false };
+    let Some(owner) = parts.next() else {
+        return false;
+    };
     if owner.is_empty() || owner.contains('/') {
         return false;
     }
-    let Some(rest) = parts.next() else { return false };
+    let Some(rest) = parts.next() else {
+        return false;
+    };
     if rest.is_empty() {
         return false;
     }
@@ -254,19 +258,28 @@ fn is_gitlab_repo_or_tree_path(path: &str) -> bool {
     let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
     // /owner/repo or /group/.../repo/-/tree/branch...
     if let Some(index) = segments.iter().position(|s| *s == "-") {
-        return segments.get(index + 1).is_some_and(|s| *s == "tree") && segments.len() >= index + 3;
+        return segments.get(index + 1).is_some_and(|s| *s == "tree")
+            && segments.len() >= index + 3;
     }
     segments.len() >= 2
 }
 
 fn parse_fragment_ref(input: &str) -> FragmentRef {
     let Some(hash_index) = input.find('#') else {
-        return FragmentRef { input_without_fragment: input.to_string(), ref_: None, skill_filter: None };
+        return FragmentRef {
+            input_without_fragment: input.to_string(),
+            ref_: None,
+            skill_filter: None,
+        };
     };
     let input_without_fragment = input[..hash_index].to_string();
     let fragment = &input[hash_index + 1..];
     if fragment.is_empty() || !looks_like_git_source(&input_without_fragment) {
-        return FragmentRef { input_without_fragment: input.to_string(), ref_: None, skill_filter: None };
+        return FragmentRef {
+            input_without_fragment: input.to_string(),
+            ref_: None,
+            skill_filter: None,
+        };
     }
     match fragment.find('@') {
         None => FragmentRef {
@@ -279,8 +292,16 @@ fn parse_fragment_ref(input: &str) -> FragmentRef {
             let skill_part = &fragment[at_index + 1..];
             FragmentRef {
                 input_without_fragment,
-                ref_: if ref_part.is_empty() { None } else { Some(url_decode(ref_part)) },
-                skill_filter: if skill_part.is_empty() { None } else { Some(url_decode(skill_part)) },
+                ref_: if ref_part.is_empty() {
+                    None
+                } else {
+                    Some(url_decode(ref_part))
+                },
+                skill_filter: if skill_part.is_empty() {
+                    None
+                } else {
+                    Some(url_decode(skill_part))
+                },
             }
         }
     }
@@ -337,7 +358,9 @@ fn is_hosted_artifact_url(input: &str) -> bool {
     }
     let (host, path) = split_url(input);
     match host.as_str() {
-        "raw.githubusercontent.com" | "codeload.github.com" | "objects.githubusercontent.com" => true,
+        "raw.githubusercontent.com" | "codeload.github.com" | "objects.githubusercontent.com" => {
+            true
+        }
         "github.com" => {
             let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
             if segments.len() < 3 {
@@ -345,7 +368,9 @@ fn is_hosted_artifact_url(input: &str) -> bool {
             }
             matches!(segments[2], "archive" | "raw" | "releases")
                 && (segments[2] != "releases"
-                    || segments.get(3).is_some_and(|s| *s == "download" || *s == "latest"))
+                    || segments
+                        .get(3)
+                        .is_some_and(|s| *s == "download" || *s == "latest"))
         }
         "gitlab.com" => path.contains("/-/archive/") || path.contains("/-/raw/"),
         _ => false,
@@ -354,7 +379,11 @@ fn is_hosted_artifact_url(input: &str) -> bool {
 
 /// Sanitize a subpath, rejecting `..` traversal (upstream `sanitizeSubpath`).
 pub fn sanitize_subpath(subpath: &str) -> Result<String, SkillsError> {
-    if subpath.replace('\\', "/").split('/').any(|segment| segment == "..") {
+    if subpath
+        .replace('\\', "/")
+        .split('/')
+        .any(|segment| segment == "..")
+    {
         return Err(diag::unsafe_subpath(subpath));
     }
     Ok(subpath.to_string())
@@ -444,11 +473,25 @@ pub fn parse_source_with_host(input: &str, github_host: &str) -> ParsedSource {
     }
 
     if let Some(rest) = input.strip_prefix("github:") {
-        return parse_source_with_host(&append_fragment_ref(rest, fragment.ref_.as_deref(), fragment.skill_filter.as_deref()), github_host);
+        return parse_source_with_host(
+            &append_fragment_ref(
+                rest,
+                fragment.ref_.as_deref(),
+                fragment.skill_filter.as_deref(),
+            ),
+            github_host,
+        );
     }
     if let Some(rest) = input.strip_prefix("gitlab:") {
         let joined = format!("https://gitlab.com/{rest}");
-        return parse_source_with_host(&append_fragment_ref(&joined, fragment.ref_.as_deref(), fragment.skill_filter.as_deref()), github_host);
+        return parse_source_with_host(
+            &append_fragment_ref(
+                &joined,
+                fragment.ref_.as_deref(),
+                fragment.skill_filter.as_deref(),
+            ),
+            github_host,
+        );
     }
 
     if is_hosted_artifact_url(&input) {
@@ -493,8 +536,11 @@ pub fn parse_source_with_host(input: &str, github_host: &str) -> ParsedSource {
     }
 
     // Shorthand: owner/repo, owner/repo/subpath, owner/repo@skill.
-    let shorthand_source_type =
-        if github_host == "github.com" { SourceKind::GitHub } else { SourceKind::Git };
+    let shorthand_source_type = if github_host == "github.com" {
+        SourceKind::GitHub
+    } else {
+        SourceKind::Git
+    };
     let shorthand_ok = !input.contains(':') && !input.starts_with('.') && !input.starts_with('/');
     if shorthand_ok {
         // owner/repo@skill
@@ -510,7 +556,10 @@ pub fn parse_source_with_host(input: &str, github_host: &str) -> ParsedSource {
             }
             if let (Some(owner), Some(repo), true) = (owner, repo, no_more) {
                 if !owner.is_empty() && !repo.is_empty() && !skill_filter.is_empty() {
-                    if fragment.ref_.is_none() && fragment.skill_filter.is_none() && is_version_pin(skill_filter) {
+                    if fragment.ref_.is_none()
+                        && fragment.skill_filter.is_none()
+                        && is_version_pin(skill_filter)
+                    {
                         return ParsedSource {
                             kind: shorthand_source_type,
                             url: format!("https://{github_host}/{owner}/{repo}.git"),
@@ -526,7 +575,9 @@ pub fn parse_source_with_host(input: &str, github_host: &str) -> ParsedSource {
                         subpath: None,
                         local_path: None,
                         ref_: fragment.ref_,
-                        skill_filter: fragment.skill_filter.or_else(|| Some(skill_filter.to_string())),
+                        skill_filter: fragment
+                            .skill_filter
+                            .or_else(|| Some(skill_filter.to_string())),
                     };
                 }
             }
@@ -536,7 +587,10 @@ pub fn parse_source_with_host(input: &str, github_host: &str) -> ParsedSource {
             let mut parts = input.splitn(3, '/');
             let owner = parts.next().unwrap_or("");
             let repo = parts.next().unwrap_or("");
-            let subpath = parts.next().map(|s| s.trim_end_matches('/')).filter(|s| !s.is_empty());
+            let subpath = parts
+                .next()
+                .map(|s| s.trim_end_matches('/'))
+                .filter(|s| !s.is_empty());
             let subpath = subpath.map(|s| sanitize_subpath(s).ok()).unwrap_or(None);
             return ParsedSource {
                 kind: shorthand_source_type,
@@ -596,7 +650,10 @@ fn parse_github_ssh_tree(input: &str) -> Option<ParsedSource> {
     let (owner, repo) = repo_part_owners(repo)?;
     let mut segments = tree_and_more.splitn(2, '/');
     let branch = segments.next()?.to_string();
-    let subpath = segments.next().map(|s| sanitize_subpath(s).ok()).unwrap_or(None);
+    let subpath = segments
+        .next()
+        .map(|s| sanitize_subpath(s).ok())
+        .unwrap_or(None);
     Some(ParsedSource {
         kind: SourceKind::Git,
         url: format!("git@{host}:{owner}/{repo}.git"),
@@ -626,7 +683,11 @@ fn parse_github_url(input: &str, fragment_ref: Option<String>) -> Option<ParsedS
     }
     let owner = segments[0];
     let raw_repo = segments[1].trim_end_matches(".git");
-    if segments.len() >= 5 && segments[2] == "tree" && !segments[3].is_empty() && !segments[4].is_empty() {
+    if segments.len() >= 5
+        && segments[2] == "tree"
+        && !segments[3].is_empty()
+        && !segments[4].is_empty()
+    {
         let branch = segments[3].to_string();
         let subpath = segments[4..].join("/");
         let subpath = sanitize_subpath(&subpath).ok();
@@ -682,7 +743,10 @@ fn parse_gitlab_url(input: &str, fragment_ref: Option<String>) -> Option<ParsedS
     if branch.is_empty() {
         return None;
     }
-    let subpath = segments.next().map(|s| sanitize_subpath(s).ok()).unwrap_or(None);
+    let subpath = segments
+        .next()
+        .map(|s| sanitize_subpath(s).ok())
+        .unwrap_or(None);
     Some(ParsedSource {
         kind: SourceKind::GitLab,
         url: format!("{protocol}://{host}/{repo_path}.git"),
@@ -698,7 +762,10 @@ fn is_well_known_url(input: &str) -> bool {
         return false;
     }
     let (host, _) = split_url(input);
-    if matches!(host.as_str(), "github.com" | "gitlab.com" | "raw.githubusercontent.com") {
+    if matches!(
+        host.as_str(),
+        "github.com" | "gitlab.com" | "raw.githubusercontent.com"
+    ) {
         return false;
     }
     !input.ends_with(".git")
@@ -712,7 +779,10 @@ mod tests {
     fn parses_shorthand() {
         let parsed = parse_source("vercel-labs/agent-skills");
         assert_eq!(parsed.kind, SourceKind::GitHub);
-        assert_eq!(parsed.url, "https://github.com/vercel-labs/agent-skills.git");
+        assert_eq!(
+            parsed.url,
+            "https://github.com/vercel-labs/agent-skills.git"
+        );
     }
 
     #[test]

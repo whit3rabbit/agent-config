@@ -136,7 +136,10 @@ pub struct LocalSkillLock {
 
 impl Default for LocalSkillLock {
     fn default() -> Self {
-        Self { version: LOCAL_LOCK_VERSION, skills: BTreeMap::new() }
+        Self {
+            version: LOCAL_LOCK_VERSION,
+            skills: BTreeMap::new(),
+        }
     }
 }
 
@@ -147,7 +150,9 @@ pub fn get_skill_lock_path() -> PathBuf {
     if let Some(state) = std::env::var_os("XDG_STATE_HOME").filter(|p| !p.is_empty()) {
         return PathBuf::from(state).join("skills").join(GLOBAL_LOCK_FILE);
     }
-    crate::paths::home_dir().join(".agents").join(GLOBAL_LOCK_FILE)
+    crate::paths::home_dir()
+        .join(".agents")
+        .join(GLOBAL_LOCK_FILE)
 }
 
 /// Path of the local (project) lock file for `cwd`.
@@ -178,9 +183,8 @@ pub fn read_skill_lock_at(path: &Path) -> Result<SkillLock, SkillsError> {
     if version.is_none_or(|v| v < GLOBAL_LOCK_VERSION as u64) {
         return Ok(SkillLock::default());
     }
-    serde_json::from_value::<SkillLock>(parsed).map_err(|err| {
-        diag::invalid_local_lock(&path.to_string_lossy(), &err.to_string())
-    })
+    serde_json::from_value::<SkillLock>(parsed)
+        .map_err(|err| diag::invalid_local_lock(&path.to_string_lossy(), &err.to_string()))
 }
 
 /// Write the global skill lock (pretty-printed, 2-space indent).
@@ -192,13 +196,20 @@ pub fn write_skill_lock(lock: &SkillLock) -> Result<(), SkillsError> {
 pub fn write_skill_lock_at(path: &Path, lock: &SkillLock) -> Result<(), SkillsError> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|err| {
-            SkillsError::new("SKILLS_IO", format!("failed to create {}: {err}", parent.display()))
+            SkillsError::new(
+                "SKILLS_IO",
+                format!("failed to create {}: {err}", parent.display()),
+            )
         })?;
     }
     let content = serde_json::to_string_pretty(lock)
         .map_err(|err| SkillsError::new("SKILLS_IO", err.to_string()))?;
-    std::fs::write(path, content)
-        .map_err(|err| SkillsError::new("SKILLS_IO", format!("failed to write {}: {err}", path.display())))?;
+    std::fs::write(path, content).map_err(|err| {
+        SkillsError::new(
+            "SKILLS_IO",
+            format!("failed to write {}: {err}", path.display()),
+        )
+    })?;
     Ok(())
 }
 
@@ -216,12 +227,14 @@ pub fn read_local_lock_at(path: &Path, lock_dir: &Path) -> Result<LocalSkillLock
             return Ok(LocalSkillLock::default());
         }
         Err(err) => {
-            return Err(diag::invalid_local_lock(&path.to_string_lossy(), &err.to_string()));
+            return Err(diag::invalid_local_lock(
+                &path.to_string_lossy(),
+                &err.to_string(),
+            ));
         }
     };
-    let parsed: serde_json::Value = serde_json::from_str(&content).map_err(|err| {
-        diag::invalid_local_lock(&path.to_string_lossy(), &err.to_string())
-    })?;
+    let parsed: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|err| diag::invalid_local_lock(&path.to_string_lossy(), &err.to_string()))?;
     let shape_ok = parsed.is_object()
         && parsed.get("version").is_some_and(|v| v.is_number())
         && parsed.get("skills").is_some_and(|s| s.is_object());
@@ -238,14 +251,15 @@ pub fn read_local_lock_at(path: &Path, lock_dir: &Path) -> Result<LocalSkillLock
             &format!("unsupported lock version {version} (expected {LOCAL_LOCK_VERSION})"),
         ));
     }
-    let mut lock: LocalSkillLock = serde_json::from_value(parsed).map_err(|err| {
-        diag::invalid_local_lock(&path.to_string_lossy(), &err.to_string())
-    })?;
+    let mut lock: LocalSkillLock = serde_json::from_value(parsed)
+        .map_err(|err| diag::invalid_local_lock(&path.to_string_lossy(), &err.to_string()))?;
     // Local sources are stored portable (`./rel`) and resolved on read.
     for entry in lock.skills.values_mut() {
         if entry.source_type == "local" && !Path::new(&entry.source).is_absolute() {
             // Lexical resolution strips `./` segments, like JS `resolve()`.
-            entry.source = lexical_abs(&lock_dir.join(&entry.source)).to_string_lossy().to_string();
+            entry.source = lexical_abs(&lock_dir.join(&entry.source))
+                .to_string_lossy()
+                .to_string();
         }
     }
     Ok(lock)
@@ -258,7 +272,11 @@ pub fn write_local_lock(lock: &LocalSkillLock, cwd: &Path) -> Result<(), SkillsE
 }
 
 /// Write the local lock to an explicit path (testing).
-pub fn write_local_lock_at(path: &Path, lock: &LocalSkillLock, lock_dir: &Path) -> Result<(), SkillsError> {
+pub fn write_local_lock_at(
+    path: &Path,
+    lock: &LocalSkillLock,
+    lock_dir: &Path,
+) -> Result<(), SkillsError> {
     let mut portable = lock.clone();
     for entry in portable.skills.values_mut() {
         if entry.source_type == "local" {
@@ -267,13 +285,21 @@ pub fn write_local_lock_at(path: &Path, lock: &LocalSkillLock, lock_dir: &Path) 
     }
     let content = serde_json::to_string_pretty(&portable)
         .map_err(|err| SkillsError::new("SKILLS_IO", err.to_string()))?;
-    std::fs::write(path, content + "\n")
-        .map_err(|err| SkillsError::new("SKILLS_IO", format!("failed to write {}: {err}", path.display())))?;
+    std::fs::write(path, content + "\n").map_err(|err| {
+        SkillsError::new(
+            "SKILLS_IO",
+            format!("failed to write {}: {err}", path.display()),
+        )
+    })?;
     Ok(())
 }
 
 fn lexical_abs(path: &Path) -> PathBuf {
-    let path = if path.is_absolute() { path.to_path_buf() } else { std::env::current_dir().unwrap_or_default().join(path) };
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir().unwrap_or_default().join(path)
+    };
     let mut out = PathBuf::new();
     for component in path.components() {
         match component {
@@ -328,11 +354,14 @@ fn collect_files(
     current_dir: &Path,
     results: &mut Vec<(String, Vec<u8>)>,
 ) -> Result<(), SkillsError> {
-    let entries = std::fs::read_dir(current_dir)
-        .map_err(|err| SkillsError::new("SKILLS_IO", format!("{}: {err}", current_dir.display())))?;
+    let entries = std::fs::read_dir(current_dir).map_err(|err| {
+        SkillsError::new("SKILLS_IO", format!("{}: {err}", current_dir.display()))
+    })?;
     for entry in entries.flatten() {
         let full_path = entry.path();
-        let Ok(file_type) = entry.file_type() else { continue };
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
         if file_type.is_dir() {
             let name = entry.file_name();
             if name == ".git" || name == "node_modules" {
@@ -343,7 +372,9 @@ fn collect_files(
             let mut content = Vec::new();
             std::fs::File::open(&full_path)
                 .and_then(|mut f| f.read_to_end(&mut content))
-                .map_err(|err| SkillsError::new("SKILLS_IO", format!("{}: {err}", full_path.display())))?;
+                .map_err(|err| {
+                    SkillsError::new("SKILLS_IO", format!("{}: {err}", full_path.display()))
+                })?;
             let relative = full_path
                 .strip_prefix(base_dir)
                 .unwrap_or(&full_path)
@@ -393,7 +424,9 @@ pub fn lock_change_reason(
         return Some(format!("{skill_name} is not in skills-lock.json"));
     };
     if locked.computed_hash != computed_hash {
-        return Some(format!("{skill_name} has changed since skills-lock.json was written"));
+        return Some(format!(
+            "{skill_name} has changed since skills-lock.json was written"
+        ));
     }
     if locked.version.as_deref() != version {
         return Some(format!(
@@ -501,7 +534,10 @@ mod tests {
         let content = std::fs::read_to_string(tmp.path().join("skills-lock.json")).unwrap();
         assert!(content.ends_with('\n'));
         let read = read_local_lock(tmp.path()).unwrap();
-        assert_eq!(read.skills["s"].source, tmp.path().join("vendor/skill").to_string_lossy());
+        assert_eq!(
+            read.skills["s"].source,
+            tmp.path().join("vendor/skill").to_string_lossy()
+        );
     }
 
     #[test]

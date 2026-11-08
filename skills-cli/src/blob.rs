@@ -50,7 +50,11 @@ fn api_base() -> String {
     }
 }
 
-fn fetch_tree_branch(owner_repo: &str, branch: &str, token: Option<&str>) -> Result<RepoTree, (bool, bool)> {
+fn fetch_tree_branch(
+    owner_repo: &str,
+    branch: &str,
+    token: Option<&str>,
+) -> Result<RepoTree, (bool, bool)> {
     // (rate_limited, auth_retryable)
     let url = format!(
         "{}/repos/{}/git/trees/{}?recursive=1",
@@ -59,8 +63,10 @@ fn fetch_tree_branch(owner_repo: &str, branch: &str, token: Option<&str>) -> Res
         url_encode_component(branch)
     );
     let token_owned = token.map(str::to_string);
-    let mut headers: Vec<(&str, &str)> =
-        vec![("Accept", "application/vnd.github.v3+json"), ("User-Agent", "skills-cli")];
+    let mut headers: Vec<(&str, &str)> = vec![
+        ("Accept", "application/vnd.github.v3+json"),
+        ("User-Agent", "skills-cli"),
+    ];
     let auth_header;
     if let Some(token) = &token_owned {
         auth_header = format!("Bearer {token}");
@@ -72,15 +78,23 @@ fn fetch_tree_branch(owner_repo: &str, branch: &str, token: Option<&str>) -> Res
                 let Ok(value) = response.json() else {
                     return Err((false, false));
                 };
-                let sha = value.get("sha").and_then(|s| s.as_str()).unwrap_or("").to_string();
+                let sha = value
+                    .get("sha")
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 let tree: Vec<TreeEntry> = value
                     .get("tree")
                     .and_then(|t| serde_json::from_value(t.clone()).ok())
                     .unwrap_or_default();
-                return Ok(RepoTree { sha, branch: branch.to_string(), tree });
+                return Ok(RepoTree {
+                    sha,
+                    branch: branch.to_string(),
+                    tree,
+                });
             }
-            let rate_limited = response.status == 403
-                && response.header("x-ratelimit-remaining") == Some("0");
+            let rate_limited =
+                response.status == 403 && response.header("x-ratelimit-remaining") == Some("0");
             let auth_retryable = response.status == 401 || response.status == 404;
             Err((rate_limited, auth_retryable))
         }
@@ -91,9 +105,19 @@ fn fetch_tree_branch(owner_repo: &str, branch: &str, token: Option<&str>) -> Res
 fn fetch_tree_with_gh_cli(owner_repo: &str, branches: &[String]) -> Option<RepoTree> {
     use std::process::Command;
     for branch in branches {
-        let endpoint = format!("repos/{owner_repo}/git/trees/{}?recursive=1", url_encode_component(branch));
+        let endpoint = format!(
+            "repos/{owner_repo}/git/trees/{}?recursive=1",
+            url_encode_component(branch)
+        );
         let output = Command::new("gh")
-            .args(["api", &endpoint, "--method", "GET", "--hostname", &skills_store::paths::github_host()])
+            .args([
+                "api",
+                &endpoint,
+                "--method",
+                "GET",
+                "--hostname",
+                &skills_store::paths::github_host(),
+            ])
             .env("GH_PROMPT_DISABLED", "1")
             .output()
             .ok()?;
@@ -112,12 +136,28 @@ fn fetch_tree_with_gh_cli(owner_repo: &str, branches: &[String]) -> Option<RepoT
         let entries: Vec<TreeEntry> = tree
             .iter()
             .map(|entry| TreeEntry {
-                path: entry.get("path").and_then(|p| p.as_str()).unwrap_or("").to_string(),
-                kind: entry.get("type").and_then(|t| t.as_str()).unwrap_or("blob").to_string(),
-                sha: entry.get("sha").and_then(|s| s.as_str()).unwrap_or("").to_string(),
+                path: entry
+                    .get("path")
+                    .and_then(|p| p.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                kind: entry
+                    .get("type")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("blob")
+                    .to_string(),
+                sha: entry
+                    .get("sha")
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("")
+                    .to_string(),
             })
             .collect();
-        return Some(RepoTree { sha: sha.to_string(), branch: branch.clone(), tree: entries });
+        return Some(RepoTree {
+            sha: sha.to_string(),
+            branch: branch.clone(),
+            tree: entries,
+        });
     }
     None
 }
@@ -198,14 +238,21 @@ const SKIP_DIRS: &[&str] = &["node_modules", ".git", "dist", "build", "__pycache
 
 /// Find SKILL.md paths in a repo tree (upstream `findSkillMdPaths`).
 #[must_use]
-pub fn find_skill_md_paths(tree: &RepoTree, subpath: Option<&str>, extra_containers: &[String]) -> Vec<String> {
+pub fn find_skill_md_paths(
+    tree: &RepoTree,
+    subpath: Option<&str>,
+    extra_containers: &[String],
+) -> Vec<String> {
     let all_skill_mds: Vec<String> = tree
         .tree
         .iter()
         .filter(|entry| entry.kind == "blob")
         .map(|entry| entry.path.clone())
         .filter(|path| {
-            path.rsplit('/').next().map(|last| last.to_lowercase() == "skill.md").unwrap_or(false)
+            path.rsplit('/')
+                .next()
+                .map(|last| last.to_lowercase() == "skill.md")
+                .unwrap_or(false)
         })
         .collect();
 
@@ -224,7 +271,9 @@ pub fn find_skill_md_paths(tree: &RepoTree, subpath: Option<&str>, extra_contain
     } else {
         all_skill_mds
             .into_iter()
-            .filter(|path| path.starts_with(&prefix) || path.as_str() == format!("{prefix}SKILL.md"))
+            .filter(|path| {
+                path.starts_with(&prefix) || path.as_str() == format!("{prefix}SKILL.md")
+            })
             .collect()
     };
     if filtered.is_empty() {
@@ -234,7 +283,8 @@ pub fn find_skill_md_paths(tree: &RepoTree, subpath: Option<&str>, extra_contain
     let lower_skill_md_set: std::collections::HashSet<String> =
         filtered.iter().map(|p| p.to_lowercase()).collect();
 
-    let mut priority_prefixes: Vec<String> = PRIORITY_PREFIXES.iter().map(|s| s.to_string()).collect();
+    let mut priority_prefixes: Vec<String> =
+        PRIORITY_PREFIXES.iter().map(|s| s.to_string()).collect();
     for dir in skills_store::registry::agent_project_skill_dirs() {
         priority_prefixes.push(format!("{dir}/"));
     }
@@ -284,12 +334,16 @@ pub fn find_skill_md_paths(tree: &RepoTree, subpath: Option<&str>, extra_contain
             if is_container
                 && parts.len() >= 3
                 && parts.len() <= skills_store::skills::DEFAULT_SKILL_CONTAINER_DEPTH + 1
-                && parts.last().map(|p| p.to_lowercase() == "skill.md").unwrap_or(false)
+                && parts
+                    .last()
+                    .map(|p| p.to_lowercase() == "skill.md")
+                    .unwrap_or(false)
                 && skill_dirs.iter().all(|part| !SKIP_DIRS.contains(part))
                 && !has_ancestor_skill
-                && seen.insert(skill_md.clone()) {
-                    results.push(skill_md.clone());
-                }
+                && seen.insert(skill_md.clone())
+            {
+                results.push(skill_md.clone());
+            }
         }
     }
 
@@ -304,7 +358,9 @@ pub fn find_skill_md_paths(tree: &RepoTree, subpath: Option<&str>, extra_contain
 
 fn fetch_raw_content(owner_repo: &str, branch: &str, file_path: &str) -> Option<String> {
     let url = format!("https://raw.githubusercontent.com/{owner_repo}/{branch}/{file_path}");
-    http::get_ok(&url, FETCH_TIMEOUT).ok().map(|response| response.text())
+    http::get_ok(&url, FETCH_TIMEOUT)
+        .ok()
+        .map(|response| response.text())
 }
 
 /// Parse the `paths` field of a skills.sh.json file (upstream
@@ -319,7 +375,9 @@ pub fn parse_skills_sh_paths(content: &str) -> Vec<String> {
     };
     let mut result: Vec<String> = Vec::new();
     for entry in paths {
-        let Some(entry) = entry.as_str() else { continue };
+        let Some(entry) = entry.as_str() else {
+            continue;
+        };
         if !entry.starts_with("./") || entry.contains('\\') {
             continue;
         }
@@ -350,7 +408,11 @@ fn fetch_skills_sh_paths(owner_repo: &str, tree: &RepoTree, subpath: Option<&str
         None => String::new(),
     };
     let config_path = format!("{root}skills.sh.json");
-    if !tree.tree.iter().any(|entry| entry.kind == "blob" && entry.path == config_path) {
+    if !tree
+        .tree
+        .iter()
+        .any(|entry| entry.kind == "blob" && entry.path == config_path)
+    {
         return Vec::new();
     }
     fetch_raw_content(owner_repo, &tree.branch, &config_path)
@@ -428,14 +490,22 @@ const SNAPSHOT_EXCLUDED_DIRS: &[&str] = &[".git", "__pycache__", "__pypackages__
 
 fn is_installable_snapshot_path(path: &str) -> bool {
     let parts: Vec<&str> = path.split('/').collect();
-    let Some(file_name) = parts.last() else { return false };
+    let Some(file_name) = parts.last() else {
+        return false;
+    };
     if SNAPSHOT_EXCLUDED_FILES.contains(file_name) {
         return false;
     }
-    parts[..parts.len() - 1].iter().all(|part| !SNAPSHOT_EXCLUDED_DIRS.contains(part))
+    parts[..parts.len() - 1]
+        .iter()
+        .all(|part| !SNAPSHOT_EXCLUDED_DIRS.contains(part))
 }
 
-fn has_complete_nested_snapshot(tree: &RepoTree, skill_md_path: &str, files: &[(String, String)]) -> bool {
+fn has_complete_nested_snapshot(
+    tree: &RepoTree,
+    skill_md_path: &str,
+    files: &[(String, String)],
+) -> bool {
     let folder_path = get_skill_folder_path(skill_md_path);
     if folder_path.is_empty() {
         return true;
@@ -478,8 +548,7 @@ pub fn try_blob_install(
             .iter()
             .filter(|path| {
                 let parts: Vec<&str> = path.split('/').collect();
-                parts.len() >= 2
-                    && to_skill_slug(parts[parts.len() - 2]) == filter_slug
+                parts.len() >= 2 && to_skill_slug(parts[parts.len() - 2]) == filter_slug
             })
             .cloned()
             .collect();
@@ -567,7 +636,11 @@ pub fn try_blob_install(
                         ))
                     })
                     .collect::<Option<Vec<_>>>()?;
-                let hash = value.get("hash").and_then(|h| h.as_str()).unwrap_or("").to_string();
+                let hash = value
+                    .get("hash")
+                    .and_then(|h| h.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 Some((files, hash))
             });
         downloads.push((skill.clone(), download));
@@ -603,7 +676,8 @@ pub fn try_blob_install(
             metadata: skill.4,
         });
     }
-    Some(BlobInstallResult { skills: blob_skills, tree })
+    Some(BlobInstallResult {
+        skills: blob_skills,
+        tree,
+    })
 }
-
-

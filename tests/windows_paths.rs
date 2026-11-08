@@ -15,7 +15,8 @@ mod common;
 use std::path::PathBuf;
 
 use agent_config::{
-    paths, registry, Event, HookSpec, Matcher, PlanStatus, PlannedChange, RefusalReason, Scope,
+    paths, registry, skill_by_id, Event, HookSpec, Matcher, PlanStatus, PlannedChange,
+    RefusalReason, Scope, SkillSpec,
 };
 
 use common::IsolatedGlobalEnv;
@@ -187,4 +188,36 @@ fn cline_hook_install_is_refused_on_windows() {
         agent_config::AgentConfigError::UnsupportedPlatform { id: "cline", .. }
     ));
     assert!(!project.path().join(".clinerules/hooks/PreToolUse").exists());
+}
+
+#[test]
+fn global_skill_install_accepts_verbatim_canonical_home() {
+    // Regression for the Windows CI failure where `IsolatedGlobalEnv`'s
+    // canonicalized home (a verbatim `\\?\C:\...` path) made every global
+    // skill install die on `symlink_metadata("\\?\C:")` with
+    // "Incorrect function": the symlink walk must not stat a bare drive
+    // prefix. Install + uninstall round-trip pins the whole path.
+    let env = IsolatedGlobalEnv::new();
+    assert!(
+        env.home_path()
+            .as_os_str()
+            .to_string_lossy()
+            .starts_with(r"\\?\"),
+        "canonicalized tempdir home should be verbatim on Windows"
+    );
+
+    let claude = skill_by_id("claude").expect("claude integration registered");
+    let spec = SkillSpec::builder("probe")
+        .owner("app")
+        .description("Verbatim-path probe.")
+        .body("## Goal\nInstall through a verbatim home.\n")
+        .build();
+
+    claude.install_skill(&Scope::Global, &spec).unwrap();
+    assert!(claude.is_skill_installed(&Scope::Global, "probe").unwrap());
+
+    claude
+        .uninstall_skill(&Scope::Global, "probe", "app")
+        .unwrap();
+    assert!(!claude.is_skill_installed(&Scope::Global, "probe").unwrap());
 }

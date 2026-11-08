@@ -145,7 +145,11 @@ fn build_use_prompt(skill_md: &str, support_dir: &Path, has_supporting_files: bo
 
 enum UseSkill {
     Blob(crate::blob::BlobSkill),
-    Disk { name: String, raw_content: Option<String>, path: PathBuf },
+    Disk {
+        name: String,
+        raw_content: Option<String>,
+        path: PathBuf,
+    },
     WellKnown(crate::wellknown::WellKnownSkill),
 }
 
@@ -180,7 +184,11 @@ pub fn run_use(sources: Vec<String>, options: UseOptions, parse_errors: Vec<Skil
         std::process::exit(1);
     }
     if sources.is_empty() {
-        eprintln!("{}\n\n{}", diag::missing_argument("source").plain(), get_use_help());
+        eprintln!(
+            "{}\n\n{}",
+            diag::missing_argument("source").plain(),
+            get_use_help()
+        );
         std::process::exit(1);
     }
     if sources.len() > 1 {
@@ -196,8 +204,14 @@ pub fn run_use(sources: Vec<String>, options: UseOptions, parse_errors: Vec<Skil
                 .unwrap_or_else(|| agent.clone());
             eprintln!(
                 "{}",
-                diag::use_agent_unsupported(&display, &supported_use_agents().iter().map(|s| s.to_string()).collect::<Vec<_>>())
-                    .plain()
+                diag::use_agent_unsupported(
+                    &display,
+                    &supported_use_agents()
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>()
+                )
+                .plain()
             );
             std::process::exit(1);
         }
@@ -208,91 +222,108 @@ pub fn run_use(sources: Vec<String>, options: UseOptions, parse_errors: Vec<Skil
     let selector = resolve_selector(parsed.skill_filter.clone(), options.skill.clone());
     let include_internal = selector.is_some();
 
-    let result: Result<UseSkill, SkillsError> = (|| {
-        match parsed.kind {
-            SourceKind::WellKnown => {
-                let skills = crate::wellknown::fetch_all_skills(&parsed.url, include_internal)?;
-                select_well_known_skill(skills, selector.as_deref(), &source)
+    let result: Result<UseSkill, SkillsError> = (|| match parsed.kind {
+        SourceKind::WellKnown => {
+            let skills = crate::wellknown::fetch_all_skills(&parsed.url, include_internal)?;
+            select_well_known_skill(skills, selector.as_deref(), &source)
+        }
+        SourceKind::Download => {
+            let downloaded = crate::download::download_source(&parsed.url)?;
+            let discovery = discover_skills(
+                &downloaded.root_dir,
+                None,
+                &DiscoverOptions {
+                    include_internal,
+                    full_depth: options.full_depth,
+                    ..Default::default()
+                },
+            )?;
+            select_disk_skill(discovery.skills, selector.as_deref(), &source)
+        }
+        SourceKind::Local => {
+            let local_path = parsed
+                .local_path
+                .clone()
+                .unwrap_or_else(|| PathBuf::from(&parsed.url));
+            if !local_path.exists() {
+                return Err(diag::local_path_not_found(&local_path.to_string_lossy()));
             }
-            SourceKind::Download => {
-                let downloaded = crate::download::download_source(&parsed.url)?;
-                let discovery = discover_skills(
-                    &downloaded.root_dir,
-                    None,
-                    &DiscoverOptions { include_internal, full_depth: options.full_depth, ..Default::default() },
-                )?;
-                select_disk_skill(discovery.skills, selector.as_deref(), &source)
-            }
-            SourceKind::Local => {
-                let local_path = parsed.local_path.clone().unwrap_or_else(|| PathBuf::from(&parsed.url));
-                if !local_path.exists() {
-                    return Err(diag::local_path_not_found(&local_path.to_string_lossy()));
+            let discovery = discover_skills(
+                &local_path,
+                parsed.subpath.as_deref(),
+                &DiscoverOptions {
+                    include_internal,
+                    full_depth: options.full_depth,
+                    ..Default::default()
+                },
+            )?;
+            select_disk_skill(discovery.skills, selector.as_deref(), &source)
+        }
+        SourceKind::GitHub if !options.full_depth => {
+            let owner_repo = source_parser::get_owner_repo(&parsed);
+            let owner = owner_repo
+                .as_ref()
+                .and_then(|or| or.split('/').next())
+                .map(str::to_lowercase);
+            let mut blob_result = None;
+            if let (Some(owner_repo), Some(owner)) = (&owner_repo, owner) {
+                if BLOB_ALLOWED_OWNERS.contains(&owner.as_str()) {
+                    blob_result = crate::blob::try_blob_install(
+                        owner_repo,
+                        parsed.subpath.as_deref(),
+                        selector.as_deref(),
+                        parsed.ref_.as_deref(),
+                        include_internal,
+                    );
                 }
-                let discovery = discover_skills(
-                    &local_path,
-                    parsed.subpath.as_deref(),
-                    &DiscoverOptions { include_internal, full_depth: options.full_depth, ..Default::default() },
-                )?;
-                select_disk_skill(discovery.skills, selector.as_deref(), &source)
             }
-            SourceKind::GitHub if !options.full_depth => {
-                let owner_repo = source_parser::get_owner_repo(&parsed);
-                let owner = owner_repo
-                    .as_ref()
-                    .and_then(|or| or.split('/').next())
-                    .map(str::to_lowercase);
-                let mut blob_result = None;
-                if let (Some(owner_repo), Some(owner)) = (&owner_repo, owner) {
-                    if BLOB_ALLOWED_OWNERS.contains(&owner.as_str()) {
-                        blob_result = crate::blob::try_blob_install(
-                            owner_repo,
-                            parsed.subpath.as_deref(),
-                            selector.as_deref(),
-                            parsed.ref_.as_deref(),
-                            include_internal,
-                        );
-                    }
-                }
-                if let Some(blob) = blob_result {
-                    let skills: Vec<Skill> = blob
-                        .skills
-                        .iter()
-                        .map(|skill| Skill {
-                            name: skill.name.clone(),
-                            description: skill.description.clone(),
-                            path: PathBuf::new(),
-                            raw_content: Some(skill.raw_content.clone()),
-                            plugin_name: None,
-                            metadata: skill.metadata.clone(),
-                        })
-                        .collect();
-                    let selected = select_disk_skill(skills, selector.as_deref(), &source)?;
-                    let blob_skill = blob
-                        .skills
-                        .into_iter()
-                        .find(|skill| skill.name == selected.name())
-                        .ok_or_else(diag::no_valid_skills)?;
-                    return Ok(UseSkill::Blob(blob_skill));
-                }
-                let temp_dir = git::clone_repo(&parsed.url, parsed.ref_.as_deref())?;
-                let discovery = discover_skills(
-                    &temp_dir,
-                    parsed.subpath.as_deref(),
-                    &DiscoverOptions { include_internal, full_depth: options.full_depth, ..Default::default() },
-                );
-                let _ = git::cleanup_temp_dir(&temp_dir);
-                select_disk_skill(discovery?.skills, selector.as_deref(), &source)
+            if let Some(blob) = blob_result {
+                let skills: Vec<Skill> = blob
+                    .skills
+                    .iter()
+                    .map(|skill| Skill {
+                        name: skill.name.clone(),
+                        description: skill.description.clone(),
+                        path: PathBuf::new(),
+                        raw_content: Some(skill.raw_content.clone()),
+                        plugin_name: None,
+                        metadata: skill.metadata.clone(),
+                    })
+                    .collect();
+                let selected = select_disk_skill(skills, selector.as_deref(), &source)?;
+                let blob_skill = blob
+                    .skills
+                    .into_iter()
+                    .find(|skill| skill.name == selected.name())
+                    .ok_or_else(diag::no_valid_skills)?;
+                return Ok(UseSkill::Blob(blob_skill));
             }
-            SourceKind::GitHub | SourceKind::GitLab | SourceKind::Git => {
-                let temp_dir = git::clone_repo(&parsed.url, parsed.ref_.as_deref())?;
-                let discovery = discover_skills(
-                    &temp_dir,
-                    parsed.subpath.as_deref(),
-                    &DiscoverOptions { include_internal, full_depth: options.full_depth, ..Default::default() },
-                );
-                let _ = git::cleanup_temp_dir(&temp_dir);
-                select_disk_skill(discovery?.skills, selector.as_deref(), &source)
-            }
+            let temp_dir = git::clone_repo(&parsed.url, parsed.ref_.as_deref())?;
+            let discovery = discover_skills(
+                &temp_dir,
+                parsed.subpath.as_deref(),
+                &DiscoverOptions {
+                    include_internal,
+                    full_depth: options.full_depth,
+                    ..Default::default()
+                },
+            );
+            let _ = git::cleanup_temp_dir(&temp_dir);
+            select_disk_skill(discovery?.skills, selector.as_deref(), &source)
+        }
+        SourceKind::GitHub | SourceKind::GitLab | SourceKind::Git => {
+            let temp_dir = git::clone_repo(&parsed.url, parsed.ref_.as_deref())?;
+            let discovery = discover_skills(
+                &temp_dir,
+                parsed.subpath.as_deref(),
+                &DiscoverOptions {
+                    include_internal,
+                    full_depth: options.full_depth,
+                    ..Default::default()
+                },
+            );
+            let _ = git::cleanup_temp_dir(&temp_dir);
+            select_disk_skill(discovery?.skills, selector.as_deref(), &source)
         }
     })();
 
@@ -341,7 +372,11 @@ fn resolve_selector(
     }
 }
 
-fn select_disk_skill(skills: Vec<Skill>, selector: Option<&str>, _source: &str) -> Result<UseSkill, SkillsError> {
+fn select_disk_skill(
+    skills: Vec<Skill>,
+    selector: Option<&str>,
+    _source: &str,
+) -> Result<UseSkill, SkillsError> {
     if skills.is_empty() {
         return Err(diag::no_valid_skills());
     }
@@ -376,8 +411,6 @@ fn select_disk_skill(skills: Vec<Skill>, selector: Option<&str>, _source: &str) 
         }
     }
 }
-
-
 
 fn select_well_known_skill(
     skills: Vec<crate::wellknown::WellKnownSkill>,
@@ -459,12 +492,14 @@ fn materialize_use_skill(skill: &UseSkill) -> MaterializedUseSkill {
             }
             well_known.content.clone()
         }
-        UseSkill::Disk { path, raw_content, .. } => {
+        UseSkill::Disk {
+            path, raw_content, ..
+        } => {
             let mut warnings = Vec::new();
             let _ = skills_store::installer::copy_directory(path, &temp_path, &mut warnings);
-            raw_content
-                .clone()
-                .unwrap_or_else(|| std::fs::read_to_string(path.join("SKILL.md")).unwrap_or_default())
+            raw_content.clone().unwrap_or_else(|| {
+                std::fs::read_to_string(path.join("SKILL.md")).unwrap_or_default()
+            })
         }
     };
 
@@ -472,7 +507,11 @@ fn materialize_use_skill(skill: &UseSkill) -> MaterializedUseSkill {
     // Keep the directory alive for the process lifetime; the OS cleans tmp.
     let temp_root_path = temp_root.keep();
     std::mem::forget(temp_root_path);
-    MaterializedUseSkill { skill_dir: temp_path, skill_md, has_supporting_files }
+    MaterializedUseSkill {
+        skill_dir: temp_path,
+        skill_md,
+        has_supporting_files,
+    }
 }
 
 fn contains_supporting_files(root_dir: &Path, current_dir: &Path) -> bool {
@@ -481,7 +520,9 @@ fn contains_supporting_files(root_dir: &Path, current_dir: &Path) -> bool {
     };
     for entry in entries.flatten() {
         let entry_path = entry.path();
-        let Ok(file_type) = entry.file_type() else { continue };
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
         if file_type.is_dir() {
             if contains_supporting_files(root_dir, &entry_path) {
                 return true;
@@ -526,7 +567,10 @@ fn launch_agent(command: &str, prompt: &str) -> i32 {
             return 1;
         }
     };
-    child.wait().map(|status| status.code().unwrap_or(1)).unwrap_or(1)
+    child
+        .wait()
+        .map(|status| status.code().unwrap_or(1))
+        .unwrap_or(1)
 }
 
 /// Re-exported resolver options for command parity tests.

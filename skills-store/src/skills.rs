@@ -70,7 +70,11 @@ pub fn parse_skill_md_with_warnings(
     let content = match std::fs::read_to_string(skill_md_path) {
         Ok(content) => content,
         Err(err) => {
-            warn_skipped(skill_md_path, &format!("failed to read file: {err}"), warnings);
+            warn_skipped(
+                skill_md_path,
+                &format!("failed to read file: {err}"),
+                warnings,
+            );
             return None;
         }
     };
@@ -87,7 +91,10 @@ pub fn parse_skill_md_with_warnings(
         }
         warn_skipped(
             skill_md_path,
-            &format!("missing required frontmatter field(s): {}", missing.join(", ")),
+            &format!(
+                "missing required frontmatter field(s): {}",
+                missing.join(", ")
+            ),
             warnings,
         );
         return None;
@@ -135,7 +142,10 @@ pub fn parse_skill_md_with_warnings(
     Some(Skill {
         name,
         description,
-        path: skill_md_path.parent().unwrap_or(Path::new(".")).to_path_buf(),
+        path: skill_md_path
+            .parent()
+            .unwrap_or(Path::new("."))
+            .to_path_buf(),
         raw_content: Some(content),
         plugin_name: None,
         metadata,
@@ -208,7 +218,9 @@ pub fn parse_skills_sh_paths(content: &str) -> Vec<String> {
     };
     let mut result: Vec<String> = Vec::new();
     for entry in paths {
-        let Some(entry) = entry.as_str() else { continue };
+        let Some(entry) = entry.as_str() else {
+            continue;
+        };
         if !entry.starts_with("./") || entry.contains('\\') {
             continue;
         }
@@ -239,7 +251,10 @@ fn skills_sh_search_dirs(base: &Path) -> Vec<PathBuf> {
     let Ok(content) = std::fs::read_to_string(base.join("skills.sh.json")) else {
         return Vec::new();
     };
-    parse_skills_sh_paths(&content).into_iter().map(|p| base.join(p)).collect()
+    parse_skills_sh_paths(&content)
+        .into_iter()
+        .map(|p| base.join(p))
+        .collect()
 }
 
 /// Plugin manifest extraction, ported from `src/plugin-manifest.ts`.
@@ -253,7 +268,10 @@ fn plugin_manifests(base: &Path) -> (Vec<PathBuf>, HashMap<PathBuf, String>) {
     };
 
     let is_contained = |candidate: &Path| -> bool {
-        candidate.canonicalize().map(|c| c.starts_with(base)).unwrap_or_else(|_| candidate.starts_with(base))
+        candidate
+            .canonicalize()
+            .map(|c| c.starts_with(base))
+            .unwrap_or_else(|_| candidate.starts_with(base))
     };
 
     // marketplace.json (multi-plugin catalog)
@@ -263,7 +281,11 @@ fn plugin_manifests(base: &Path) -> (Vec<PathBuf>, HashMap<PathBuf, String>) {
             .and_then(|m| m.get("pluginRoot"))
             .and_then(|p| p.as_str())
             .filter(|p| p.starts_with("./"));
-        let plugins = manifest.get("plugins").and_then(|p| p.as_array()).cloned().unwrap_or_default();
+        let plugins = manifest
+            .get("plugins")
+            .and_then(|p| p.as_array())
+            .cloned()
+            .unwrap_or_default();
         for plugin in &plugins {
             let name = plugin.get("name").and_then(|n| n.as_str());
             let source = match plugin.get("source") {
@@ -289,7 +311,9 @@ fn plugin_manifests(base: &Path) -> (Vec<PathBuf>, HashMap<PathBuf, String>) {
             }
             if let Some(skills) = plugin.get("skills").and_then(|s| s.as_array()) {
                 for skill_path in skills {
-                    let Some(skill_path) = skill_path.as_str() else { continue };
+                    let Some(skill_path) = skill_path.as_str() else {
+                        continue;
+                    };
                     if !skill_path.starts_with("./") {
                         continue;
                     }
@@ -309,9 +333,15 @@ fn plugin_manifests(base: &Path) -> (Vec<PathBuf>, HashMap<PathBuf, String>) {
     // plugin.json (single plugin at root)
     if let Some(manifest) = read_manifest(".claude-plugin/plugin.json") {
         let name = manifest.get("name").and_then(|n| n.as_str());
-        let skills = manifest.get("skills").and_then(|s| s.as_array()).cloned().unwrap_or_default();
+        let skills = manifest
+            .get("skills")
+            .and_then(|s| s.as_array())
+            .cloned()
+            .unwrap_or_default();
         for skill_path in &skills {
-            let Some(skill_path) = skill_path.as_str() else { continue };
+            let Some(skill_path) = skill_path.as_str() else {
+                continue;
+            };
             if !skill_path.starts_with("./") {
                 continue;
             }
@@ -357,7 +387,12 @@ pub fn discover_skills(
 
     // The source repo's own lock marks skills it merely installed; skip them.
     let locked_skill_names: HashSet<String> = crate::locks::read_local_lock(base_path)
-        .map(|lock| lock.skills.keys().map(|k| normalize_skill_name(k)).collect())
+        .map(|lock| {
+            lock.skills
+                .keys()
+                .map(|k| normalize_skill_name(k))
+                .collect()
+        })
         .unwrap_or_default();
     let skip_installed_project_skill = |skill: &Skill| -> bool {
         if locked_skill_names.is_empty() {
@@ -374,7 +409,11 @@ pub fn discover_skills(
             return false;
         }
         let directory_name = normalize_skill_name(
-            &skill.path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+            &skill
+                .path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default(),
         );
         locked_skill_names.contains(&normalize_skill_name(&skill.name))
             || locked_skill_names.contains(&directory_name)
@@ -402,12 +441,20 @@ pub fn discover_skills(
 
     // Direct skill at the search path (early return unless full depth).
     if has_skill_md(&search_path) {
-        if let Some(mut skill) = parse_skill_at(&search_path, &mut parsed_skill_paths, options, &mut warnings) {
+        if let Some(mut skill) = parse_skill_at(
+            &search_path,
+            &mut parsed_skill_paths,
+            options,
+            &mut warnings,
+        ) {
             if !skip_installed_project_skill(&skill) {
                 enhance(&mut skill);
                 seen_names.insert(skill.name.clone());
                 if !options.full_depth {
-                    return Ok(Discovery { skills: vec![skill], warnings });
+                    return Ok(Discovery {
+                        skills: vec![skill],
+                        warnings,
+                    });
                 }
                 skills.push(skill);
             }
@@ -436,7 +483,18 @@ pub fn discover_skills(
         } else {
             1
         };
-        walk_skill_dirs(dir, max_depth, 1, options, &mut skills, &mut seen_names, &mut parsed_skill_paths, &mut warnings, &plugin_groupings, &skip_installed_project_skill);
+        walk_skill_dirs(
+            dir,
+            max_depth,
+            1,
+            options,
+            &mut skills,
+            &mut seen_names,
+            &mut parsed_skill_paths,
+            &mut warnings,
+            &plugin_groupings,
+            &skip_installed_project_skill,
+        );
     }
 
     // Recursive fallback when nothing matched, or with full depth.
@@ -444,7 +502,9 @@ pub fn discover_skills(
         let mut all_skill_dirs = Vec::new();
         find_skill_dirs(&search_path, 0, 5, &mut all_skill_dirs);
         for skill_dir in all_skill_dirs {
-            if let Some(mut skill) = parse_skill_at(&skill_dir, &mut parsed_skill_paths, options, &mut warnings) {
+            if let Some(mut skill) =
+                parse_skill_at(&skill_dir, &mut parsed_skill_paths, options, &mut warnings)
+            {
                 if (options.include_duplicate_names || !seen_names.contains(&skill.name))
                     && !skip_installed_project_skill(&skill)
                 {
@@ -476,7 +536,9 @@ fn walk_skill_dirs(
         return;
     };
     for entry in entries.flatten() {
-        let Ok(file_type) = entry.file_type() else { continue };
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
         if !file_type.is_dir() {
             continue;
         }
@@ -488,8 +550,11 @@ fn walk_skill_dirs(
             let skill_md_path = child.join("SKILL.md");
             if !parsed_skill_paths.contains(&skill_md_path) {
                 parsed_skill_paths.insert(skill_md_path.clone());
-                if let Some(mut skill) = parse_skill_md_with_warnings(&skill_md_path, options, warnings) {
-                    let duplicate = !options.include_duplicate_names && seen_names.contains(&skill.name);
+                if let Some(mut skill) =
+                    parse_skill_md_with_warnings(&skill_md_path, options, warnings)
+                {
+                    let duplicate =
+                        !options.include_duplicate_names && seen_names.contains(&skill.name);
                     if !duplicate && !skip_installed(&skill) {
                         if let Some(plugin) = plugin_groupings.get(&skill.path) {
                             skill.plugin_name = Some(plugin.clone());
@@ -506,7 +571,18 @@ fn walk_skill_dirs(
         {
             continue;
         }
-        walk_skill_dirs(&child, max_depth, depth + 1, options, skills, seen_names, parsed_skill_paths, warnings, plugin_groupings, skip_installed);
+        walk_skill_dirs(
+            &child,
+            max_depth,
+            depth + 1,
+            options,
+            skills,
+            seen_names,
+            parsed_skill_paths,
+            warnings,
+            plugin_groupings,
+            skip_installed,
+        );
     }
 }
 
@@ -521,8 +597,11 @@ fn find_skill_dirs(dir: &Path, depth: usize, max_depth: usize, out: &mut Vec<Pat
         return;
     };
     for entry in entries.flatten() {
-        let Ok(file_type) = entry.file_type() else { continue };
-        if file_type.is_dir() && !SKIP_DIRS.contains(&entry.file_name().to_string_lossy().as_ref()) {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_dir() && !SKIP_DIRS.contains(&entry.file_name().to_string_lossy().as_ref())
+        {
             find_skill_dirs(&entry.path(), depth + 1, max_depth, out);
         }
     }
@@ -544,9 +623,7 @@ pub fn filter_skills(skills: &[Skill], input_names: &[String]) -> Vec<Skill> {
             skills
                 .iter()
                 .enumerate()
-                .filter(|(_, s)| {
-                    normalize_skill_name(&s.name) == normalize_skill_name(input)
-                })
+                .filter(|(_, s)| normalize_skill_name(&s.name) == normalize_skill_name(input))
                 .map(|(i, _)| i)
                 .collect()
         } else {
@@ -627,7 +704,10 @@ mod tests {
         let shown = discover_skills(
             root,
             None,
-            &DiscoverOptions { include_internal: true, ..Default::default() },
+            &DiscoverOptions {
+                include_internal: true,
+                ..Default::default()
+            },
         )
         .unwrap();
         assert_eq!(shown.skills.len(), 1);
@@ -656,7 +736,10 @@ mod tests {
 
     #[test]
     fn skills_sh_paths_parsed() {
-        assert_eq!(parse_skills_sh_paths(r#"{"paths":["./tools/skills/","./skills"]}"#), vec!["tools/skills", "skills"]);
+        assert_eq!(
+            parse_skills_sh_paths(r#"{"paths":["./tools/skills/","./skills"]}"#),
+            vec!["tools/skills", "skills"]
+        );
         assert!(parse_skills_sh_paths("not json").is_empty());
         assert!(parse_skills_sh_paths(r#"{"paths":["../esc"]}"#).is_empty());
     }

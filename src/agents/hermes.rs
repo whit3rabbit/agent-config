@@ -63,7 +63,7 @@ impl HermesAgent {
     fn mcp_path(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         match scope {
             Scope::Global => Ok(Self::mcp_config_path_from_hermes_home(
-                &paths::hermes_home()?,
+                &paths::hermes_home()?
             )),
             Scope::Local(_) => Err(AgentConfigError::UnsupportedScope {
                 id: "hermes",
@@ -84,9 +84,7 @@ impl HermesAgent {
     /// `agent-config` category convention as the global root.
     fn skills_root(scope: &Scope) -> Result<PathBuf, AgentConfigError> {
         match scope {
-            Scope::Global => Ok(Self::skills_root_from_hermes_home(
-                &paths::hermes_home()?,
-            )),
+            Scope::Global => Ok(Self::skills_root_from_hermes_home(&paths::hermes_home()?)),
             Scope::Local(p) => Ok(p.join(".hermes").join("skills").join(SKILL_CATEGORY)),
         }
     }

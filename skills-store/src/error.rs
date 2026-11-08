@@ -20,7 +20,11 @@ pub struct SkillsError {
 impl SkillsError {
     /// Build an error from a code and message.
     pub fn new(code: &'static str, why: impl Into<String>) -> Self {
-        Self { code, why: why.into(), fix: None }
+        Self {
+            code,
+            why: why.into(),
+            fix: None,
+        }
     }
 
     /// Attach fix guidance.
@@ -86,7 +90,10 @@ pub mod diag {
 
     /// `SKILLS_OPTION_REQUIRES_VALUE`
     pub fn option_requires_value(option: &str, value: &str) -> SkillsError {
-        SkillsError::new("SKILLS_OPTION_REQUIRES_VALUE", format!("{option} requires {value}"))
+        SkillsError::new(
+            "SKILLS_OPTION_REQUIRES_VALUE",
+            format!("{option} requires {value}"),
+        )
     }
 
     /// `SKILLS_UNKNOWN_OPTION`
@@ -133,7 +140,10 @@ pub mod diag {
 
     /// `SKILLS_MISSING_ARGUMENT`
     pub fn missing_argument(name: &str) -> SkillsError {
-        SkillsError::new("SKILLS_MISSING_ARGUMENT", format!("Missing required argument: {name}"))
+        SkillsError::new(
+            "SKILLS_MISSING_ARGUMENT",
+            format!("Missing required argument: {name}"),
+        )
     }
 
     /// `SKILLS_MULTIPLE_SOURCES`
@@ -150,8 +160,11 @@ pub mod diag {
 
     /// `SKILLS_UNKNOWN_COMMAND`
     pub fn unknown_command(command: &str) -> SkillsError {
-        SkillsError::new("SKILLS_UNKNOWN_COMMAND", format!("Unknown command: {command}"))
-            .with_fix("Run skills --help for usage.")
+        SkillsError::new(
+            "SKILLS_UNKNOWN_COMMAND",
+            format!("Unknown command: {command}"),
+        )
+        .with_fix("Run skills --help for usage.")
     }
 
     /// `SKILLS_REMOVE_GLOBALLY_TRACKED`
@@ -211,7 +224,8 @@ pub mod diag {
 
     /// `SKILLS_MULTIPLE_SKILLS_IN_SOURCE`
     pub fn multiple_skills_in_source(names: &[String]) -> SkillsError {
-        let mut why = String::from("This source contains multiple skills. Specify exactly one skill:");
+        let mut why =
+            String::from("This source contains multiple skills. Specify exactly one skill:");
         for name in names {
             why.push_str(&format!("\n  - {name}"));
         }
@@ -238,7 +252,10 @@ pub mod diag {
 
     /// `SKILLS_LOCAL_PATH_NOT_FOUND`
     pub fn local_path_not_found(path: &str) -> SkillsError {
-        SkillsError::new("SKILLS_LOCAL_PATH_NOT_FOUND", format!("Local path does not exist: {path}"))
+        SkillsError::new(
+            "SKILLS_LOCAL_PATH_NOT_FOUND",
+            format!("Local path does not exist: {path}"),
+        )
     }
 
     /// `SKILLS_WELLKNOWN_SCOPE_NOT_FOUND`
@@ -271,7 +288,10 @@ pub mod diag {
 
     /// `SKILLS_SKILL_SKIPPED`
     pub fn skill_skipped(path: &str, reason: &str) -> SkillsError {
-        SkillsError::new("SKILLS_SKILL_SKIPPED", format!("⚠ Skipped {path} — {reason}"))
+        SkillsError::new(
+            "SKILLS_SKILL_SKIPPED",
+            format!("⚠ Skipped {path} — {reason}"),
+        )
     }
 
     /// `SKILLS_UNSUPPORTED_GIT_TRANSPORT`
@@ -391,7 +411,10 @@ pub mod diag {
 
     /// `SKILLS_ARCHIVE_MULTI_DISK_ZIP`
     pub fn archive_multi_disk_zip() -> SkillsError {
-        SkillsError::new("SKILLS_ARCHIVE_MULTI_DISK_ZIP", "Multi-disk zip archives are not supported")
+        SkillsError::new(
+            "SKILLS_ARCHIVE_MULTI_DISK_ZIP",
+            "Multi-disk zip archives are not supported",
+        )
     }
 
     /// `SKILLS_ARCHIVE_UNSAFE_PATH`
@@ -404,16 +427,26 @@ pub mod diag {
 
     /// `SKILLS_ARCHIVE_ENCRYPTED_ENTRY`
     pub fn archive_encrypted_entry() -> SkillsError {
-        SkillsError::new("SKILLS_ARCHIVE_ENCRYPTED_ENTRY", "Encrypted zip entries are not supported")
+        SkillsError::new(
+            "SKILLS_ARCHIVE_ENCRYPTED_ENTRY",
+            "Encrypted zip entries are not supported",
+        )
     }
 
     /// `SKILLS_ARCHIVE_LINK_ENTRY`
     pub fn archive_link_entry() -> SkillsError {
-        SkillsError::new("SKILLS_ARCHIVE_LINK_ENTRY", "Archive links are not supported")
+        SkillsError::new(
+            "SKILLS_ARCHIVE_LINK_ENTRY",
+            "Archive links are not supported",
+        )
     }
 
     /// `SKILLS_ARCHIVE_TOO_MANY_FILES`
-    pub fn archive_too_many_files(count: usize, max: usize, override_env: Option<&str>) -> SkillsError {
+    pub fn archive_too_many_files(
+        count: usize,
+        max: usize,
+        override_env: Option<&str>,
+    ) -> SkillsError {
         let mut why = format!("Archive contains too many files ({count}). Maximum is {max}.");
         if let Some(env) = override_env {
             why.push_str(&format!(" Set {env} to override."));
@@ -440,27 +473,42 @@ pub mod diag {
 
     /// `SKILLS_ARCHIVE_UNSUPPORTED_FORMAT`
     pub fn archive_unsupported_format() -> SkillsError {
-        SkillsError::new("SKILLS_ARCHIVE_UNSUPPORTED_FORMAT", "Unsupported archive format")
+        SkillsError::new(
+            "SKILLS_ARCHIVE_UNSUPPORTED_FORMAT",
+            "Unsupported archive format",
+        )
     }
 
     /// `SKILLS_ARCHIVE_MISSING_SKILL_MD`
     pub fn archive_missing_skill_md() -> SkillsError {
-        SkillsError::new("SKILLS_ARCHIVE_MISSING_SKILL_MD", "Archive missing root SKILL.md")
+        SkillsError::new(
+            "SKILLS_ARCHIVE_MISSING_SKILL_MD",
+            "Archive missing root SKILL.md",
+        )
     }
 
     /// `SKILLS_WELLKNOWN_ARCHIVE_UNSAFE_PATH`
     pub fn wellknown_archive_unsafe_path(path: &str) -> SkillsError {
-        SkillsError::new("SKILLS_WELLKNOWN_ARCHIVE_UNSAFE_PATH", format!("Unsafe archive path: {path}"))
+        SkillsError::new(
+            "SKILLS_WELLKNOWN_ARCHIVE_UNSAFE_PATH",
+            format!("Unsafe archive path: {path}"),
+        )
     }
 
     /// `SKILLS_WELLKNOWN_ARCHIVE_TOO_LARGE`
     pub fn wellknown_archive_too_large() -> SkillsError {
-        SkillsError::new("SKILLS_WELLKNOWN_ARCHIVE_TOO_LARGE", "Archive exceeds maximum unpacked size")
+        SkillsError::new(
+            "SKILLS_WELLKNOWN_ARCHIVE_TOO_LARGE",
+            "Archive exceeds maximum unpacked size",
+        )
     }
 
     /// `SKILLS_WELLKNOWN_ARCHIVE_TOO_MANY_FILES`
     pub fn wellknown_archive_too_many_files() -> SkillsError {
-        SkillsError::new("SKILLS_WELLKNOWN_ARCHIVE_TOO_MANY_FILES", "Archive contains too many files")
+        SkillsError::new(
+            "SKILLS_WELLKNOWN_ARCHIVE_TOO_MANY_FILES",
+            "Archive contains too many files",
+        )
     }
 
     /// `SKILLS_UNSAFE_SKILL_NAME`
@@ -481,7 +529,10 @@ pub mod diag {
 
     /// `SKILLS_BROKEN_SYMLINK`
     pub fn broken_symlink(path: &str) -> SkillsError {
-        SkillsError::new("SKILLS_BROKEN_SYMLINK", format!("Skipping broken symlink: {path}"))
+        SkillsError::new(
+            "SKILLS_BROKEN_SYMLINK",
+            format!("Skipping broken symlink: {path}"),
+        )
     }
 
     /// `SKILLS_LOCK_MISSING_SOURCE_URL`
@@ -528,8 +579,14 @@ pub mod diag {
 
     /// `SKILLS_USE_AGENT_UNSUPPORTED`
     pub fn use_agent_unsupported(agent: &str, supported: &[String]) -> SkillsError {
-        SkillsError::new("SKILLS_USE_AGENT_UNSUPPORTED", format!("Running {agent} is not supported yet."))
-            .with_fix(format!("Supported agents for skills use --agent: {}", supported.join(", ")))
+        SkillsError::new(
+            "SKILLS_USE_AGENT_UNSUPPORTED",
+            format!("Running {agent} is not supported yet."),
+        )
+        .with_fix(format!(
+            "Supported agents for skills use --agent: {}",
+            supported.join(", ")
+        ))
     }
 
     /// `SKILLS_USE_AGENT_COMMAND_NOT_FOUND`
@@ -550,7 +607,10 @@ pub mod diag {
 
     /// `SKILLS_USE_MULTIPLE_AGENTS`
     pub fn use_multiple_agents() -> SkillsError {
-        SkillsError::new("SKILLS_USE_MULTIPLE_AGENTS", "skills use --agent accepts exactly one agent.")
+        SkillsError::new(
+            "SKILLS_USE_MULTIPLE_AGENTS",
+            "skills use --agent accepts exactly one agent.",
+        )
     }
 
     /// `SKILLS_USE_NO_MATCHING_SKILL`

@@ -162,11 +162,21 @@ fn format_detail_lines(detail: Option<&str>, width: usize, max_lines: usize) -> 
 #[allow(clippy::too_many_lines)]
 pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<String>> {
     let searchable = options.searchable;
-    let max_visible = if options.max_visible == 0 { 8 } else { options.max_visible };
+    let max_visible = if options.max_visible == 0 {
+        8
+    } else {
+        options.max_visible
+    };
     let locked_values: Vec<String> = options
         .locked_section
         .as_ref()
-        .map(|section| section.items.iter().map(|item| item.value.clone()).collect())
+        .map(|section| {
+            section
+                .items
+                .iter()
+                .map(|item| item.value.clone())
+                .collect()
+        })
         .unwrap_or_default();
 
     let mut query = String::new();
@@ -180,11 +190,14 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
             return true;
         }
         let lower_q = q.to_lowercase();
-        item.label.to_lowercase().contains(&lower_q)
-            || item.value.to_lowercase().contains(&lower_q)
+        item.label.to_lowercase().contains(&lower_q) || item.value.to_lowercase().contains(&lower_q)
     };
 
-    let columns = || crossterm::terminal::size().map(|(c, _)| c as usize).unwrap_or(80);
+    let columns = || {
+        crossterm::terminal::size()
+            .map(|(c, _)| c as usize)
+            .unwrap_or(80)
+    };
 
     let draw = |lines: &[String], last_height: &mut usize| {
         if *last_height > 0 {
@@ -192,13 +205,20 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
         }
         // Count wrapped rows.
         let cols = columns();
-        let rows: usize = lines.iter().map(|l| (color::visible_len(l) / cols).max(1)).sum();
+        let rows: usize = lines
+            .iter()
+            .map(|l| (color::visible_len(l) / cols).max(1))
+            .sum();
         *last_height = rows;
         println!("{}", lines.join("\n"));
         let _ = std::io::Write::flush(&mut std::io::stdout());
     };
 
-    let _session = if is_tty() { Some(RawSession::new()) } else { None };
+    let _session = if is_tty() {
+        Some(RawSession::new())
+    } else {
+        None
+    };
     _session.as_ref()?;
 
     let result: Option<Vec<String>> = loop {
@@ -213,7 +233,11 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
         let entry_cursor = cursor.saturating_sub(if has_select_all { 1 } else { 0 });
 
         let mut lines: Vec<String> = Vec::new();
-        lines.push(format!("{}  {}", color::cyan(S_STEP_ACTIVE), color::bold(&options.message)));
+        lines.push(format!(
+            "{}  {}",
+            color::cyan(S_STEP_ACTIVE),
+            color::bold(&options.message)
+        ));
 
         // Locked section.
         if let Some(section) = &options.locked_section {
@@ -288,7 +312,11 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
                 color::dim(S_RADIO_INACTIVE)
             };
             let is_cursor = cursor == 0;
-            let prefix = if is_cursor { color::cyan("\u{276F}") } else { " ".to_string() };
+            let prefix = if is_cursor {
+                color::cyan("\u{276F}")
+            } else {
+                " ".to_string()
+            };
             let label = if is_cursor {
                 color::underline(&color::bold("Select All"))
             } else {
@@ -316,7 +344,10 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
                              entries: &[Entry]| {
             if include_detail {
                 let detail = if has_select_all && cursor == 0 {
-                    Some(format!("Select or clear all {} skills.", options.items.len()))
+                    Some(format!(
+                        "Select or clear all {} skills.",
+                        options.items.len()
+                    ))
                 } else {
                     match entries.get(entry_cursor) {
                         Some(Entry::Group(group, items, _)) => {
@@ -328,7 +359,11 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
                 };
                 let detail_width = columns().saturating_sub(5).max(1);
                 lines.push(color::gray(S_BAR));
-                lines.push(format!("{}  {}", color::gray(S_BAR), color::dim("Description")));
+                lines.push(format!(
+                    "{}  {}",
+                    color::gray(S_BAR),
+                    color::dim("Description")
+                ));
                 for line in format_detail_lines(detail.as_deref(), detail_width, 2) {
                     lines.push(format!("{}  {}", color::gray(S_BAR), color::dim(&line)));
                 }
@@ -347,7 +382,11 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
                         .map(|item| item.label.clone()),
                 );
                 if all_labels.is_empty() {
-                    lines.push(format!("{}  {}", color::gray(S_BAR), color::dim("Selected: (none)")));
+                    lines.push(format!(
+                        "{}  {}",
+                        color::gray(S_BAR),
+                        color::dim("Selected: (none)")
+                    ));
                 } else {
                     let summary = if all_labels.len() <= 3 {
                         all_labels.join(", ")
@@ -383,18 +422,29 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
                                 visible_limit: usize,
                                 entries: &[Entry]| {
             if filtered.is_empty() {
-                lines.push(format!("{}  {}", color::gray(S_BAR), color::dim("No matches found")));
+                lines.push(format!(
+                    "{}  {}",
+                    color::gray(S_BAR),
+                    color::dim("No matches found")
+                ));
                 return;
             }
             let visible_start = (entry_cursor.saturating_sub(visible_limit / 2))
                 .min(entries.len().saturating_sub(visible_limit));
             let visible_end = (visible_start + visible_limit).min(entries.len());
-            for (index, entry) in entries.iter().enumerate().skip(visible_start).take(visible_end - visible_start) {
+            for (index, entry) in entries
+                .iter()
+                .enumerate()
+                .skip(visible_start)
+                .take(visible_end - visible_start)
+            {
                 let is_cursor = index == entry_cursor;
                 match entry {
                     Entry::Group(group, items, collapsed) => {
-                        let selected_count =
-                            items.iter().filter(|item| selected.contains(&item.value)).count();
+                        let selected_count = items
+                            .iter()
+                            .filter(|item| selected.contains(&item.value))
+                            .count();
                         let radio = if selected_count == items.len() {
                             color::green(S_RADIO_ACTIVE)
                         } else if selected_count > 0 {
@@ -407,7 +457,11 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
                         } else {
                             color::bold(group)
                         };
-                        let prefix = if is_cursor { color::cyan("\u{276F}") } else { " ".to_string() };
+                        let prefix = if is_cursor {
+                            color::cyan("\u{276F}")
+                        } else {
+                            " ".to_string()
+                        };
                         let disclosure = if *collapsed {
                             color::dim("\u{25B8}")
                         } else {
@@ -415,7 +469,11 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
                         };
                         lines.push(format!(
                             "{} {} {} {} {}",
-                            color::gray(S_BAR), prefix, disclosure, radio, label
+                            color::gray(S_BAR),
+                            prefix,
+                            disclosure,
+                            radio,
+                            label
                         ));
                     }
                     Entry::Item(item) => {
@@ -425,13 +483,21 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
                         } else {
                             color::dim(S_RADIO_INACTIVE)
                         };
-                        let label = if is_cursor { color::underline(&item.label) } else { item.label.clone() };
+                        let label = if is_cursor {
+                            color::underline(&item.label)
+                        } else {
+                            item.label.clone()
+                        };
                         let hint = item
                             .hint
                             .as_ref()
                             .map(|h| format!(" {}", color::dim(&format!("({h})"))))
                             .unwrap_or_default();
-                        let prefix = if is_cursor { color::cyan("\u{276F}") } else { " ".to_string() };
+                        let prefix = if is_cursor {
+                            color::cyan("\u{276F}")
+                        } else {
+                            " ".to_string()
+                        };
                         let mut tree = String::new();
                         if options.select_groups {
                             if let Some(group) = &item.group {
@@ -443,14 +509,23 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
                                     let is_last = last.value == item.value;
                                     tree = format!(
                                         "{} ",
-                                        color::dim(if is_last { "\u{2514}\u{2500}" } else { "\u{251C}\u{2500}" })
+                                        color::dim(if is_last {
+                                            "\u{2514}\u{2500}"
+                                        } else {
+                                            "\u{251C}\u{2500}"
+                                        })
                                     );
                                 }
                             }
                         }
                         lines.push(format!(
                             "{} {} {}{} {}{}",
-                            color::gray(S_BAR), prefix, tree, radio, label, hint
+                            color::gray(S_BAR),
+                            prefix,
+                            tree,
+                            radio,
+                            label,
+                            hint
                         ));
                     }
                 }
@@ -465,7 +540,11 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
                 if hidden_after > 0 {
                     parts.push(format!("\u{2193} {hidden_after} more"));
                 }
-                lines.push(format!("{}  {}", color::gray(S_BAR), color::dim(&parts.join("  "))));
+                lines.push(format!(
+                    "{}  {}",
+                    color::gray(S_BAR),
+                    color::dim(&parts.join("  "))
+                ));
             }
         };
 
@@ -473,13 +552,21 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
         frame.extend(lines);
         build_item_lines(&mut frame, entry_cursor, max_visible, &entries);
         let mut footer: Vec<String> = Vec::new();
-        render_footer(&mut footer, entry_cursor, options.show_detail, options.show_selected_summary, &entries);
+        render_footer(
+            &mut footer,
+            entry_cursor,
+            options.show_detail,
+            options.show_selected_summary,
+            &entries,
+        );
         frame.extend(footer);
         draw(&frame, &mut last_render_height);
 
         // Handle input.
         let Some(session) = &_session else { break None };
-        let Some(key) = session.next_key() else { break None };
+        let Some(key) = session.next_key() else {
+            break None;
+        };
         let entries_now = build_entries(&filtered, options.select_groups, &collapsed_groups);
         let cursor_offset = if has_select_all { 1 } else { 0 };
         let entry = if entry_cursor < entries_now.len() {
@@ -500,7 +587,9 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
                 cursor = cursor.saturating_sub(1);
             }
             Key::Down => {
-                cursor = (entries_now.len() + cursor_offset).saturating_sub(1).min(cursor + 1);
+                cursor = (entries_now.len() + cursor_offset)
+                    .saturating_sub(1)
+                    .min(cursor + 1);
             }
             Key::Right => {
                 if options.select_groups {
@@ -533,8 +622,10 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
             }
             Key::Space => {
                 if has_select_all && cursor == 0 {
-                    let all_selected =
-                        options.items.iter().all(|item| selected.contains(&item.value));
+                    let all_selected = options
+                        .items
+                        .iter()
+                        .all(|item| selected.contains(&item.value));
                     for item in &options.items {
                         if all_selected {
                             selected.remove(&item.value);
@@ -608,13 +699,25 @@ pub fn search_multiselect(options: &SearchMultiselectOptions) -> Option<Vec<Stri
                     .map(|item| item.label.clone()),
             );
             vec![
-                format!("{}  {}", color::green(S_STEP_SUBMIT), color::bold(&options.message)),
-                format!("{}  {}", color::gray(S_BAR), color::dim(&all_labels.join(", "))),
+                format!(
+                    "{}  {}",
+                    color::green(S_STEP_SUBMIT),
+                    color::bold(&options.message)
+                ),
+                format!(
+                    "{}  {}",
+                    color::gray(S_BAR),
+                    color::dim(&all_labels.join(", "))
+                ),
             ]
         }
         None => {
             vec![
-                format!("{}  {}", color::red(S_STEP_CANCEL), color::bold(&options.message)),
+                format!(
+                    "{}  {}",
+                    color::red(S_STEP_CANCEL),
+                    color::bold(&options.message)
+                ),
                 format!(
                     "{}  {}",
                     color::gray(S_BAR),
@@ -646,8 +749,20 @@ mod tests {
     #[test]
     fn entries_respect_collapse() {
         let items = vec![
-            SearchItem { value: "a".into(), label: "a".into(), hint: None, group: Some("G".into()), detail: None },
-            SearchItem { value: "b".into(), label: "b".into(), hint: None, group: Some("G".into()), detail: None },
+            SearchItem {
+                value: "a".into(),
+                label: "a".into(),
+                hint: None,
+                group: Some("G".into()),
+                detail: None,
+            },
+            SearchItem {
+                value: "b".into(),
+                label: "b".into(),
+                hint: None,
+                group: Some("G".into()),
+                detail: None,
+            },
         ];
         let mut collapsed = HashSet::new();
         collapsed.insert("G".to_string());

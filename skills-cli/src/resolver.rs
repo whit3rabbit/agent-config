@@ -65,9 +65,17 @@ pub fn resolve_skills(
 
     match parsed.kind {
         SourceKind::Local => {
-            let local_path = parsed.local_path.clone().unwrap_or_else(|| PathBuf::from(&parsed.url));
+            let local_path = parsed
+                .local_path
+                .clone()
+                .unwrap_or_else(|| PathBuf::from(&parsed.url));
             spinner_message(spinner, "Discovering skills…");
-            discovery = Some(discover(local_path, parsed.subpath.as_deref(), options, &mut missing_retry(parsed))?);
+            discovery = Some(discover(
+                local_path,
+                parsed.subpath.as_deref(),
+                options,
+                &mut missing_retry(parsed),
+            )?);
         }
         SourceKind::WellKnown | SourceKind::Download => {
             spinner_message(spinner, "Downloading source...");
@@ -76,7 +84,11 @@ pub fn resolve_skills(
             root_dir = Some(downloaded.root_dir.clone());
             spinner_message(
                 spinner,
-                if downloaded.kind == "skill-md" { "Downloaded SKILL.md file" } else { "Downloaded archive" },
+                if downloaded.kind == "skill-md" {
+                    "Downloaded SKILL.md file"
+                } else {
+                    "Downloaded archive"
+                },
             );
             spinner_message(spinner, "Discovering skills...");
             discovery = Some(discover(
@@ -113,10 +125,7 @@ pub fn resolve_skills(
             }
             if let Some(blob) = &blob_result {
                 discovery = Some(blob_to_discovery(blob, options));
-                spinner_message(
-                    spinner,
-                    &format!("Found {} skill(s)", blob.skills.len()),
-                );
+                spinner_message(spinner, &format!("Found {} skill(s)", blob.skills.len()));
             } else {
                 spinner_message(spinner, "Cloning repository…");
                 temp_dir = Some(git::clone_repo(&parsed.url, parsed.ref_.as_deref())?);
@@ -147,7 +156,13 @@ pub fn resolve_skills(
     }
 
     let discovery = discovery.unwrap_or_default();
-    Ok(ResolvedSkills { discovery, blob_result, temp_dir: temp_dir.map(TempClone), root_dir, commit })
+    Ok(ResolvedSkills {
+        discovery,
+        blob_result,
+        temp_dir: temp_dir.map(TempClone),
+        root_dir,
+        commit,
+    })
 }
 
 fn missing_retry(
@@ -164,9 +179,10 @@ fn missing_blob(
 ) -> bool {
     if let Some(filter) = select_filter(parsed, options) {
         let filter_slug = skills_store::sanitize::to_skill_slug(&filter);
-        let matches = blob.skills.iter().any(|skill| {
-            skills_store::sanitize::to_skill_slug(&skill.name) == filter_slug
-        });
+        let matches = blob
+            .skills
+            .iter()
+            .any(|skill| skills_store::sanitize::to_skill_slug(&skill.name) == filter_slug);
         if !matches {
             return true;
         }
@@ -178,7 +194,10 @@ fn select_filter(
     parsed: &crate::source_parser::ParsedSource,
     options: &ResolveOptions,
 ) -> Option<String> {
-    parsed.skill_filter.clone().or_else(|| options.skill_filter.clone())
+    parsed
+        .skill_filter
+        .clone()
+        .or_else(|| options.skill_filter.clone())
 }
 
 fn discover(
@@ -194,7 +213,10 @@ fn discover(
     };
     let found = discover_skills(&root, subpath, &discover_options)?;
     if !options.full_depth && needs_full_depth(&found) {
-        let deep = DiscoverOptions { full_depth: true, ..discover_options };
+        let deep = DiscoverOptions {
+            full_depth: true,
+            ..discover_options
+        };
         return discover_skills(&root, subpath, &deep);
     }
     Ok(found)
@@ -223,7 +245,10 @@ fn blob_to_discovery(blob: &blob::BlobInstallResult, options: &ResolveOptions) -
             metadata: skill.metadata.clone(),
         })
         .collect();
-    Discovery { skills, warnings: Vec::new() }
+    Discovery {
+        skills,
+        warnings: Vec::new(),
+    }
 }
 
 /// Options for [`resolve_skills`].

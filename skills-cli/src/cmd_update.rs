@@ -134,7 +134,10 @@ fn parse_update_options(args: &[String]) -> (UpdateCheckOptions, Vec<String>) {
 }
 
 fn matches_skill_filter(name: &str, filter: &[String]) -> bool {
-    filter.is_empty() || filter.iter().any(|f| f.to_lowercase() == name.to_lowercase())
+    filter.is_empty()
+        || filter
+            .iter()
+            .any(|f| f.to_lowercase() == name.to_lowercase())
 }
 
 fn get_skip_reason(entry: &locks::SkillLockEntry) -> &'static str {
@@ -180,8 +183,12 @@ fn print_skipped_skills(skipped: &[(&String, &str, &locks::SkillLockEntry)]) {
     #[allow(clippy::type_complexity)]
     let mut grouped: Vec<(String, Vec<&str>, &str, Option<&str>, String)> = Vec::new();
     for (name, reason, entry) in skipped {
-        let source = get_install_source(&entry.source_url, &entry.source_type, entry.ref_.as_deref());
-        match grouped.iter_mut().find(|(source_key, _, _, _, _)| *source_key == source) {
+        let source =
+            get_install_source(&entry.source_url, &entry.source_type, entry.ref_.as_deref());
+        match grouped
+            .iter_mut()
+            .find(|(source_key, _, _, _, _)| *source_key == source)
+        {
             Some((_, names, _, _, _)) => names.push(name),
             None => grouped.push((
                 source,
@@ -240,7 +247,11 @@ pub fn run_update(args: &[String], mode: &'static str) {
             color::reset("")
         );
     } else {
-        println!("{}Checking for skill updates…{}", color::text(""), color::reset(""));
+        println!(
+            "{}Checking for skill updates…{}",
+            color::text(""),
+            color::reset("")
+        );
     }
     println!();
 
@@ -301,7 +312,12 @@ pub fn run_update(args: &[String], mode: &'static str) {
     let outdated = options.outdated_names.borrow();
     if mode == "check" && !outdated.is_empty() {
         for name in outdated.iter() {
-            println!("{}{} has an update{}", color::text("\u{2191}"), sanitize_metadata(name), color::reset(""));
+            println!(
+                "{}{} has an update{}",
+                color::text("\u{2191}"),
+                sanitize_metadata(name),
+                color::reset("")
+            );
         }
         println!(
             "{}{} skill(s) can be updated; run {}skills update{} to install{}",
@@ -330,9 +346,7 @@ fn placement_agents(global: bool) -> Vec<&'static AgentConfig> {
         let supported: Vec<&AgentConfig> = agents
             .iter()
             .copied()
-            .filter(|a| {
-                registry_global_dir(a).is_some()
-            })
+            .filter(|a| registry_global_dir(a).is_some())
             .collect();
         if !supported.is_empty() {
             agents = supported;
@@ -363,10 +377,19 @@ fn print_fetching(count: usize) {
 fn report_install(name: &str, ok: bool, failures: &[String], error: Option<&str>) -> bool {
     let safe_name = sanitize_metadata(name);
     for failure in failures {
-        println!("  {}{}{}", color::dim_gray("\u{2717} "), failure, color::reset(""));
+        println!(
+            "  {}{}{}",
+            color::dim_gray("\u{2717} "),
+            failure,
+            color::reset("")
+        );
     }
     if ok && error.is_none() {
-        println!("  {}\u{2713}{} Updated {safe_name}", color::text(""), color::reset(""));
+        println!(
+            "  {}\u{2713}{} Updated {safe_name}",
+            color::text(""),
+            color::reset("")
+        );
         return true;
     }
     println!(
@@ -390,7 +413,11 @@ fn update_global_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) {
     let mut fail_count = 0;
 
     if skill_names.is_empty() && options.skills.is_empty() {
-        println!("{}No global skills tracked in lock file.{}", color::dim_gray(""), color::reset(""));
+        println!(
+            "{}No global skills tracked in lock file.{}",
+            color::dim_gray(""),
+            color::reset("")
+        );
         println!(
             "{}Install skills with{} {}skills add <package> -g{}",
             color::dim_gray(""),
@@ -405,7 +432,9 @@ fn update_global_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) {
     let mut checkable: Vec<(String, locks::SkillLockEntry)> = Vec::new();
 
     for skill_name in &skill_names {
-        let Some(entry) = lock.skills.get(skill_name) else { continue };
+        let Some(entry) = lock.skills.get(skill_name) else {
+            continue;
+        };
         if entry.skill_folder_hash.is_empty() || entry.skill_path.is_none() {
             skipped.push((skill_name.clone(), get_skip_reason(entry), entry.clone()));
             continue;
@@ -413,14 +442,11 @@ fn update_global_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) {
         checkable.push((skill_name.clone(), entry.clone()));
     }
 
-    let on_disk: std::collections::HashSet<String> = installer::list_installed_skills(
-        Some(true),
-        &common::current_dir(),
-        None,
-    )
-    .into_iter()
-    .map(|skill| skill.name)
-    .collect();
+    let on_disk: std::collections::HashSet<String> =
+        installer::list_installed_skills(Some(true), &common::current_dir(), None)
+            .into_iter()
+            .map(|skill| skill.name)
+            .collect();
 
     // Group by source + ref.
     type GlobalGroup = (String, Option<String>, Vec<(String, locks::SkillLockEntry)>);
@@ -452,7 +478,9 @@ fn update_global_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) {
         let checkout: Result<(Option<crate::blob::RepoTree>, Option<std::path::PathBuf>), ()> =
             (|| {
                 if first_entry.source_type == "github" {
-                    if let Some(tree) = crate::blob::fetch_repo_tree(source, first_entry.ref_.as_deref()) {
+                    if let Some(tree) =
+                        crate::blob::fetch_repo_tree(source, first_entry.ref_.as_deref())
+                    {
                         let tree_paths: std::collections::HashSet<&str> = tree
                             .tree
                             .iter()
@@ -482,11 +510,9 @@ fn update_global_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) {
                         );
                     }
                 }
-                let temp = crate::git::clone_repo(
-                    &first_entry.source_url,
-                    first_entry.ref_.as_deref(),
-                )
-                .map_err(|_| ())?;
+                let temp =
+                    crate::git::clone_repo(&first_entry.source_url, first_entry.ref_.as_deref())
+                        .map_err(|_| ())?;
                 Ok((None, Some(temp)))
             })();
 
@@ -503,10 +529,9 @@ fn update_global_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) {
             Ok((tree, temp_dir)) => {
                 if let Some(tree) = &tree {
                     for (name, entry) in items {
-                        let latest = entry
-                            .skill_path
-                            .as_ref()
-                            .and_then(|path| crate::blob::get_skill_folder_hash_from_tree(tree, path));
+                        let latest = entry.skill_path.as_ref().and_then(|path| {
+                            crate::blob::get_skill_folder_hash_from_tree(tree, path)
+                        });
                         if let Some(latest) = latest {
                             if latest != entry.skill_folder_hash || !on_disk.contains(name) {
                                 updates.push((name.clone(), entry.clone(), latest));
@@ -526,7 +551,9 @@ fn update_global_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) {
                     match discovery {
                         Ok(discovered) => {
                             for (name, entry) in items {
-                                let Some(locked_path) = &entry.skill_path else { continue };
+                                let Some(locked_path) = &entry.skill_path else {
+                                    continue;
+                                };
                                 // Find the skill with the same name (exact path or relocation).
                                 let matches: Vec<&skills_store::skills::Skill> = discovered
                                     .skills
@@ -548,11 +575,11 @@ fn update_global_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) {
                                     continue;
                                 }
                                 let current = matches[0];
-                                let folder_hash =
-                                    locks::compute_folder_hash(&current.path).ok();
-                                let relocated =
-                                    format!("{}/SKILL.md", current.path.to_string_lossy().replace('\\', "/"))
-                                        != *locked_path;
+                                let folder_hash = locks::compute_folder_hash(&current.path).ok();
+                                let relocated = format!(
+                                    "{}/SKILL.md",
+                                    current.path.to_string_lossy().replace('\\', "/")
+                                ) != *locked_path;
                                 if relocated
                                     || folder_hash.as_ref().is_some_and(|hash| {
                                         *hash != entry.skill_folder_hash || !on_disk.contains(name)
@@ -590,7 +617,11 @@ fn update_global_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) {
         return (0, 0, 0);
     }
     if updates.is_empty() {
-        println!("{}\u{2713} All global skills are up to date{}", color::text(""), color::reset(""));
+        println!(
+            "{}\u{2713} All global skills are up to date{}",
+            color::text(""),
+            color::reset("")
+        );
         print_skipped_skills(
             &skipped
                 .iter()
@@ -622,7 +653,12 @@ fn update_global_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) {
 
     let agents = placement_agents(true);
     for (name, entry, new_hash) in &updates {
-        println!("{}Updating {}…{}", color::text(""), sanitize_metadata(name), color::reset(""));
+        println!(
+            "{}Updating {}…{}",
+            color::text(""),
+            sanitize_metadata(name),
+            color::reset("")
+        );
         let install_url = update_source::build_global_update_install_source(entry);
         let Some(install_url) = install_url else {
             println!(
@@ -636,7 +672,14 @@ fn update_global_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) {
         };
         let parsed = parse_update_source(&install_url, &entry.source_type);
         let full_depth = update_source::should_use_full_depth_for_global(entry);
-        match reinstall_skill(&parsed, name, &agents, false, entry.install_mode.as_deref() == Some("copy"), full_depth) {
+        match reinstall_skill(
+            &parsed,
+            name,
+            &agents,
+            false,
+            entry.install_mode.as_deref() == Some("copy"),
+            full_depth,
+        ) {
             Ok(()) => {
                 if let Ok(mut lock) = locks::read_skill_lock() {
                     if let Some(mut entry) = lock.skills.get(name).cloned() {
@@ -702,7 +745,11 @@ fn reinstall_skill(
         resolved
             .blob_result
             .as_ref()
-            .map(|blob| blob.skills.iter().any(|skill| skill.name.eq_ignore_ascii_case(skill_name)))
+            .map(|blob| {
+                blob.skills
+                    .iter()
+                    .any(|skill| skill.name.eq_ignore_ascii_case(skill_name))
+            })
             .unwrap_or(false)
     } else {
         resolved
@@ -712,7 +759,9 @@ fn reinstall_skill(
             .any(|skill| skill.name.eq_ignore_ascii_case(skill_name))
     };
     if !present {
-        return Err(format!("skill {skill_name} not found in the fetched source"));
+        return Err(format!(
+            "skill {skill_name} not found in the fetched source"
+        ));
     }
 
     let mode = if copy {
@@ -738,7 +787,11 @@ fn reinstall_skill(
                             &skill.files,
                             agent,
                             &skills_store::installer::InstallOptions {
-                                global: if global { skills_store::installer::Scope::Global } else { skills_store::installer::Scope::Project },
+                                global: if global {
+                                    skills_store::installer::Scope::Global
+                                } else {
+                                    skills_store::installer::Scope::Project
+                                },
                                 cwd: Some(cwd.clone()),
                                 mode: Some(mode),
                                 ..Default::default()
@@ -769,7 +822,11 @@ fn reinstall_skill(
                             &skill.path,
                             agent,
                             &skills_store::installer::InstallOptions {
-                                global: if global { skills_store::installer::Scope::Global } else { skills_store::installer::Scope::Project },
+                                global: if global {
+                                    skills_store::installer::Scope::Global
+                                } else {
+                                    skills_store::installer::Scope::Project
+                                },
                                 cwd: Some(cwd.clone()),
                                 mode: Some(mode),
                                 ..Default::default()
@@ -816,7 +873,11 @@ fn update_project_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) 
     let mut fail_count = 0;
 
     if project_skills.is_empty() && options.skills.is_empty() {
-        println!("{}No project skills to update.{}", color::dim_gray(""), color::reset(""));
+        println!(
+            "{}No project skills to update.{}",
+            color::dim_gray(""),
+            color::reset("")
+        );
         println!(
             "{}Install project skills with{} {}skills add <package>{}",
             color::dim_gray(""),
@@ -827,12 +888,18 @@ fn update_project_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) 
         return (0, 0, 0);
     }
 
-    let updatable: Vec<&(String, locks::LocalSkillLockEntry)> =
-        project_skills.iter().filter(|(_, entry)| entry.skill_path.is_some()).collect();
+    let updatable: Vec<&(String, locks::LocalSkillLockEntry)> = project_skills
+        .iter()
+        .filter(|(_, entry)| entry.skill_path.is_some())
+        .collect();
     let legacy_count = project_skills.len() - updatable.len();
 
     if updatable.is_empty() {
-        println!("{}No project skills can be updated in place.{}", color::dim_gray(""), color::reset(""));
+        println!(
+            "{}No project skills can be updated in place.{}",
+            color::dim_gray(""),
+            color::reset("")
+        );
         return (0, 0, project_skills.len());
     }
 
@@ -873,27 +940,35 @@ fn update_project_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) 
     );
     println!();
 
-    let on_disk: std::collections::HashSet<String> = installer::list_installed_skills(
-        Some(false),
-        &cwd,
-        None,
-    )
-    .into_iter()
-    .map(|skill| skill.name)
-    .collect();
+    let on_disk: std::collections::HashSet<String> =
+        installer::list_installed_skills(Some(false), &cwd, None)
+            .into_iter()
+            .map(|skill| skill.name)
+            .collect();
     let agents = placement_agents(false);
 
     // Group by source + ref.
-    type LocalGroup = (String, Option<String>, Vec<(String, locks::LocalSkillLockEntry)>);
+    type LocalGroup = (
+        String,
+        Option<String>,
+        Vec<(String, locks::LocalSkillLockEntry)>,
+    );
     let mut groups: Vec<LocalGroup> = Vec::new();
     for (name, entry) in &updatable {
-        let source = entry.source_url.clone().unwrap_or_else(|| entry.source.clone());
+        let source = entry
+            .source_url
+            .clone()
+            .unwrap_or_else(|| entry.source.clone());
         match groups
             .iter_mut()
             .find(|(source_key, ref_, _)| *source_key == source && *ref_ == entry.ref_)
         {
             Some((_, _, items)) => items.push((name.clone(), entry.clone())),
-            None => groups.push((source, entry.ref_.clone(), vec![(name.clone(), entry.clone())])),
+            None => groups.push((
+                source,
+                entry.ref_.clone(),
+                vec![(name.clone(), entry.clone())],
+            )),
         }
     }
 
@@ -956,9 +1031,14 @@ fn update_project_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) 
                     }
                     let current = matches[0];
                     let computed_hash = locks::compute_folder_hash(&current.path).ok();
-                    let same_path = entry.skill_path.as_ref().map(|locked| {
-                        format!("{}/SKILL.md", relative_path(&temp_dir, &current.path)) == *locked
-                    }).unwrap_or(false);
+                    let same_path = entry
+                        .skill_path
+                        .as_ref()
+                        .map(|locked| {
+                            format!("{}/SKILL.md", relative_path(&temp_dir, &current.path))
+                                == *locked
+                        })
+                        .unwrap_or(false);
                     if same_path
                         && computed_hash.as_deref() == Some(entry.computed_hash.as_str())
                         && on_disk.contains(name)
@@ -970,7 +1050,12 @@ fn update_project_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) 
                         report_outdated(options, name);
                         continue;
                     }
-                    println!("{}Updating {}…{}", color::text(""), sanitize_metadata(name), color::reset(""));
+                    println!(
+                        "{}Updating {}…{}",
+                        color::text(""),
+                        sanitize_metadata(name),
+                        color::reset("")
+                    );
                     let copy = entry.install_mode.as_deref() == Some("copy");
                     let parsed = source_parser::parse_source(source);
                     let full_depth = update_source::should_use_full_depth_for_update(entry);
@@ -978,7 +1063,8 @@ fn update_project_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) 
                         Ok(()) => {
                             if let Ok(hash) = locks::compute_folder_hash(&current.path) {
                                 if let Ok(mut lock) = locks::read_local_lock(&cwd) {
-                                    if let Some(mut current_entry) = lock.skills.get(name).cloned() {
+                                    if let Some(mut current_entry) = lock.skills.get(name).cloned()
+                                    {
                                         current_entry.computed_hash = hash;
                                         current_entry.skill_path = Some(format!(
                                             "{}/SKILL.md",

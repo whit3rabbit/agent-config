@@ -65,7 +65,11 @@ pub fn get(
                     headers.push((name, value.to_string()));
                 }
             }
-            return Ok(Response { status: code, body: Vec::new(), headers });
+            return Ok(Response {
+                status: code,
+                body: Vec::new(),
+                headers,
+            });
         }
         Err(other) => return Err(SkillsError::new("SKILLS_HTTP", other.to_string())),
     };
@@ -83,7 +87,11 @@ pub fn get(
         .take(64 * 1024 * 1024)
         .read_to_end(&mut body)
         .map_err(|err| SkillsError::new("SKILLS_HTTP", err.to_string()))?;
-    Ok(Response { status, body, headers: out_headers })
+    Ok(Response {
+        status,
+        body,
+        headers: out_headers,
+    })
 }
 
 /// GET expecting success; non-2xx becomes `SKILLS_DOWNLOAD_HTTP_ERROR`.

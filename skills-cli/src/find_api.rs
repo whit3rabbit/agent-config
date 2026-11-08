@@ -17,8 +17,7 @@ fn search_api_base() -> String {
 }
 
 fn telemetry_enabled() -> bool {
-    std::env::var_os("DISABLE_TELEMETRY").is_none()
-        && std::env::var_os("DO_NOT_TRACK").is_none()
+    std::env::var_os("DISABLE_TELEMETRY").is_none() && std::env::var_os("DO_NOT_TRACK").is_none()
 }
 
 /// One search result.
@@ -76,7 +75,9 @@ pub fn search_skills_api(query: &str, owner: Option<&str>) -> Vec<SearchSkill> {
     if !(200..300).contains(&response.status) {
         return Vec::new();
     }
-    let Ok(value) = response.json() else { return Vec::new() };
+    let Ok(value) = response.json() else {
+        return Vec::new();
+    };
     value
         .get("skills")
         .and_then(|skills| skills.as_array())
@@ -87,7 +88,9 @@ pub fn search_skills_api(query: &str, owner: Option<&str>) -> Vec<SearchSkill> {
                     Some(SearchSkill {
                         name: sanitize_metadata(skill.get("name")?.as_str()?),
                         slug: sanitize_metadata(skill.get("id")?.as_str()?),
-                        source: sanitize_metadata(skill.get("source").and_then(|s| s.as_str()).unwrap_or("")),
+                        source: sanitize_metadata(
+                            skill.get("source").and_then(|s| s.as_str()).unwrap_or(""),
+                        ),
                         installs: skill.get("installs").and_then(|i| i.as_u64()).unwrap_or(0),
                     })
                 })

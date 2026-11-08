@@ -426,13 +426,19 @@ pub fn agent_by_id(name: &str) -> Option<&'static AgentConfig> {
 /// the universal list (upstream `getUniversalAgents`).
 #[must_use]
 pub fn universal_agents() -> Vec<&'static AgentConfig> {
-    agents().iter().filter(|a| a.is_universal() && a.flags.show_in_universal_list()).collect()
+    agents()
+        .iter()
+        .filter(|a| a.is_universal() && a.flags.show_in_universal_list())
+        .collect()
 }
 
 /// The subset of universal agents shown in the interactive locked section.
 #[must_use]
 pub fn visible_universal_agents() -> Vec<&'static AgentConfig> {
-    agents().iter().filter(|a| a.visible_in_universal_prompt()).collect()
+    agents()
+        .iter()
+        .filter(|a| a.visible_in_universal_prompt())
+        .collect()
 }
 
 /// Agents whose project skills dir is not `.agents/skills`.
@@ -445,7 +451,10 @@ pub fn non_universal_agents() -> Vec<&'static AgentConfig> {
 #[must_use]
 pub fn detect_installed_agents(cwd: &Path) -> Vec<&'static AgentConfig> {
     let ctx = DetectContext::from_env(cwd);
-    agents().iter().filter(|a| a.detect_installed(&ctx)).collect()
+    agents()
+        .iter()
+        .filter(|a| a.detect_installed(&ctx))
+        .collect()
 }
 
 /// Legacy project skill dirs that repositories still publish to, searched
@@ -470,7 +479,11 @@ pub fn agent_project_skill_dirs() -> &'static [String] {
         let mut dirs: Vec<String> = agents()
             .iter()
             .map(|a| a.skills_dir.to_string())
-            .chain(LEGACY_AGENT_PROJECT_SKILL_DIRS.iter().map(|d| (*d).to_string()))
+            .chain(
+                LEGACY_AGENT_PROJECT_SKILL_DIRS
+                    .iter()
+                    .map(|d| (*d).to_string()),
+            )
             .filter(|d| d != "skills")
             .collect();
         dirs.sort();
@@ -491,9 +504,18 @@ mod tests {
             assert!(!agent.display_name.is_empty());
             assert!(!agent.skills_dir.is_empty());
         }
-        assert_eq!(agent_by_id("claude-code").unwrap().display_name, "Claude Code");
-        assert!(agent_by_id("eve").unwrap().global_skills_dir(&DetectContext::from_env(Path::new("."))).is_none());
-        assert!(agent_by_id("promptscript").unwrap().global_skills_dir(&DetectContext::from_env(Path::new("."))).is_none());
+        assert_eq!(
+            agent_by_id("claude-code").unwrap().display_name,
+            "Claude Code"
+        );
+        assert!(agent_by_id("eve")
+            .unwrap()
+            .global_skills_dir(&DetectContext::from_env(Path::new(".")))
+            .is_none());
+        assert!(agent_by_id("promptscript")
+            .unwrap()
+            .global_skills_dir(&DetectContext::from_env(Path::new(".")))
+            .is_none());
     }
 
     #[test]
@@ -503,7 +525,9 @@ mod tests {
         // getUniversalAgents excludes Replit and the neutral `universal` target.
         assert_eq!(universal.len() + non_universal.len() + 2, 79);
         assert!(universal.iter().all(|a| a.is_universal()));
-        assert!(non_universal.iter().any(|a| a.name == "cursor" || a.name == "claude-code"));
+        assert!(non_universal
+            .iter()
+            .any(|a| a.name == "cursor" || a.name == "claude-code"));
         // cursor: universal project and reads ~/.agents/skills globally too.
         let cursor = agent_by_id("cursor").unwrap();
         assert!(cursor.is_universal() && cursor.reads_canonical_globally());

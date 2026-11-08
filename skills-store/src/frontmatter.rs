@@ -19,7 +19,10 @@ pub struct Frontmatter {
 pub fn parse_frontmatter(raw: &str) -> Frontmatter {
     let input = raw.strip_prefix('\u{FEFF}').unwrap_or(raw);
     let Some(fence_end) = opening_fence_len(input) else {
-        return Frontmatter { data: serde_json::Value::Object(Default::default()), content: raw.to_string() };
+        return Frontmatter {
+            data: serde_json::Value::Object(Default::default()),
+            content: raw.to_string(),
+        };
     };
     let rest = &input[fence_end..];
     // Find the closing fence: a line that is exactly `---` (allowing a
@@ -40,7 +43,10 @@ pub fn parse_frontmatter(raw: &str) -> Frontmatter {
         offset = at + 3;
     }
     let Some(close_start) = close_start else {
-        return Frontmatter { data: serde_json::Value::Object(Default::default()), content: raw.to_string() };
+        return Frontmatter {
+            data: serde_json::Value::Object(Default::default()),
+            content: raw.to_string(),
+        };
     };
     // Body excludes the newline before the closing fence.
     let mut body = &rest[..close_start];
@@ -55,7 +61,10 @@ pub fn parse_frontmatter(raw: &str) -> Frontmatter {
     let after = after.strip_prefix('\r').unwrap_or(after);
     let content = after.strip_prefix('\n').unwrap_or(after);
     let data = parse_yaml_object(body);
-    Frontmatter { data, content: content.to_string() }
+    Frontmatter {
+        data,
+        content: content.to_string(),
+    }
 }
 
 fn opening_fence_len(input: &str) -> Option<usize> {
@@ -86,11 +95,12 @@ pub fn yaml_to_json(value: &Yaml) -> serde_json::Value {
         Yaml::Null | Yaml::BadValue => serde_json::Value::Null,
         Yaml::Boolean(b) => serde_json::Value::Bool(*b),
         Yaml::Integer(i) => serde_json::json!(i),
-        Yaml::Real(s) => s.parse::<f64>().map(|f| serde_json::json!(f)).unwrap_or_else(|_| serde_json::json!(s)),
+        Yaml::Real(s) => s
+            .parse::<f64>()
+            .map(|f| serde_json::json!(f))
+            .unwrap_or_else(|_| serde_json::json!(s)),
         Yaml::String(s) => serde_json::json!(s),
-        Yaml::Array(items) => {
-            serde_json::Value::Array(items.iter().map(yaml_to_json).collect())
-        }
+        Yaml::Array(items) => serde_json::Value::Array(items.iter().map(yaml_to_json).collect()),
         Yaml::Hash(map) => {
             let mut object = serde_json::Map::new();
             for (key, val) in map {

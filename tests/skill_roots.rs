@@ -177,7 +177,8 @@ fn cline_global_skills_install_uses_standard_agents_dir() {
     let env = IsolatedGlobalEnv::new();
     let cline = skill_by_id("cline").unwrap();
 
-    cline.install_skill(&Scope::Global, &skill("probe", "app"))
+    cline
+        .install_skill(&Scope::Global, &skill("probe", "app"))
         .unwrap();
 
     let canonical = env.home_path().join(".agents/skills/probe");
@@ -185,7 +186,9 @@ fn cline_global_skills_install_uses_standard_agents_dir() {
     assert!(!env.home_path().join(".cline/skills/probe").exists());
     assert!(cline.is_skill_installed(&Scope::Global, "probe").unwrap());
 
-    cline.uninstall_skill(&Scope::Global, "probe", "app").unwrap();
+    cline
+        .uninstall_skill(&Scope::Global, "probe", "app")
+        .unwrap();
     assert!(!canonical.exists());
 }
 
@@ -268,7 +271,8 @@ fn kilocode_global_skills_root_is_unchanged() {
     assert!(expected.join("SKILL.md").exists());
     assert!(kilo.is_skill_installed(&Scope::Global, "probe").unwrap());
 
-    kilo.uninstall_skill(&Scope::Global, "probe", "app").unwrap();
+    kilo.uninstall_skill(&Scope::Global, "probe", "app")
+        .unwrap();
     assert!(!expected.exists());
 }
 
@@ -289,7 +293,9 @@ fn claude_global_skills_respect_claude_config_dir() {
     assert!(!env.home_path().join(".claude/skills/probe").exists());
     assert!(claude.is_skill_installed(&Scope::Global, "probe").unwrap());
 
-    claude.uninstall_skill(&Scope::Global, "probe", "app").unwrap();
+    claude
+        .uninstall_skill(&Scope::Global, "probe", "app")
+        .unwrap();
     assert!(!custom.join("skills/probe").exists());
 
     // Restore the IsolatedGlobalEnv-pinned value before the guard drops.
@@ -329,7 +335,9 @@ fn hermes_local_skills_install_under_project() {
     let hermes = skill_by_id("hermes").unwrap();
     let scope = Scope::Local(project.clone());
 
-    hermes.install_skill(&scope, &skill("probe", "app")).unwrap();
+    hermes
+        .install_skill(&scope, &skill("probe", "app"))
+        .unwrap();
 
     assert!(project
         .join(".hermes/skills/agent-config/probe/SKILL.md")

@@ -42,8 +42,12 @@ const LOGO_LINES: [&str; 6] = [
 ];
 
 const GRAYS: [&str; 6] = [
-    "\x1b[38;5;250m", "\x1b[38;5;248m", "\x1b[38;5;245m",
-    "\x1b[38;5;243m", "\x1b[38;5;240m", "\x1b[38;5;238m",
+    "\x1b[38;5;250m",
+    "\x1b[38;5;248m",
+    "\x1b[38;5;245m",
+    "\x1b[38;5;243m",
+    "\x1b[38;5;240m",
+    "\x1b[38;5;238m",
 ];
 
 fn show_logo() {
@@ -58,7 +62,9 @@ fn show_banner() {
     println!();
     println!("{DIM}The open agent skills ecosystem{RESET}");
     println!();
-    println!("  {DIM}${RESET} {TEXT}skills add {DIM}<package>{RESET}        {DIM}Add a new skill{RESET}");
+    println!(
+        "  {DIM}${RESET} {TEXT}skills add {DIM}<package>{RESET}        {DIM}Add a new skill{RESET}"
+    );
     println!("  {DIM}${RESET} {TEXT}skills use {DIM}<package>@<skill>{RESET} {DIM}Use a skill without installing{RESET}");
     println!("  {DIM}${RESET} {TEXT}skills remove{RESET}               {DIM}Remove installed skills{RESET}");
     println!("  {DIM}${RESET} {TEXT}skills list{RESET}                 {DIM}List installed skills{RESET}");
@@ -80,12 +86,27 @@ fn show_banner() {
 fn show_help() {
     let examples: Vec<(&str, Option<&str>)> = vec![
         ("skills add vercel-labs/agent-skills", None),
-        ("skills use vercel-labs/agent-skills@vercel-optimize | claude", None),
-        ("skills use vercel-labs/agent-skills --skill vercel-optimize --agent claude-code", None),
+        (
+            "skills use vercel-labs/agent-skills@vercel-optimize | claude",
+            None,
+        ),
+        (
+            "skills use vercel-labs/agent-skills --skill vercel-optimize --agent claude-code",
+            None,
+        ),
         ("skills add vercel-labs/agent-skills -g", None),
-        ("skills add vercel-labs/agent-skills --agent claude-code cursor", None),
-        ("skills add vercel-labs/agent-skills --skill pr-review commit", None),
-        ("skills add vercel-labs/agent-skills --json -y", Some("JSON output")),
+        (
+            "skills add vercel-labs/agent-skills --agent claude-code cursor",
+            None,
+        ),
+        (
+            "skills add vercel-labs/agent-skills --skill pr-review commit",
+            None,
+        ),
+        (
+            "skills add vercel-labs/agent-skills --json -y",
+            Some("JSON output"),
+        ),
         ("skills remove", Some("interactive remove")),
         ("skills remove web-design", Some("remove by name")),
         ("skills rm --global frontend-design", None),
@@ -95,13 +116,22 @@ fn show_help() {
         ("skills ls --json", Some("JSON output")),
         ("skills find", Some("interactive search")),
         ("skills find typescript", Some("search by keyword")),
-        ("skills find react --owner vercel", Some("search within an owner")),
+        (
+            "skills find react --owner vercel",
+            Some("search within an owner"),
+        ),
         ("skills update", None),
         ("skills update my-skill", Some("update a single skill")),
         ("skills update -g", Some("update global skills only")),
-        ("skills experimental_install", Some("restore from skills-lock.json")),
+        (
+            "skills experimental_install",
+            Some("restore from skills-lock.json"),
+        ),
         ("skills init my-skill", None),
-        ("skills experimental_sync", Some("sync from node_modules (experimental)")),
+        (
+            "skills experimental_sync",
+            Some("sync from node_modules (experimental)"),
+        ),
         ("skills experimental_sync -y", Some("sync without prompts")),
     ];
     let example_width = examples

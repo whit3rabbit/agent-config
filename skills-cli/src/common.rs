@@ -9,11 +9,18 @@ use crate::color;
 
 /// Split target agents into universal vs symlinked display names.
 #[must_use]
-pub fn split_agents_by_type(agent_types: &[&AgentConfig], global: bool) -> (Vec<String>, Vec<String>) {
+pub fn split_agents_by_type(
+    agent_types: &[&AgentConfig],
+    global: bool,
+) -> (Vec<String>, Vec<String>) {
     let mut universal = Vec::new();
     let mut symlinked = Vec::new();
     for agent in agent_types {
-        if if global { agent.reads_canonical_globally() } else { agent.is_universal() } {
+        if if global {
+            agent.reads_canonical_globally()
+        } else {
+            agent.is_universal()
+        } {
             universal.push(agent.display_name.to_string());
         } else {
             symlinked.push(agent.display_name.to_string());
@@ -28,7 +35,11 @@ pub fn format_list(items: &[String], max_show: usize) -> String {
     if items.len() <= max_show {
         return items.join(", ");
     }
-    format!("{} +{} more", items[..max_show].join(", "), items.len() - max_show)
+    format!(
+        "{} +{} more",
+        items[..max_show].join(", "),
+        items.len() - max_show
+    )
 }
 
 /// Build the `universal:` / `symlink →` / `copy →` summary lines.
@@ -56,9 +67,15 @@ pub fn build_agent_summary_lines(
             ));
         }
     } else {
-        let all_names: Vec<String> =
-            target_agents.iter().map(|a| a.display_name.to_string()).collect();
-        lines.push(format!("  {} {}", color::dim("copy →"), format_list(&all_names, 5)));
+        let all_names: Vec<String> = target_agents
+            .iter()
+            .map(|a| a.display_name.to_string())
+            .collect();
+        lines.push(format!(
+            "  {} {}",
+            color::dim("copy →"),
+            format_list(&all_names, 5)
+        ));
     }
     lines
 }
@@ -87,14 +104,19 @@ pub fn build_result_lines(
     let skipped_symlinks: Vec<String> = results
         .iter()
         .filter(|(agent, _, skipped, reason)| {
-            *skipped && reason.as_deref() == Some("missing-agent-project-directory")
+            *skipped
+                && reason.as_deref() == Some("missing-agent-project-directory")
                 && symlink_agents.contains(agent)
         })
         .map(|(agent, _, _, _)| agent.clone())
         .collect();
 
     if !universal.is_empty() {
-        lines.push(format!("  {} {}", color::green("universal:"), format_list(&universal, 5)));
+        lines.push(format!(
+            "  {} {}",
+            color::green("universal:"),
+            format_list(&universal, 5)
+        ));
     }
     if !successful_symlinks.is_empty() {
         lines.push(format!(
@@ -104,7 +126,11 @@ pub fn build_result_lines(
         ));
     }
     if !failed_symlinks.is_empty() {
-        lines.push(format!("  {} {}", color::yellow("copied:"), format_list(&failed_symlinks, 5)));
+        lines.push(format!(
+            "  {} {}",
+            color::yellow("copied:"),
+            format_list(&failed_symlinks, 5)
+        ));
     }
     if !skipped_symlinks.is_empty() {
         lines.push(format!(
@@ -124,10 +150,16 @@ pub fn shorten_path(full_path: &Path, cwd: &Path) -> String {
     let home = skills_store::paths::home_dir();
     let home_text = home.to_string_lossy().to_string();
     let cwd_text = cwd.to_string_lossy().to_string();
-    if text == home_text || text.starts_with(&format!("{home_text}/")) || text.starts_with(&format!("{home_text}\\")) {
+    if text == home_text
+        || text.starts_with(&format!("{home_text}/"))
+        || text.starts_with(&format!("{home_text}\\"))
+    {
         return format!("~{}", &text[home_text.len()..]);
     }
-    if text == cwd_text || text.starts_with(&format!("{cwd_text}/")) || text.starts_with(&format!("{cwd_text}\\")) {
+    if text == cwd_text
+        || text.starts_with(&format!("{cwd_text}/"))
+        || text.starts_with(&format!("{cwd_text}\\"))
+    {
         return format!(".{}", &text[cwd_text.len()..]);
     }
     text
@@ -156,10 +188,13 @@ pub fn non_interactive_target_agents(cwd: &Path) -> Vec<&'static AgentConfig> {
 /// Ensure canonical-reading universal agents are always targeted
 /// (upstream `ensureUniversalAgents`).
 #[must_use]
-pub fn ensure_universal_agents(target_agents: Vec<&'static AgentConfig>) -> Vec<&'static AgentConfig> {
+pub fn ensure_universal_agents(
+    target_agents: Vec<&'static AgentConfig>,
+) -> Vec<&'static AgentConfig> {
     let mut result = target_agents;
     for universal in registry::universal_agents() {
-        if universal.reads_canonical_globally() && !result.iter().any(|a| a.name == universal.name) {
+        if universal.reads_canonical_globally() && !result.iter().any(|a| a.name == universal.name)
+        {
             result.push(universal);
         }
     }
@@ -176,8 +211,11 @@ pub fn skip_agents_without_global_dir(
     if !global || explicit {
         return target_agents;
     }
-    let skipped: Vec<&AgentConfig> =
-        target_agents.iter().copied().filter(|a| global_dir_none(a)).collect();
+    let skipped: Vec<&AgentConfig> = target_agents
+        .iter()
+        .copied()
+        .filter(|a| global_dir_none(a))
+        .collect();
     if skipped.is_empty() || skipped.len() == target_agents.len() {
         return target_agents;
     }
@@ -186,7 +224,10 @@ pub fn skip_agents_without_global_dir(
         "Skipping {}: no global skills directory",
         names.join(", ")
     ));
-    target_agents.into_iter().filter(|a| !global_dir_none(a)).collect()
+    target_agents
+        .into_iter()
+        .filter(|a| !global_dir_none(a))
+        .collect()
 }
 
 fn global_dir_none(agent: &AgentConfig) -> bool {

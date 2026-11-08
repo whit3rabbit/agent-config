@@ -54,7 +54,9 @@ fn visible_len(line: &str) -> usize {
 }
 
 fn term_columns() -> usize {
-    crossterm::terminal::size().map(|(c, _)| c as usize).unwrap_or(80)
+    crossterm::terminal::size()
+        .map(|(c, _)| c as usize)
+        .unwrap_or(80)
 }
 
 // ─── Frame tracking ─────────────────────────────────────────────────────────
@@ -238,7 +240,11 @@ pub fn outro(message: &str) {
 /// `p.cancel(message)`.
 pub fn cancel(message: &str) {
     FRAME_ROWS.store(0, Ordering::SeqCst);
-    write_str(&format!("{}  {}\n\n", color::gray(S_BAR_END), color::red(message)));
+    write_str(&format!(
+        "{}  {}\n\n",
+        color::gray(S_BAR_END),
+        color::red(message)
+    ));
 }
 
 // ─── log ────────────────────────────────────────────────────────────────────
@@ -309,7 +315,10 @@ pub fn note(body: &str, title: &str) {
 
     let mut out = String::new();
     out.push_str(&format!("{}\n", color::gray(S_BAR)));
-    let dashes = box_width.saturating_sub(title_width).saturating_sub(1).max(1);
+    let dashes = box_width
+        .saturating_sub(title_width)
+        .saturating_sub(1)
+        .max(1);
     out.push_str(&format!(
         "{}  {} {}\n",
         color::green(S_STEP_SUBMIT),
@@ -472,8 +481,6 @@ fn strip_dots(message: &str) -> &str {
     message.trim_end_matches('.')
 }
 
-
-
 // ─── select ─────────────────────────────────────────────────────────────────
 
 /// One selectable option.
@@ -543,10 +550,7 @@ pub fn select(message: &str, options: &[SelectOption], initial: Option<usize>) -
                 }
             }
             PromptState::Submit => {
-                lines.push(format!(
-                    "{prefix}{}",
-                    color::dim(&options[cursor].label)
-                ));
+                lines.push(format!("{prefix}{}", color::dim(&options[cursor].label)));
                 clear_frame();
                 write_str(&format!("{}\n", lines.join("\n")));
                 return Some(options[cursor].value.clone());
@@ -732,7 +736,10 @@ pub fn multiselect(
                 );
             }
             PromptState::Cancel => {
-                lines.push(format!("{prefix}{}", color::styled(&["strikethrough", "dim"], "")));
+                lines.push(format!(
+                    "{prefix}{}",
+                    color::styled(&["strikethrough", "dim"], "")
+                ));
                 lines.push(color::gray(S_BAR));
                 clear_frame();
                 write_str(&format!("{}\n", lines.join("\n")));

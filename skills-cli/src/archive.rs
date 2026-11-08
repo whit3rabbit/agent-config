@@ -18,7 +18,12 @@ pub struct ArchiveLimits {
     pub max_entries: usize,
 }
 
-fn ensure_range(buffer: &[u8], offset: usize, length: usize, label: &str) -> Result<(), SkillsError> {
+fn ensure_range(
+    buffer: &[u8],
+    offset: usize,
+    length: usize,
+    label: &str,
+) -> Result<(), SkillsError> {
     if offset.saturating_add(length) > buffer.len() {
         return Err(diag::archive_invalid(&format!(
             "Invalid zip archive: {label} is out of bounds"
@@ -92,14 +97,22 @@ fn normalize_archive_path(raw_path: &str) -> Option<String> {
         return None;
     }
     let path = raw_path.replace('\\', "/");
-    if path.starts_with('/') || path.chars().next().is_some_and(|c| c.is_ascii_alphabetic() && path[1..].starts_with(':')) {
+    if path.starts_with('/')
+        || path
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() && path[1..].starts_with(':'))
+    {
         return None;
     }
     let parts: Vec<&str> = path.split('/').collect();
     if parts.contains(&"..") {
         return None;
     }
-    let normalized: Vec<&str> = parts.into_iter().filter(|p| !p.is_empty() && *p != ".").collect();
+    let normalized: Vec<&str> = parts
+        .into_iter()
+        .filter(|p| !p.is_empty() && *p != ".")
+        .collect();
     let joined = normalized.join("/");
     if joined.is_empty() && !path.ends_with('/') {
         return None;
@@ -138,8 +151,14 @@ fn find_extra_field(
     Ok(None)
 }
 
-fn decode_zip64_extra(buffer: &[u8], extra_offset: usize, extra_length: usize, values: (u32, u32, u32, u16)) -> Result<(u64, u64, u64), SkillsError> {
-    let (mut compressed_size, mut uncompressed_size, mut local_header_offset, mut disk_start) = values;
+fn decode_zip64_extra(
+    buffer: &[u8],
+    extra_offset: usize,
+    extra_length: usize,
+    values: (u32, u32, u32, u16),
+) -> Result<(u64, u64, u64), SkillsError> {
+    let (mut compressed_size, mut uncompressed_size, mut local_header_offset, mut disk_start) =
+        values;
     let needs_zip64 = uncompressed_size == 0xffff_ffff
         || compressed_size == 0xffff_ffff
         || local_header_offset == 0xffff_ffff
@@ -148,7 +167,11 @@ fn decode_zip64_extra(buffer: &[u8], extra_offset: usize, extra_length: usize, v
         if disk_start != 0 {
             return Err(diag::archive_multi_disk_zip());
         }
-        return Ok((u64::from(compressed_size), u64::from(uncompressed_size), u64::from(local_header_offset)));
+        return Ok((
+            u64::from(compressed_size),
+            u64::from(uncompressed_size),
+            u64::from(local_header_offset),
+        ));
     }
     let Some(zip64_extra) = find_extra_field(buffer, extra_offset, extra_length, 0x0001)? else {
         return Err(diag::archive_invalid("Invalid zip64 extra field"));
@@ -160,22 +183,30 @@ fn decode_zip64_extra(buffer: &[u8], extra_offset: usize, extra_length: usize, v
                 "Invalid zip64 extra field: missing {label}"
             )));
         }
-        let value = u64::from_le_bytes(zip64_extra[value_offset..value_offset + 8].try_into().unwrap());
+        let value = u64::from_le_bytes(
+            zip64_extra[value_offset..value_offset + 8]
+                .try_into()
+                .unwrap(),
+        );
         value_offset += 8;
         Ok(value)
     };
     if uncompressed_size == 0xffff_ffff {
-        uncompressed_size = u32::try_from(read_u64_in_extra("uncompressed size")?).unwrap_or(u32::MAX);
+        uncompressed_size =
+            u32::try_from(read_u64_in_extra("uncompressed size")?).unwrap_or(u32::MAX);
     }
     if compressed_size == 0xffff_ffff {
         compressed_size = u32::try_from(read_u64_in_extra("compressed size")?).unwrap_or(u32::MAX);
     }
     if local_header_offset == 0xffff_ffff {
-        local_header_offset = u32::try_from(read_u64_in_extra("local header offset")?).unwrap_or(u32::MAX);
+        local_header_offset =
+            u32::try_from(read_u64_in_extra("local header offset")?).unwrap_or(u32::MAX);
     }
     if disk_start == 0xffff {
         if value_offset + 4 > zip64_extra.len() {
-            return Err(diag::archive_invalid("Invalid zip64 extra field: missing disk start"));
+            return Err(diag::archive_invalid(
+                "Invalid zip64 extra field: missing disk start",
+            ));
         }
         disk_start = u16::from_le_bytes([zip64_extra[value_offset], zip64_extra[value_offset + 1]]);
     }
@@ -191,7 +222,10 @@ fn decode_zip64_extra(buffer: &[u8], extra_offset: usize, extra_length: usize, v
 
 /// Read a zip archive into `{ path: bytes }`, enforcing limits.
 #[allow(clippy::too_many_lines)]
-pub fn read_zip_archive(bytes: &[u8], limits: ArchiveLimits) -> Result<HashMap<String, Vec<u8>>, SkillsError> {
+pub fn read_zip_archive(
+    bytes: &[u8],
+    limits: ArchiveLimits,
+) -> Result<HashMap<String, Vec<u8>>, SkillsError> {
     let buffer = bytes;
     let Some(end_offset) = find_end_of_central_directory(buffer) else {
         return Err(diag::archive_invalid("Invalid zip archive"));
@@ -231,37 +265,68 @@ pub fn read_zip_archive(bytes: &[u8], limits: ArchiveLimits) -> Result<HashMap<S
             return Err(diag::archive_multi_disk_zip());
         }
         let zip64_end_offset = read_u64(buffer, locator_offset + 8, "zip64 end offset")? as usize;
-        ensure_range(buffer, zip64_end_offset, 56, "zip64 end of central directory")?;
+        ensure_range(
+            buffer,
+            zip64_end_offset,
+            56,
+            "zip64 end of central directory",
+        )?;
         if read_u32(buffer, zip64_end_offset) != ZIP64_END_OF_CENTRAL_DIRECTORY {
-            return Err(diag::archive_invalid("Invalid zip64 end of central directory"));
+            return Err(diag::archive_invalid(
+                "Invalid zip64 end of central directory",
+            ));
         }
         let record_size = read_u64(buffer, zip64_end_offset + 4, "zip64 end size")?;
         if record_size < 44 {
-            return Err(diag::archive_invalid("Invalid zip64 end of central directory"));
+            return Err(diag::archive_invalid(
+                "Invalid zip64 end of central directory",
+            ));
         }
         if zip64_end_offset + record_size as usize + 12 != locator_offset {
-            return Err(diag::archive_invalid("Invalid zip64 end of central directory"));
+            return Err(diag::archive_invalid(
+                "Invalid zip64 end of central directory",
+            ));
         }
-        if read_u32(buffer, zip64_end_offset + 16) != 0 || read_u32(buffer, zip64_end_offset + 20) != 0 {
+        if read_u32(buffer, zip64_end_offset + 16) != 0
+            || read_u32(buffer, zip64_end_offset + 20) != 0
+        {
             return Err(diag::archive_multi_disk_zip());
         }
-        let zip64_entries_on_disk = read_u64(buffer, zip64_end_offset + 24, "zip64 entries on disk")?;
+        let zip64_entries_on_disk =
+            read_u64(buffer, zip64_end_offset + 24, "zip64 entries on disk")?;
         let zip64_total_entries = read_u64(buffer, zip64_end_offset + 32, "zip64 total entries")?;
         if zip64_entries_on_disk != zip64_total_entries {
             return Err(diag::archive_multi_disk_zip());
         }
         (
             zip64_total_entries,
-            read_u64(buffer, zip64_end_offset + 48, "zip64 central directory offset")?,
-            read_u64(buffer, zip64_end_offset + 40, "zip64 central directory size")?,
+            read_u64(
+                buffer,
+                zip64_end_offset + 48,
+                "zip64 central directory offset",
+            )?,
+            read_u64(
+                buffer,
+                zip64_end_offset + 40,
+                "zip64 central directory size",
+            )?,
             u64::try_from(zip64_end_offset).unwrap_or(u64::MAX),
         )
     };
 
     if total_entries > limits.max_entries as u64 {
-        return Err(diag::archive_too_many_files(total_entries as usize, limits.max_entries, None));
+        return Err(diag::archive_too_many_files(
+            total_entries as usize,
+            limits.max_entries,
+            None,
+        ));
     }
-    ensure_range(buffer, cd_offset as usize, cd_size as usize, "central directory")?;
+    ensure_range(
+        buffer,
+        cd_offset as usize,
+        cd_size as usize,
+        "central directory",
+    )?;
     if cd_offset + cd_size > trailer_offset {
         return Err(diag::archive_invalid(
             "Invalid zip archive: central directory overlaps archive trailer",
@@ -289,7 +354,12 @@ pub fn read_zip_archive(bytes: &[u8], limits: ArchiveLimits) -> Result<HashMap<S
         let external_attributes = read_u32(buffer, offset + 38);
         let local_header_offset_raw = read_u32(buffer, offset + 42);
         let variable_size = file_name_length + extra_length + comment_length;
-        ensure_range(buffer, offset + 46, variable_size, "central directory entry data")?;
+        ensure_range(
+            buffer,
+            offset + 46,
+            variable_size,
+            "central directory entry data",
+        )?;
 
         let name_start = offset + 46;
         let extra_offset = name_start + file_name_length;
@@ -297,7 +367,12 @@ pub fn read_zip_archive(bytes: &[u8], limits: ArchiveLimits) -> Result<HashMap<S
             buffer,
             extra_offset,
             extra_length,
-            (compressed_size_raw, uncompressed_size_raw, local_header_offset_raw, disk_start_raw),
+            (
+                compressed_size_raw,
+                uncompressed_size_raw,
+                local_header_offset_raw,
+                disk_start_raw,
+            ),
         )?;
 
         let central_file_name = &buffer[name_start..name_start + file_name_length];
@@ -314,8 +389,7 @@ pub fn read_zip_archive(bytes: &[u8], limits: ArchiveLimits) -> Result<HashMap<S
         if file_type != 0 && file_type != 0o100000 && file_type != 0o040000 {
             return Err(diag::archive_link_entry());
         }
-        let is_directory =
-            raw_file_name.replace('\\', "/").ends_with('/') || file_type == 0o040000;
+        let is_directory = raw_file_name.replace('\\', "/").ends_with('/') || file_type == 0o040000;
         offset += 46 + variable_size;
 
         extracted_bytes += uncompressed_size as usize;
@@ -342,7 +416,8 @@ pub fn read_zip_archive(bytes: &[u8], limits: ArchiveLimits) -> Result<HashMap<S
             local_file_name_length + local_extra_length,
             "local file header data",
         )?;
-        let local_file_name = &buffer[local_name_offset..local_name_offset + local_file_name_length];
+        let local_file_name =
+            &buffer[local_name_offset..local_name_offset + local_file_name_length];
         if local_flags != flags || local_method != method || local_file_name != central_file_name {
             return Err(diag::archive_invalid(
                 "Zip local header does not match central directory",
@@ -391,7 +466,10 @@ fn decode_file_name(bytes: &[u8], is_utf8: bool, unicode_extra: Option<&[u8]>) -
         return String::from_utf8_lossy(bytes).to_string();
     }
     if let Some(extra) = unicode_extra {
-        if extra.len() >= 5 && extra[0] == 1 && u32::from_le_bytes(extra[1..5].try_into().unwrap()) == crc32(bytes) {
+        if extra.len() >= 5
+            && extra[0] == 1
+            && u32::from_le_bytes(extra[1..5].try_into().unwrap()) == crc32(bytes)
+        {
             return String::from_utf8_lossy(&extra[5..]).to_string();
         }
     }
@@ -416,7 +494,9 @@ fn validate_archive_path(path: &str) -> Option<String> {
     if normalized.is_empty() || normalized.ends_with('/') {
         return Some(normalized);
     }
-    if normalized.starts_with('/') || normalized.contains(':') && normalized.as_bytes().get(1) == Some(&b':') {
+    if normalized.starts_with('/')
+        || normalized.contains(':') && normalized.as_bytes().get(1) == Some(&b':')
+    {
         return None;
     }
     if normalized.split('/').any(|segment| segment == "..") {
@@ -446,7 +526,10 @@ pub fn extract_tar(
 
     let mut state_bytes: usize = 0;
     let mut state_entries: usize = 0;
-    for entry in archive.entries().map_err(|err| SkillsError::new("SKILLS_ARCHIVE_INVALID", err.to_string()))? {
+    for entry in archive
+        .entries()
+        .map_err(|err| SkillsError::new("SKILLS_ARCHIVE_INVALID", err.to_string()))?
+    {
         let mut entry =
             entry.map_err(|err| SkillsError::new("SKILLS_ARCHIVE_INVALID", err.to_string()))?;
         let raw_path = entry
@@ -544,8 +627,12 @@ pub fn read_tar_gz(bytes: &[u8]) -> Result<HashMap<String, Vec<u8>>, SkillsError
         let size_text = read_tar_string(header, 124, 12).trim().to_string();
         let type_flag = header[156];
         let prefix = read_tar_string(header, 345, 155);
-        let path = if prefix.is_empty() { name } else { format!("{prefix}/{name}") };
-        let size = usize::from_str_radix(size_text.trim_matches(' ') , 8)
+        let path = if prefix.is_empty() {
+            name
+        } else {
+            format!("{prefix}/{name}")
+        };
+        let size = usize::from_str_radix(size_text.trim_matches(' '), 8)
             .map_err(|_| diag::archive_invalid("Invalid tar entry size"))?;
         offset += 512;
         if type_flag == 0x32 || type_flag == 0x31 {
@@ -617,6 +704,9 @@ mod tests {
     fn rejects_unsafe_tar_paths() {
         assert!(normalize_wellknown_path("../evil").is_none());
         assert!(normalize_wellknown_path("a\\b").is_none());
-        assert_eq!(normalize_wellknown_path("skills/x/SKILL.md").as_deref(), Some("skills/x/SKILL.md"));
+        assert_eq!(
+            normalize_wellknown_path("skills/x/SKILL.md").as_deref(),
+            Some("skills/x/SKILL.md")
+        );
     }
 }

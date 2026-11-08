@@ -5,10 +5,10 @@ use std::io::Write;
 
 use skills_store::sanitize::sanitize_metadata;
 
+use crate::cmd_add;
 use crate::color;
 use crate::find_api::{format_installs, search_skills_api, SearchSkill};
 use crate::prompt::{is_tty, Key, RawSession};
-use crate::cmd_add;
 
 const HIDE_CURSOR: &str = "\x1b[?25l";
 #[allow(dead_code)] // used after prompt-driven flows restore the cursor
@@ -28,7 +28,10 @@ const GITHUB_OWNER_PATTERN_OK: fn(&str) -> bool = |owner: &str| {
         return false;
     }
     let first_ok = bytes[0].is_ascii_digit() || bytes[0].is_ascii_alphabetic();
-    first_ok && bytes.iter().all(|b| b.is_ascii_alphanumeric() || *b == b'-')
+    first_ok
+        && bytes
+            .iter()
+            .all(|b| b.is_ascii_alphanumeric() || *b == b'-')
 };
 
 /// Parse find options (upstream `parseFindOptions`).
@@ -84,7 +87,13 @@ pub fn parse_find_options(args: &[String]) -> (FindOptions, Vec<skills_store::er
         index += 1;
     }
 
-    (FindOptions { query: query_parts.join(" "), owner }, errors)
+    (
+        FindOptions {
+            query: query_parts.join(" "),
+            owner,
+        },
+        errors,
+    )
 }
 
 /// The `skills find` entry point (upstream `runFind`).
@@ -127,10 +136,18 @@ pub fn run_find(args: &[String]) {
             );
             return;
         }
-        println!("{}Install with{} skills add <owner/repo@skill>", color::dim_gray(""), color::reset(""));
+        println!(
+            "{}Install with{} skills add <owner/repo@skill>",
+            color::dim_gray(""),
+            color::reset("")
+        );
         println!();
         for skill in &results {
-            let package = if skill.source.is_empty() { &skill.slug } else { &skill.source };
+            let package = if skill.source.is_empty() {
+                &skill.slug
+            } else {
+                &skill.source
+            };
             let installs = format_installs(skill.installs);
             println!(
                 "{}{}",
@@ -141,7 +158,12 @@ pub fn run_find(args: &[String]) {
                     format!(" {}", color::cyan(&installs))
                 }
             );
-            println!("{}└ https://skills.sh/{}{}", color::dim_gray(""), skill.slug, color::reset(""));
+            println!(
+                "{}└ https://skills.sh/{}{}",
+                color::dim_gray(""),
+                skill.slug,
+                color::reset("")
+            );
             println!();
         }
         return;
@@ -150,19 +172,31 @@ pub fn run_find(args: &[String]) {
     if is_non_interactive || crate::detect_agent::is_running_in_agent() {
         println!("{agent_tip}");
         println!();
-        println!("{}Usage: skills find <query> [--owner <owner>]{}", color::dim_gray(""), color::reset(""));
+        println!(
+            "{}Usage: skills find <query> [--owner <owner>]{}",
+            color::dim_gray(""),
+            color::reset("")
+        );
         return;
     }
 
     let selected = run_search_prompt("", owner.as_deref());
 
     let Some(selected) = selected else {
-        println!("{}Search cancelled{}", color::dim_gray(""), color::reset(""));
+        println!(
+            "{}Search cancelled{}",
+            color::dim_gray(""),
+            color::reset("")
+        );
         println!();
         return;
     };
 
-    let package = if selected.source.is_empty() { selected.slug.clone() } else { selected.source.clone() };
+    let package = if selected.source.is_empty() {
+        selected.slug.clone()
+    } else {
+        selected.source.clone()
+    };
     let skill_name = selected.name.clone();
 
     println!();
@@ -175,11 +209,8 @@ pub fn run_find(args: &[String]) {
     );
     println!();
 
-    let (sources, add_options, _errors) = cmd_add::parse_add_options(&[
-        package.clone(),
-        "--skill".to_string(),
-        skill_name.clone(),
-    ]);
+    let (sources, add_options, _errors) =
+        cmd_add::parse_add_options(&[package.clone(), "--skill".to_string(), skill_name.clone()]);
     cmd_add::run_add(sources, add_options);
 
     println!();
@@ -221,12 +252,22 @@ fn get_owner_repo_from_string(package: &str) -> Option<(String, String)> {
 
 fn is_repo_public(owner: &str, repo: &str) -> Option<bool> {
     let url = format!("https://api.github.com/repos/{owner}/{repo}");
-    let response = crate::http::get(&url, std::time::Duration::from_secs(10), &[("User-Agent", "skills-cli")]).ok()?;
+    let response = crate::http::get(
+        &url,
+        std::time::Duration::from_secs(10),
+        &[("User-Agent", "skills-cli")],
+    )
+    .ok()?;
     if !(200..300).contains(&response.status) {
         return None;
     }
     let value = response.json().ok()?;
-    Some(!value.get("private").and_then(|p| p.as_bool()).unwrap_or(false))
+    Some(
+        !value
+            .get("private")
+            .and_then(|p| p.as_bool())
+            .unwrap_or(false),
+    )
 }
 
 /// Interactive fzf-style search prompt (upstream `runSearchPrompt`).
@@ -259,14 +300,26 @@ fn run_search_prompt(initial_query: &str, owner: Option<&str>) -> Option<SearchS
         ));
         lines.push(String::new());
         if query.len() < 2 {
-            lines.push(format!("{}Start typing to search (min 2 chars){}", color::dim_gray(""), color::reset("")));
+            lines.push(format!(
+                "{}Start typing to search (min 2 chars){}",
+                color::dim_gray(""),
+                color::reset("")
+            ));
         } else if results.is_empty() {
-            lines.push(format!("{}No skills found{}", color::dim_gray(""), color::reset("")));
+            lines.push(format!(
+                "{}No skills found{}",
+                color::dim_gray(""),
+                color::reset("")
+            ));
         } else {
             let max_visible = 8;
             for (index, skill) in results.iter().enumerate().take(max_visible) {
                 let is_selected = index == selected_index;
-                let arrow = if is_selected { color::bold(">") } else { " ".to_string() };
+                let arrow = if is_selected {
+                    color::bold(">")
+                } else {
+                    " ".to_string()
+                };
                 let name = if is_selected {
                     color::bold(&skill.name)
                 } else {
@@ -306,7 +359,9 @@ fn run_search_prompt(initial_query: &str, owner: Option<&str>) -> Option<SearchS
     render(&results, selected_index, &query, &mut last_rendered_lines);
 
     loop {
-        let Some(key) = session.next_key() else { break None };
+        let Some(key) = session.next_key() else {
+            break None;
+        };
         match key {
             Key::Escape => break None,
             Key::CtrlC => break None,

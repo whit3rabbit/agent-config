@@ -12,7 +12,9 @@ const DEFAULT_CLONE_TIMEOUT_MS: u64 = 300_000;
 const ALLOWED_GIT_PROTOCOLS: &str = "https:http:ssh:git:file";
 
 fn clone_timeout() -> Duration {
-    let Some(raw) = std::env::var("SKILLS_CLONE_TIMEOUT_MS").ok().filter(|v| !v.is_empty())
+    let Some(raw) = std::env::var("SKILLS_CLONE_TIMEOUT_MS")
+        .ok()
+        .filter(|v| !v.is_empty())
     else {
         return Duration::from_millis(DEFAULT_CLONE_TIMEOUT_MS);
     };
@@ -67,7 +69,9 @@ fn parse_github_repo_url(url: &str) -> Option<GitHubRepoInfo> {
         }
         let path = path.trim_end_matches(".git").trim_end_matches('/');
         let (owner, repo) = path.split_once('/')?;
-        return Some(GitHubRepoInfo { ssh_url: format!("git@{host}:{owner}/{repo}.git") });
+        return Some(GitHubRepoInfo {
+            ssh_url: format!("git@{host}:{owner}/{repo}.git"),
+        });
     }
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return None;
@@ -81,7 +85,9 @@ fn parse_github_repo_url(url: &str) -> Option<GitHubRepoInfo> {
         return None;
     }
     let repo = segments[1].trim_end_matches(".git");
-    Some(GitHubRepoInfo { ssh_url: format!("git@{host}:{}/{repo}.git", segments[0]) })
+    Some(GitHubRepoInfo {
+        ssh_url: format!("git@{host}:{}/{repo}.git", segments[0]),
+    })
 }
 
 fn is_github_https_clone_url(url: &str) -> bool {
@@ -118,7 +124,10 @@ fn reset_temp_dir(dir: &Path) {
 
 /// Run a command with a hard timeout; returns (exit ok, combined output).
 fn run_with_timeout(mut command: Command, timeout: Duration) -> (bool, String) {
-    command.stdout(Stdio::piped()).stderr(Stdio::piped()).stdin(Stdio::null());
+    command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(Stdio::null());
     let Ok(mut child) = command.spawn() else {
         return (false, "failed to spawn command".to_string());
     };
@@ -134,7 +143,10 @@ fn run_with_timeout(mut command: Command, timeout: Duration) -> (bool, String) {
         if let Some(mut stderr) = stderr_pipe {
             let _ = stderr.read_to_end(&mut err);
         }
-        (String::from_utf8_lossy(&out).to_string(), String::from_utf8_lossy(&err).to_string())
+        (
+            String::from_utf8_lossy(&out).to_string(),
+            String::from_utf8_lossy(&err).to_string(),
+        )
     });
     let deadline = Instant::now() + timeout;
     loop {
@@ -274,8 +286,7 @@ pub fn clone_repo(url: &str, ref_: Option<&str>) -> Result<PathBuf, SkillsError>
     let ref_can_be_sha = ref_.is_some_and(is_commit_sha);
     let _ = &ref_;
 
-    let mut clone_args: Vec<String> =
-        vec!["clone".into(), "--depth".into(), "1".into()];
+    let mut clone_args: Vec<String> = vec!["clone".into(), "--depth".into(), "1".into()];
     if let Some(ref_) = ref_ {
         clone_args.push("--branch".into());
         clone_args.push(ref_.to_string());
@@ -316,8 +327,7 @@ pub fn clone_repo(url: &str, ref_: Option<&str>) -> Result<PathBuf, SkillsError>
             return Ok(clone_dir);
         }
         reset_temp_dir(&clone_dir);
-        let mut ssh_args: Vec<String> =
-            vec!["clone".into(), "--depth".into(), "1".into()];
+        let mut ssh_args: Vec<String> = vec!["clone".into(), "--depth".into(), "1".into()];
         if let Some(ref_) = ref_ {
             ssh_args.push("--branch".into());
             ssh_args.push(ref_.to_string());
@@ -327,8 +337,7 @@ pub fn clone_repo(url: &str, ref_: Option<&str>) -> Result<PathBuf, SkillsError>
         let mut ssh_command = git_command();
         ssh_command.env(
             "GIT_SSH_COMMAND",
-            std::env::var("GIT_SSH_COMMAND")
-                .unwrap_or_else(|_| "ssh -o BatchMode=yes".to_string()),
+            std::env::var("GIT_SSH_COMMAND").unwrap_or_else(|_| "ssh -o BatchMode=yes".to_string()),
         );
         let arg_refs: Vec<&str> = ssh_args.iter().map(String::as_str).collect();
         ssh_command.args(arg_refs);
@@ -408,8 +417,7 @@ fn rev_parse(repo_dir: &Path, revision: &str) -> Option<String> {
 /// (upstream `cleanupTempDir`).
 pub fn cleanup_temp_dir(dir: &Path) -> Result<(), SkillsError> {
     let normalized = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
-    let tmp = std::fs::canonicalize(std::env::temp_dir())
-        .unwrap_or_else(|_| std::env::temp_dir());
+    let tmp = std::fs::canonicalize(std::env::temp_dir()).unwrap_or_else(|_| std::env::temp_dir());
     if !normalized.starts_with(&tmp) {
         return Err(diag::cleanup_outside_temp_dir());
     }

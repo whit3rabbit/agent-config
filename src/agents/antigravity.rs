@@ -76,7 +76,12 @@ impl AntigravityAgent {
 
     fn legacy_skills_root(scope: &Scope) -> Option<PathBuf> {
         match scope {
-            Scope::Global => Some(paths::gemini_home().ok()?.join("antigravity").join("skills")),
+            Scope::Global => Some(
+                paths::gemini_home()
+                    .ok()?
+                    .join("antigravity")
+                    .join("skills"),
+            ),
             Scope::Local(p) => Some(p.join(".agent").join("skills")),
         }
     }

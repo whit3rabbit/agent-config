@@ -411,11 +411,12 @@ pub(crate) fn reject_symlink_components(path: &Path) -> Result<(), AgentConfigEr
     let mut current = PathBuf::new();
     for component in path_abs.components() {
         match component {
-            Component::RootDir => {
+            Component::RootDir | Component::Prefix(_) => {
+                // A filesystem root (`/`, `C:\`) cannot be a symlink, and the
+                // bare Windows prefix form (`\\?\C:`) is not a queryable path
+                // at all — stat only once a normal component exists.
                 current.push(component.as_os_str());
-            }
-            Component::Prefix(prefix) => {
-                current.push(prefix.as_os_str());
+                continue;
             }
             Component::Normal(part) => {
                 current.push(part);

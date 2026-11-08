@@ -106,7 +106,10 @@ pub fn build_update_install_source(entry: &LocalSkillLockEntry) -> Option<String
         let source = if !entry.source_type.is_empty() && entry.source_type != "github" {
             get_local_source(entry)
         } else {
-            entry.source_url.clone().or_else(|| Some(entry.source.clone()))
+            entry
+                .source_url
+                .clone()
+                .or_else(|| Some(entry.source.clone()))
         }?;
         return Some(format_source_input(&source, entry.ref_.as_deref()));
     };
@@ -115,7 +118,11 @@ pub fn build_update_install_source(entry: &LocalSkillLockEntry) -> Option<String
     } else {
         Some(entry.source.clone())
     }?;
-    Some(append_folder_and_ref(&source, skill_path, entry.ref_.as_deref()))
+    Some(append_folder_and_ref(
+        &source,
+        skill_path,
+        entry.ref_.as_deref(),
+    ))
 }
 
 /// Build the `skills add` source argument for a project-lock update.
@@ -124,13 +131,19 @@ pub fn build_local_update_source(entry: &LocalSkillLockEntry) -> Option<String> 
     let source = get_local_source(entry)?;
     match &entry.skill_path {
         None => Some(format_source_input(&source, entry.ref_.as_deref())),
-        Some(skill_path) => Some(append_folder_and_ref(&source, skill_path, entry.ref_.as_deref())),
+        Some(skill_path) => Some(append_folder_and_ref(
+            &source,
+            skill_path,
+            entry.ref_.as_deref(),
+        )),
     }
 }
 
 /// Build the `skills add` source argument from a global-lock entry.
 #[must_use]
-pub fn build_global_update_install_source(entry: &skills_store::locks::SkillLockEntry) -> Option<String> {
+pub fn build_global_update_install_source(
+    entry: &skills_store::locks::SkillLockEntry,
+) -> Option<String> {
     let local = LocalSkillLockEntry {
         source: entry.source.clone(),
         source_url: None,
@@ -147,7 +160,10 @@ pub fn build_global_update_install_source(entry: &skills_store::locks::SkillLock
     // Global entries always carry the original URL in `source_url`; use it
     // verbatim for sources where the shorthand would be ambiguous.
     if entry.source_url.starts_with("git@") || entry.source_url.starts_with("ssh://") {
-        return Some(format_source_input(&entry.source_url, entry.ref_.as_deref()));
+        return Some(format_source_input(
+            &entry.source_url,
+            entry.ref_.as_deref(),
+        ));
     }
     let mut out = build_update_install_source(&local)?;
     if out.is_empty() {
@@ -213,7 +229,11 @@ mod tests {
 
     #[test]
     fn ssh_sources_use_hash_refs() {
-        let mut e = entry("git@github.com:owner/repo.git", "git", Some("skills/web/SKILL.md"));
+        let mut e = entry(
+            "git@github.com:owner/repo.git",
+            "git",
+            Some("skills/web/SKILL.md"),
+        );
         e.source_url = Some("git@github.com:owner/repo.git".to_string());
         e.ref_ = Some("main".to_string());
         // Unappendable sources fall back to the URL plus a `#ref` fragment.

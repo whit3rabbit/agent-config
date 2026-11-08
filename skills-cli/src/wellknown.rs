@@ -110,7 +110,9 @@ fn hostname_of(url: &str) -> Option<String> {
 
 fn is_valid_skill_name(name: &str) -> bool {
     (1..=64).contains(&name.len())
-        && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
         && !name.starts_with('-')
         && !name.ends_with('-')
         && !name.contains("--")
@@ -134,16 +136,24 @@ fn normalize_index(
     if schema == Some(DISCOVERY_SCHEMA_V2) {
         let mut entries = Vec::new();
         for entry in skills {
-            let Some(name) = entry.get("name").and_then(|v| v.as_str()) else { continue };
+            let Some(name) = entry.get("name").and_then(|v| v.as_str()) else {
+                continue;
+            };
             let Some(description) = entry.get("description").and_then(|v| v.as_str()) else {
                 continue;
             };
-            let Some(kind) = entry.get("type").and_then(|v| v.as_str()) else { continue };
+            let Some(kind) = entry.get("type").and_then(|v| v.as_str()) else {
+                continue;
+            };
             if kind != "skill-md" && kind != "archive" {
                 continue;
             }
-            let Some(url) = entry.get("url").and_then(|v| v.as_str()) else { continue };
-            let Some(digest) = entry.get("digest").and_then(|v| v.as_str()) else { continue };
+            let Some(url) = entry.get("url").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let Some(digest) = entry.get("digest").and_then(|v| v.as_str()) else {
+                continue;
+            };
             if !is_valid_skill_name(name)
                 || description.is_empty()
                 || description.len() > 1024
@@ -244,7 +254,10 @@ fn fetch_index_candidates(base_url: &str, update_check: bool) -> Vec<Candidate> 
         else {
             continue;
         };
-        candidates.push(Candidate { entries, resolved_base_url: resolved_base });
+        candidates.push(Candidate {
+            entries,
+            resolved_base_url: resolved_base,
+        });
         if !candidates.is_empty() {
             // Upstream collects all candidates but fetchIndex()/fetchAllSkills
             // only use the first; stop here for identical behavior.
@@ -279,7 +292,14 @@ fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 fn fetch_v1(entry: &NormalizedEntry) -> Option<WellKnownSkill> {
-    let NormalizedEntry::V1 { name, description: _, files, base_url, well_known_path } = entry else {
+    let NormalizedEntry::V1 {
+        name,
+        description: _,
+        files,
+        base_url,
+        well_known_path,
+    } = entry
+    else {
         return None;
     };
     let skill_base_url = format!(
@@ -294,7 +314,8 @@ fn fetch_v1(entry: &NormalizedEntry) -> Option<WellKnownSkill> {
     let skill_name = fm.data.get("name")?.as_str()?.to_string();
     let skill_description = fm.data.get("description")?.as_str()?.to_string();
 
-    let mut out_files: Vec<(String, FileContent)> = vec![("SKILL.md".to_string(), FileContent::Text(content.clone()))];
+    let mut out_files: Vec<(String, FileContent)> =
+        vec![("SKILL.md".to_string(), FileContent::Text(content.clone()))];
     let other_files: Vec<&String> = files
         .iter()
         .filter(|f| f.to_lowercase() != "skill.md")
@@ -320,7 +341,13 @@ fn fetch_v1(entry: &NormalizedEntry) -> Option<WellKnownSkill> {
 }
 
 fn fetch_v2(entry: &NormalizedEntry) -> Result<Option<WellKnownSkill>, SkillsError> {
-    let NormalizedEntry::V2 { name, description: _, artifact_url, digest } = entry else {
+    let NormalizedEntry::V2 {
+        name,
+        description: _,
+        artifact_url,
+        digest,
+    } = entry
+    else {
         return Ok(None);
     };
     let response = crate::http::get_ok(artifact_url, DISCOVERY_TIMEOUT)?;
@@ -328,13 +355,20 @@ fn fetch_v2(entry: &NormalizedEntry) -> Result<Option<WellKnownSkill>, SkillsErr
     let bytes = response.body;
     let actual_digest = format!("sha256:{}", sha256_hex(&bytes));
     if actual_digest != *digest {
-        return Err(diag::wellknown_digest_mismatch(name, digest, &actual_digest));
+        return Err(diag::wellknown_digest_mismatch(
+            name,
+            digest,
+            &actual_digest,
+        ));
     }
 
     let files: Vec<(String, FileContent)> = if is_zip_bytes(&bytes, artifact_url, &content_type) {
         let map = read_zip_archive(
             &bytes,
-            ArchiveLimits { max_extracted_bytes: 50 * 1024 * 1024, max_entries: 1000 },
+            ArchiveLimits {
+                max_extracted_bytes: 50 * 1024 * 1024,
+                max_entries: 1000,
+            },
         )?;
         map.into_iter()
             .map(|(path, data)| (path, FileContent::Bytes(data)))
@@ -381,9 +415,10 @@ fn normalize_file_texts(files: Vec<(String, FileContent)>) -> Vec<(String, FileC
         .map(|(path, content)| {
             if path.to_lowercase() == "skill.md" {
                 match content {
-                    FileContent::Bytes(bytes) => {
-                        (path, FileContent::Text(String::from_utf8_lossy(&bytes).to_string()))
-                    }
+                    FileContent::Bytes(bytes) => (
+                        path,
+                        FileContent::Text(String::from_utf8_lossy(&bytes).to_string()),
+                    ),
                     text => (path, text),
                 }
             } else {
@@ -408,7 +443,10 @@ fn is_tar_gz_bytes(bytes: &[u8], url: &str, content_type: &str) -> bool {
 }
 
 /// Fetch every skill from a well-known endpoint (upstream `fetchAllSkills`).
-pub fn fetch_all_skills(url: &str, include_internal: bool) -> Result<Vec<WellKnownSkill>, SkillsError> {
+pub fn fetch_all_skills(
+    url: &str,
+    include_internal: bool,
+) -> Result<Vec<WellKnownSkill>, SkillsError> {
     let candidates = fetch_index_candidates(url, false);
     let scope = scope_of(url);
     let scoped: Vec<&Candidate> = match &scope {

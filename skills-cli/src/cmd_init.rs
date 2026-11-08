@@ -21,7 +21,11 @@ pub fn run_init(args: &[String]) {
             .unwrap_or_else(|| "skill".to_string())
     });
 
-    let skill_dir = if has_name { cwd.join(&skill_name) } else { cwd.clone() };
+    let skill_dir = if has_name {
+        cwd.join(&skill_name)
+    } else {
+        cwd.clone()
+    };
     let skill_file = skill_dir.join("SKILL.md");
     let display_path = if has_name {
         format!("{skill_name}/SKILL.md")
@@ -65,7 +69,10 @@ pub fn run_init(args: &[String]) {
     println!("  {display_path}");
     println!();
     println!("{}Next steps:{}", color::dim(""), color::reset(""));
-    println!("  1. Edit {} to define your skill instructions", color::text(&display_path));
+    println!(
+        "  1. Edit {} to define your skill instructions",
+        color::text(&display_path)
+    );
     println!(
         "  2. Update the {} and {} in the frontmatter",
         color::text("name"),
@@ -156,7 +163,10 @@ pub fn resolve_restore_agents(
                 &valid.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
             ));
         }
-        requested.iter().filter_map(|name| registry::agent_by_id(name)).collect()
+        requested
+            .iter()
+            .filter_map(|name| registry::agent_by_id(name))
+            .collect()
     } else {
         let last = locks::read_skill_lock()
             .ok()
@@ -185,7 +195,9 @@ pub fn resolve_restore_agents(
 pub fn run_install_from_lock(args: &[String]) {
     let cwd = common::current_dir();
     let options = parse_install_options(args);
-    let frozen = options.frozen_lockfile.unwrap_or_else(crate::detect_agent::is_ci);
+    let frozen = options
+        .frozen_lockfile
+        .unwrap_or_else(crate::detect_agent::is_ci);
     let force = options.force;
     let lock = match locks::read_local_lock(&cwd) {
         Ok(lock) => lock,
@@ -194,8 +206,11 @@ pub fn run_install_from_lock(args: &[String]) {
             std::process::exit(1);
         }
     };
-    let skill_entries: Vec<(String, locks::LocalSkillLockEntry)> =
-        lock.skills.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    let skill_entries: Vec<(String, locks::LocalSkillLockEntry)> = lock
+        .skills
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
 
     if skill_entries.is_empty() {
         if frozen {
@@ -222,8 +237,11 @@ pub fn run_install_from_lock(args: &[String]) {
             return;
         }
     };
-    let linked_agents: Vec<&registry::AgentConfig> =
-        target_agents.iter().copied().filter(|a| !a.is_universal()).collect();
+    let linked_agents: Vec<&registry::AgentConfig> = target_agents
+        .iter()
+        .copied()
+        .filter(|a| !a.is_universal())
+        .collect();
 
     let mut node_module_skills: Vec<String> = Vec::new();
     let mut already_installed: Vec<String> = Vec::new();
@@ -249,9 +267,7 @@ pub fn run_install_from_lock(args: &[String]) {
             crate::update_source::build_local_update_source(entry)
         };
         let Some(install_source) = install_source else {
-            prompt::log_error(
-                &diag::lock_missing_source_url(&color::cyan(skill_name)).plain(),
-            );
+            prompt::log_error(&diag::lock_missing_source_url(&color::cyan(skill_name)).plain());
             failed_skills.push(skill_name.clone());
             continue;
         };
@@ -280,7 +296,11 @@ pub fn run_install_from_lock(args: &[String]) {
     if remote_count > 0 {
         prompt::log_info(&format!(
             "{} {} skill(s) from skills-lock.json into {}",
-            if options.dry_run { "Would restore" } else { "Restoring" },
+            if options.dry_run {
+                "Would restore"
+            } else {
+                "Restoring"
+            },
             color::cyan(&remote_count.to_string()),
             color::dim(".agents/skills/")
         ));
@@ -288,8 +308,16 @@ pub fn run_install_from_lock(args: &[String]) {
     if !linked_agents.is_empty() && (remote_count > 0 || !already_installed.is_empty()) {
         prompt::log_info(&format!(
             "{} to {}",
-            if options.dry_run { "Would link" } else { "Linking" },
-            linked_agents.iter().map(|a| a.display_name).collect::<Vec<_>>().join(", ")
+            if options.dry_run {
+                "Would link"
+            } else {
+                "Linking"
+            },
+            linked_agents
+                .iter()
+                .map(|a| a.display_name)
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     }
 
@@ -299,7 +327,10 @@ pub fn run_install_from_lock(args: &[String]) {
             prompt::log_plain(&format!(
                 "{} {}",
                 names.join(", "),
-                color::dim(&format!("from {source}{}", if *copy { " (copy)" } else { "" }))
+                color::dim(&format!(
+                    "from {source}{}",
+                    if *copy { " (copy)" } else { "" }
+                ))
             ));
         }
         return;
@@ -313,12 +344,17 @@ pub fn run_install_from_lock(args: &[String]) {
         } else {
             crate::source_parser::parse_source(source)
         };
-        let result = install_group_from_source(&parsed, skills, *copy, &target_agents, frozen, &lock, &cwd);
+        let result =
+            install_group_from_source(&parsed, skills, *copy, &target_agents, frozen, &lock, &cwd);
         match result {
             Ok(installed) => {
                 prompt::log_success(&format!(
                     "Restored {}",
-                    installed.iter().map(|n| color::cyan(n)).collect::<Vec<_>>().join(", ")
+                    installed
+                        .iter()
+                        .map(|n| color::cyan(n))
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ));
                 let installed_lower: Vec<String> =
                     installed.iter().map(|n| n.to_lowercase()).collect();
@@ -366,7 +402,11 @@ pub fn run_install_from_lock(args: &[String]) {
         prompt::log_error(&format!(
             "Failed to restore {} skill(s) from skills-lock.json: {}",
             failed_skills.len(),
-            failed_skills.iter().map(|n| color::cyan(n)).collect::<Vec<_>>().join(", ")
+            failed_skills
+                .iter()
+                .map(|n| color::cyan(n))
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
         common::set_exit_code_1();
     }
@@ -409,7 +449,10 @@ fn install_group_from_source(
     if frozen {
         let mut changes: Vec<String> = Vec::new();
         for skill in &resolved.discovery.skills {
-            if !skills.iter().any(|name| name.eq_ignore_ascii_case(&skill.name)) {
+            if !skills
+                .iter()
+                .any(|name| name.eq_ignore_ascii_case(&skill.name))
+            {
                 continue;
             }
             if let Ok(hash) = locks::compute_folder_hash(&skill.path) {
@@ -419,7 +462,10 @@ fn install_group_from_source(
             }
         }
         if !changes.is_empty() {
-            return Err(SkillsError::new("SKILLS_FROZEN_LOCKFILE", locks::frozen_lockfile_error(&changes)));
+            return Err(SkillsError::new(
+                "SKILLS_FROZEN_LOCKFILE",
+                locks::frozen_lockfile_error(&changes),
+            ));
         }
     }
 
@@ -431,7 +477,10 @@ fn install_group_from_source(
     };
     let mut warnings: Vec<SkillsError> = Vec::new();
     for skill in &resolved.discovery.skills {
-        if !skills.iter().any(|name| name.eq_ignore_ascii_case(&skill.name)) {
+        if !skills
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case(&skill.name))
+        {
             continue;
         }
         let mut any_success = false;
@@ -488,7 +537,12 @@ fn link_installed_skills(
 ) {
     for name in skill_names {
         let path = installer::get_canonical_path(name, false, cwd);
-        let mode = if lock.skills.get(name).and_then(|e| e.install_mode.as_deref()) == Some("copy") {
+        let mode = if lock
+            .skills
+            .get(name)
+            .and_then(|e| e.install_mode.as_deref())
+            == Some("copy")
+        {
             installer::InstallMode::Copy
         } else {
             installer::InstallMode::Symlink

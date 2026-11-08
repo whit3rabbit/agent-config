@@ -27,13 +27,18 @@ fn home_fallback_windows() -> Option<PathBuf> {
 }
 
 fn env_path(name: &str) -> Option<PathBuf> {
-    std::env::var_os(name).map(PathBuf::from).filter(|p| !p.as_os_str().is_empty())
+    std::env::var_os(name)
+        .map(PathBuf::from)
+        .filter(|p| !p.as_os_str().is_empty())
 }
 
 /// Trimmed string env var, as the upstream CLI reads overrides.
 #[must_use]
 pub fn env_trimmed(name: &str) -> Option<String> {
-    std::env::var(name).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+    std::env::var(name)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 /// XDG configuration home: `$XDG_CONFIG_HOME` when set and absolute, else
@@ -126,7 +131,11 @@ pub fn github_host() -> String {
         && !lowered.contains('#')
         && !lowered.contains('@')
         && !lowered.contains('\\');
-    if valid { lowered } else { "github.com".to_string() }
+    if valid {
+        lowered
+    } else {
+        "github.com".to_string()
+    }
 }
 
 /// Whether `host` is github.com or the configured `GH_HOST`.
