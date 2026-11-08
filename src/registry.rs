@@ -195,7 +195,7 @@ pub fn instruction_by_id(id: &str) -> Option<Box<dyn InstructionSurface>> {
     instruction_capable().into_iter().find(|i| i.id() == id)
 }
 
-/// Returns the [`InstructionPlacement`] shapes this agent's instruction
+/// Returns the [`crate::spec::InstructionPlacement`] shapes this agent's instruction
 /// surface accepts, best first. Empty for agents without an instruction
 /// surface (e.g. `cursor`, `iflow`, `tabnine`).
 ///
