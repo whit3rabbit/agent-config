@@ -3,8 +3,8 @@
 //! Tabnine packs hooks and MCP servers into a single `settings.json`. The
 //! per-event hook entry shape mirrors Claude's, but Tabnine uses its own
 //! event names (`BeforeTool`, `AfterTool`, `BeforeAgent`, `AfterAgent`,
-//! `SessionStart`, `SessionEnd`, `PreCompress`, `BeforeModel`, `AfterModel`,
-//! `BeforeToolSelection`).
+//! `Notification`, `SessionStart`, `SessionEnd`, `PreCompress`, `BeforeModel`,
+//! `AfterModel`, `BeforeToolSelection`).
 //!
 //! Surfaces:
 //!

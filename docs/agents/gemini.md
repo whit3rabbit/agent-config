@@ -90,6 +90,13 @@ available.
 
 ## Prompt instructions
 
+### Memory file support
+
+- **Supported format**: Own memory file (`GEMINI.md`).
+- **Primary memory file**: `~/.gemini/GEMINI.md` (global) and `<root>/GEMINI.md` (local).
+- **`AGENTS.md` support**: Gemini CLI primarily targets `GEMINI.md`; in the unified Google Antigravity ecosystem, `AGENTS.md` is also read for project context.
+
+
 | | |
 | --- | --- |
 | User scope file | `~/.gemini/GEMINI.md` |
@@ -139,7 +146,7 @@ HTML-comment fenced block in the existing memory file.
 
 | | |
 | --- | --- |
-| File | `.gemini/settings.json` |
+| File | `<root>/.gemini/settings.json` |
 | Key | `mcpServers` |
 | Format | JSON |
 
@@ -178,8 +185,12 @@ Gemini path for this integration.
 ## References
 
 - <https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/>
+- <https://geminicli.com/docs/reference/configuration/>
+- <https://geminicli.com/docs/cli/settings/>
 - <https://geminicli.com/docs/hooks/>
+- <https://geminicli.com/docs/hooks/reference/>
 - <https://geminicli.com/docs/cli/gemini-md/>
 - <https://geminicli.com/docs/tools/mcp-server/>
 - <https://geminicli.com/docs/cli/using-agent-skills/>
+- <https://geminicli.com/docs/cli/creating-skills/>
 - <https://docs.cloud.google.com/gemini/docs/codeassist/chat-gemini>

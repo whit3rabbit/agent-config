@@ -10,38 +10,38 @@ contract across all integrations. Each entry documents:
 - **MCP**, **Skills**, and **Instructions** — implemented where this crate has
   a file-backed or config-backed contract and tests for the emitted shape.
 
-**Last updated:** 2026-05-29. MCP, skills, and instruction coverage reflects
+**Last updated:** 2026-11-08. MCP, skills, and instruction coverage reflects
 the current file-backed locations implemented by this crate.
 
 ## Implemented
 
-| Agent | Hooks | Prompt | MCP | Skills | Instructions |
-| ----- | ----- | ------ | --- | ------ | ------------ |
-| [Claude Code](claude.md)         | ✓ (Global + Local) | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, ReferencedFile) |
-| [Cursor](cursor.md)              | ✓ (Global + Local) | -   | ✓ (Global + Local) | ✓ (Global + Local) | - |
-| [Gemini CLI](gemini.md)          | ✓ (Global + Local) | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
-| [OpenClaw](openclaw.md)          | - | ✓ (Local) | ✓ (Global, JSON5) | ✓ (Global + Local) | ✓ (Local, InlineBlock) |
-| [Hermes Agent](hermes.md)        | - | ✓ (Local) | ✓ (Global, YAML) | ✓ (Global) | ✓ (Local, InlineBlock) |
-| [Codex CLI](codex.md)            | ✓ (Global + Local) | ✓ | ✓ (Global + Local, TOML) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
-| [GitHub Copilot](copilot.md)     | ✓ (Local)          | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Local, InlineBlock) |
-| [OpenCode](opencode.md)          | ✓ (Global + Local) | ✓ | ✓ (Global + Local, object) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
-| [Cline](cline.md)                | ✓ (Local, v3.36+ scripts) | ✓ | ✓ (Global) | ✓ (Global + Local) | ✓ (Local, StandaloneFile) |
-| [Roo Code](roo.md)               | -                    | ✓ | ✓ (Global + Local) | -    | ✓ (Local, StandaloneFile) |
-| [Windsurf](windsurf.md)          | ✓ (Local) | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Local, StandaloneFile) |
-| [Kilo Code](kilocode.md)         | -                    | ✓ | ✓ (Global + Local, JSONC) | ✓ (Global + Local) | ✓ (Local, StandaloneFile) |
-| [Google Antigravity](antigravity.md) | -                | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Local, StandaloneFile) |
-| [Antigravity CLI](antigravitycli.md) | -                | ✓ | ✓ (Global + Local) | - | ✓ (Global + Local, InlineBlock) |
-| [Amp](amp.md)                    | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
-| [CodeBuddy CLI](codebuddy.md)    | ✓ (Global + Local) | ✓ | - | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
-| [Charm Crush](crush.md)          | ✓ (Global + Local) | ✓ | ✓ (Global + Local, JSONC) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
-| [Forge](forge.md)                | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
-| [iFlow CLI](iflow.md)            | ✓ (Global + Local) | - | ✓ (Global + Local) | - | - |
-| [JetBrains Junie](junie.md)      | - | ✓ (Local) | ✓ (Global + Local) | - | ✓ (Local, InlineBlock) |
-| [Pi](pi.md)                      | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
-| [Qoder CLI](qodercli.md)         | - | ✓ | ✓ (Global + Local) | - | ✓ (Global + Local, InlineBlock) |
-| [Qwen Code](qwen.md)             | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) |
-| [Tabnine CLI](tabnine.md)        | ✓ (Global + Local) | - | ✓ (Global + Local) | - | - |
-| [Trae](trae.md)                  | - | ✓ (Local) | - | ✓ (Global + Local) | ✓ (Local, InlineBlock) |
+| Agent | Hooks | Prompt | MCP | Skills | Instructions | Memory File Support |
+| ----- | ----- | ------ | --- | ------ | ------------ | ------------------- |
+| [Claude Code](claude.md)         | ✓ (Global + Local) | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, ReferencedFile) | Own (`CLAUDE.md`) |
+| [Cursor](cursor.md)              | ✓ (Global + Local) | -   | ✓ (Global + Local) | ✓ (Global + Local) | - | Both (`AGENTS.md` + `.cursor/rules/`) |
+| [Gemini CLI](gemini.md)          | ✓ (Global + Local) | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) | Own (`GEMINI.md`) |
+| [OpenClaw](openclaw.md)          | - | ✓ (Local) | ✓ (Global, JSON5) | ✓ (Global + Local) | ✓ (Local, InlineBlock) | `AGENTS.md` |
+| [Hermes Agent](hermes.md)        | - | ✓ (Local) | ✓ (Global, YAML) | ✓ (Global) | ✓ (Local, InlineBlock) | Both (`.hermes.md` + `AGENTS.md`) |
+| [Codex CLI](codex.md)            | ✓ (Global + Local) | ✓ | ✓ (Global + Local, TOML) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) | `AGENTS.md` |
+| [GitHub Copilot](copilot.md)     | ✓ (Local)          | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Local, InlineBlock) | Both (`copilot-instructions.md` + `AGENTS.md`) |
+| [OpenCode](opencode.md)          | ✓ (Global + Local) | ✓ | ✓ (Global + Local, object) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) | `AGENTS.md` |
+| [Cline](cline.md)                | ✓ (Local, v3.36+ scripts) | ✓ | ✓ (Global) | ✓ (Global + Local) | ✓ (Local, StandaloneFile) | Both (`.cline/rules/` + `AGENTS.md`) |
+| [Roo Code](roo.md)               | -                    | ✓ | ✓ (Global + Local) | -    | ✓ (Local, StandaloneFile) | Both (`.roo/rules/` + `AGENTS.md`) |
+| [Windsurf](windsurf.md)          | ✓ (Local) | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Local, StandaloneFile) | Both (`.windsurf/rules/` + `AGENTS.md`) |
+| [Kilo Code](kilocode.md)         | -                    | ✓ | ✓ (Global + Local, JSONC) | ✓ (Global + Local) | ✓ (Local, StandaloneFile) | Both (`.kilo/rules/` + `AGENTS.md`) |
+| [Google Antigravity](antigravity.md) | -                | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Local, StandaloneFile) | Both (`.agents/rules/` + `AGENTS.md`) |
+| [Antigravity CLI](antigravitycli.md) | -                | ✓ | ✓ (Global + Local) | - | ✓ (Global + Local, InlineBlock) | Both (`AGENTS.md` + `GEMINI.md`) |
+| [Amp](amp.md)                    | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) | Both (`AGENTS.md` + `CLAUDE.md` fallback) |
+| [CodeBuddy CLI](codebuddy.md)    | ✓ (Global + Local) | ✓ | - | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) | Both / All (`CODEBUDDY.md` + `AGENTS.md` + `CLAUDE.md`) |
+| [Charm Crush](crush.md)          | ✓ (Global + Local) | ✓ | ✓ (Global + Local, JSONC) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) | Both (`AGENTS.md` + `CRUSH.md`) |
+| [Forge](forge.md)                | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) | `AGENTS.md` |
+| [iFlow CLI](iflow.md)            | ✓ (Global + Local) | - | ✓ (Global + Local) | - | - | Both (`IFLOW.md` + `AGENTS.md`) |
+| [JetBrains Junie](junie.md)      | - | ✓ (Local) | ✓ (Global + Local) | - | ✓ (Local, InlineBlock) | `AGENTS.md` (`.junie/AGENTS.md` + root) |
+| [Pi](pi.md)                      | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) | `AGENTS.md` |
+| [Qoder CLI](qodercli.md)         | - | ✓ | ✓ (Global + Local) | - | ✓ (Global + Local, InlineBlock) | `AGENTS.md` (and `.qoder/rules/`) |
+| [Qwen Code](qwen.md)             | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) | Both (`QWEN.md` + `AGENTS.md`) |
+| [Tabnine CLI](tabnine.md)        | ✓ (Global + Local) | - | ✓ (Global + Local) | - | - | MCP only (Coaching Guidelines) |
+| [Trae](trae.md)                  | - | ✓ (Local) | - | ✓ (Global + Local) | ✓ (Local, InlineBlock) | Both (`.trae/project_rules.md` + `AGENTS.md`) |
 
 ## Conventions
 

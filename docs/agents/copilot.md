@@ -6,9 +6,10 @@ ID: `copilot` — `agent_config::by_id("copilot")`
 
 ### User scope (`Scope::Global`)
 
-Not supported. Copilot's CLI loads hook configs from cwd; the cloud agent
-loads them from the repo's default branch under `.github/hooks/`. There is
-no documented per-user hook directory.
+Not supported by this integration. Copilot CLI supports user-level hooks in
+`~/.copilot/hooks/*.json` (or `$COPILOT_HOME/hooks/*.json`), but `agent-config`
+currently targets repository-scoped hooks (`Scope::Local`) under `.github/hooks/`,
+which are supported across both Copilot CLI and Copilot in the cloud.
 
 ### Project scope (`Scope::Local(<root>)`)
 
@@ -52,7 +53,7 @@ Copilot uses lowerCamelCase events (Claude is PascalCase).
 | `PostToolUse`  | `postToolUse`  |
 | `Custom(s)`    | `s`            |
 
-Other events: `sessionStart`, `sessionEnd`, `userPromptSubmitted`, `errorOccurred`.
+Other events: `sessionStart`, `sessionEnd`, `userPromptSubmitted`, `postToolUseFailure`, `permissionRequest`, `errorOccurred`.
 
 ### Matcher mapping
 
@@ -61,7 +62,7 @@ Other events: `sessionStart`, `sessionEnd`, `userPromptSubmitted`, `errorOccurre
 | `All`               | `*`            |
 | `Bash`              | `Shell`        |
 | `Exact(s)`          | `s`            |
-| `AnyOf([a, b])`     | `a\|b`         |
+| `AnyOf([a, b])`     | `a|b`         |
 | `Regex(s)`          | `s`            |
 
 ### Windows-only PowerShell variant — TODO
@@ -71,22 +72,31 @@ v0.1 always writes `bash`. Add `ScriptTemplate::PowerShell` if/when needed.
 
 ## Prompt instructions
 
+### Memory file support
+
+- **Supported format**: Both own file (`.github/copilot-instructions.md`) and `AGENTS.md`.
+- **Primary memory file**: `~/.copilot/copilot-instructions.md` (user) and `.github/copilot-instructions.md` (repository).
+- **`AGENTS.md` support**: Supported; Copilot CLI and GitHub.com coding agents also recognize repository-level `AGENTS.md`.
+
+
 | | |
 | --- | --- |
 | Project scope file | `<root>/.github/copilot-instructions.md` |
-| Format | Tagged HTML-comment fence |
+| Format | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<tag> -->`) |
 
 Copilot also reads `<root>/.github/instructions/*.instructions.md` (path-scoped
-via frontmatter) and project-root `AGENTS.md`. Use the Codex integration to
-write `AGENTS.md`.
+via frontmatter `applyTo`) and project-root `AGENTS.md`. Use the Codex integration to
+write `AGENTS.md`. At user scope, Copilot CLI also supports `~/.copilot/copilot-instructions.md`
+and `~/.copilot/instructions/**/*.instructions.md`.
 
 ## Instructions
 
 Standalone instruction files installed via `InstructionSurface`. Uses
 `InstructionPlacement::InlineBlock` (project-local only) because GitHub
-Copilot's memory file does not expose a documented `@import` syntax; the body
-is injected as a tagged HTML-comment fenced block in the existing memory
-file.
+Copilot's memory file does not expose a documented `@import` syntax across all
+surfaces (Copilot CLI supports `@<relative-path>` file references, but
+`agent-config` embeds an inline fenced block into `.github/copilot-instructions.md`
+for universal compatibility across CLI, IDE, and cloud agent).
 
 | | |
 | --- | --- |
@@ -104,6 +114,7 @@ file.
 | File | `~/.copilot/mcp-config.json` |
 | Format | JSON |
 | Key | `mcpServers` |
+| Ledger | `~/.copilot/.agent-config-mcp.json` |
 
 ### Project scope (`Scope::Local(<root>)`)
 
@@ -112,6 +123,7 @@ file.
 | File | `<root>/.mcp.json` |
 | Format | JSON |
 | Key | `mcpServers` |
+| Ledger | `<root>/.agent-config-mcp.json` |
 
 ### Configuration
 
@@ -127,7 +139,9 @@ file.
 ```
 
 VS Code Copilot can also read `<root>/.vscode/mcp.json` with a `servers`
-object. `agent-config` targets the Copilot CLI/cloud-agent contract here.
+object. `agent-config` targets the Copilot CLI/cloud-agent `.mcp.json` contract
+with `mcpServers`. Copilot CLI also reads shared project configuration from
+`<root>/.github/mcp.json` when present.
 
 ## Skills
 
@@ -135,15 +149,30 @@ object. `agent-config` targets the Copilot CLI/cloud-agent contract here.
 | --- | --- |
 | User | `~/.copilot/skills/<name>/` |
 | Project | `.github/skills/<name>/` |
+| Ledger (User) | `~/.copilot/skills/.agent-config-skills.json` |
+| Ledger (Project) | `.github/skills/.agent-config-skills.json` |
 
 Each skill is a directory containing `SKILL.md` with required `name` and
-`description` frontmatter. Copilot also supports `allowed-tools`,
-`user-invocable`, and `disable-model-invocation` frontmatter, but `agent-config`
-only renders the shared fields exposed by `SkillSpec`.
+`description` frontmatter. Copilot CLI also discovers skills in `.claude/skills`
+and `.agents/skills`, but `agent-config` writes to `.github/skills/<name>/` for
+project scope and `~/.copilot/skills/<name>/` for user scope. Copilot also supports
+`allowed-tools`, `license`, `user-invocable`, and `disable-model-invocation` frontmatter,
+but `agent-config` only renders the shared fields exposed by `SkillSpec`.
 
 ## References
 
-- <https://docs.github.com/en/copilot/reference/hooks-configuration>
+### Official GitHub Copilot Documentation
+- <https://docs.github.com/en/copilot/reference/hooks-reference>
 - <https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/use-hooks>
-- <https://code.visualstudio.com/docs/copilot/customization/hooks>
+- <https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-custom-instructions>
+- <https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions>
+- <https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers>
+- <https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills>
+- <https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference>
 - <https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference>
+
+### VS Code Agent Customization Documentation
+- <https://code.visualstudio.com/docs/agent-customization/overview>
+- <https://code.visualstudio.com/docs/agent-customization/hooks>
+- <https://code.visualstudio.com/docs/agent-customization/custom-instructions>
+- <https://code.visualstudio.com/docs/agent-customization/mcp-servers>

@@ -18,7 +18,14 @@ Matches event names like `PreToolUse` and `PostToolUse`. Matcher translates `Mat
 
 If the hook specification includes `rules`, prompt rules are written/injected into local `AGENTS.md` or global `~/.gemini/GEMINI.md`.
 
-## Prompt Instructions
+## Prompt
+
+### Memory file support
+
+- **Supported format**: Both `AGENTS.md` and `GEMINI.md`.
+- **Primary memory files**: `~/.gemini/GEMINI.md` (global user instructions) and `<root>/AGENTS.md` (local repository instructions).
+- **`AGENTS.md` support**: Native; Antigravity CLI targets `<root>/AGENTS.md` for project scope.
+ Instructions
 
 | | |
 | --- | --- |
@@ -103,6 +110,9 @@ still detected and removed.
 - <https://antigravity.google/docs/hooks>
 - <https://antigravity.google/docs/skills>
 - <https://antigravity.google/docs/mcp>
-- <https://antigravity.google/docs/gcli-migration>
-- <https://antigravity.google/assets/docs/cli/gcli-migration.md>
-- <https://antigravity.google/assets/docs/cli/cli-plugins.md>
+- <https://antigravity.google/docs/rules>
+- <https://antigravity.google/docs/customization-discovery>
+- <https://antigravity.google/docs/cli/reference>
+- <https://antigravity.google/docs/cli/gcli-migration>
+- <https://antigravity.google/docs/settings?tab=cli>
+- <https://antigravity.google/docs/plugins?tab=cli>

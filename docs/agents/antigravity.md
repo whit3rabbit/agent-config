@@ -18,7 +18,14 @@ Matches event names like `PreToolUse` and `PostToolUse`. Matcher translates `Mat
 
 If the hook specification includes `rules`, prompt rules are written to `<root>/.agents/rules/<tag>.md` (Local scope only; global prompt rules are unsupported).
 
-## Prompt Instructions
+## Prompt
+
+### Memory file support
+
+- **Supported format**: Both `AGENTS.md` and per-file rules in `.agents/rules/`.
+- **Primary rules directory**: `.agents/rules/<name>.md` (local repository rules).
+- **`AGENTS.md` support**: Native; Antigravity IDE and CLI automatically discover and load `<root>/AGENTS.md` as project guidelines.
+ Instructions
 
 ### Project scope (`Scope::Local(<root>)`)
 
@@ -99,8 +106,11 @@ when omitted by the host.
 
 ## Workflows
 
-Not implemented. Antigravity documents workflows as markdown files, but this
-crate has no workflow surface yet.
+Not implemented. Antigravity originally documented workflows as markdown files,
+but workflows are deprecated upstream in favor of agent skills (see the
+[workflows documentation](https://antigravity.google/docs/ide/workflows) and
+[migration guide](https://antigravity.google/docs/migration/workflows-to-skills)).
+This crate has no workflow surface.
 
 ## MCP Servers
 
@@ -126,10 +136,10 @@ Local app MCP is updated to `.agents/mcp_config.json`, with legacy fallback supp
 
 ## References
 
-- <https://antigravity.google/docs/hooks>
-- <https://antigravity.google/docs/rules-workflows>
-- <https://antigravity.google/docs/skills>
-- <https://antigravity.google/docs/mcp>
-- <https://antigravity.google/assets/docs/antigravity-2-0/rules-workflows.md>
-- <https://antigravity.google/assets/docs/editor/ide-skills.md>
-- <https://antigravity.google/assets/docs/editor/ide-mcp.md>
+- <https://antigravity.google/docs/hooks> (Markdown: <https://antigravity.google/docs/hooks.md>)
+- <https://antigravity.google/docs/rules> (Markdown: <https://antigravity.google/docs/rules.md>)
+- <https://antigravity.google/docs/skills> (Markdown: <https://antigravity.google/docs/skills.md>)
+- <https://antigravity.google/docs/mcp> (Markdown: <https://antigravity.google/docs/mcp.md>)
+- <https://antigravity.google/docs/customization-discovery> (Markdown: <https://antigravity.google/docs/customization-discovery.md>)
+- <https://antigravity.google/docs/ide/workflows> (Markdown: <https://antigravity.google/docs/ide/workflows.md>)
+- <https://antigravity.google/docs/migration/workflows-to-skills> (Markdown: <https://antigravity.google/docs/migration/workflows-to-skills.md>)

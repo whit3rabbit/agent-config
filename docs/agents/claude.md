@@ -4,7 +4,9 @@ ID: `claude` — `agent_config::by_id("claude")`
 
 Global-scope paths below resolve under `~/.claude`; when the host sets
 `CLAUDE_CONFIG_DIR` (Claude Code's documented config-directory override),
-every `~/.claude/...` path is rooted at that directory instead.
+every `~/.claude/...` path is rooted at that directory instead. Note that
+`~/.claude.json` (user-scoped MCP configuration) is always located in the user
+home directory (`$HOME` or `%USERPROFILE%`).
 
 ## Hooks
 
@@ -60,11 +62,23 @@ every `~/.claude/...` path is rooted at that directory instead.
 | -------------- | ------------- |
 | `PreToolUse`   | `PreToolUse`  |
 | `PostToolUse`  | `PostToolUse` |
+| `Notification` | `Notification` |
+| `UserPromptSubmit` | `UserPromptSubmit` |
+| `Stop`         | `Stop`        |
+| `SubagentStop` | `SubagentStop` |
+| `PreCompact`   | `PreCompact`  |
+| `SessionStart` | `SessionStart` |
+| `SessionEnd`   | `SessionEnd`  |
+| `PermissionRequest` | `PermissionRequest` |
+| `PermissionDenied`  | `PermissionDenied`  |
+| `ConfigChange` | `ConfigChange` |
+| `FileChanged`  | `FileChanged` |
+| `InstructionsLoaded` | `InstructionsLoaded` |
 | `Custom(s)`    | `s`           |
 
-Claude supports many additional events (`SessionStart`, `UserPromptSubmit`,
-`MessageDisplay`, `InstructionsLoaded`, `ConfigChange`, `FileChanged`,
-`Stop`, `SubagentStart`, etc.). Use `Event::Custom` to attach to those.
+Claude supports additional hook events (e.g. `WorktreeCreate`,
+`WorktreeRemove`, `Setup`, `Teardown`, `SubagentStart`, `MessageDisplay`).
+Use `Event::Custom` to attach to those or any newly introduced event.
 
 ### Matcher mapping
 
@@ -77,6 +91,13 @@ Claude supports many additional events (`SessionStart`, `UserPromptSubmit`,
 | `Regex(s)`          | `s` (verbatim; Claude treats non-`[A-Za-z0-9_\|]` as JS regex) |
 
 ## Prompt instructions
+
+### Memory file support
+
+- **Supported format**: Own memory file (`CLAUDE.md`).
+- **Primary memory file**: `~/.claude/CLAUDE.md` (global), `<root>/CLAUDE.md` and `<root>/CLAUDE.local.md` (local), plus `.claude/rules/*.md`.
+- **`AGENTS.md` support**: Claude Code does not natively load `AGENTS.md` by default; projects can import `AGENTS.md` by adding `@AGENTS.md` inside `CLAUDE.md`.
+
 
 | | |
 | --- | --- |
@@ -123,7 +144,7 @@ the consumer overrides `placement`.
 | --- | --- |
 | File | `~/.claude.json` |
 | Format | JSON |
-| Mechanism | Server config under the current project's entry for local/user scoped servers |
+| Mechanism | Top-level `mcpServers` object (user scope, applies across all projects) |
 
 ### Project scope (`Scope::Local(<root>)`)
 
@@ -131,10 +152,10 @@ the consumer overrides `placement`.
 | --- | --- |
 | File | `.mcp.json` |
 | Format | JSON |
-| Mechanism | Server config (version-controlled) |
+| Mechanism | Top-level `mcpServers` object (project scope, version-controlled) |
 
 **Important:** Do not use `settings.json` for MCP servers. This integration
-writes user/local MCP to `~/.claude.json` and project-shared MCP to
+writes user-scoped MCP servers to `~/.claude.json` and project-shared MCP to
 `<root>/.mcp.json`.
 
 ### Example
@@ -228,19 +249,28 @@ Usage examples.
 Limitations or edge cases.
 ```
 
-The builder exposes typed setters for Claude's current skill frontmatter:
-`when_to_use`, `argument_hint`, `arguments`,
+The builder exposes typed setters on `SkillFrontmatter` for Claude's skill
+frontmatter: `when_to_use`, `argument_hint`, `arguments`,
 `disable_model_invocation`, `user_invocable`, `allowed_tools`,
 `disallowed_tools`, `model`, `effort`, `context`, `agent`, `paths`, and
-`shell`. `description` is still required by this crate for cross-harness
-safety, even though Claude can infer it in some cases.
+`shell`. Claude Code also recognizes `background`, `hooks`, `metadata`,
+`license`, and `compatibility`. `description` is required by this crate for
+cross-harness safety, even though Claude can infer it in some cases.
 
 ## References
 
-- <https://code.claude.com/docs/en/hooks>
-- <https://code.claude.com/docs/en/settings>
-- <https://code.claude.com/docs/en/mcp>
-- <https://code.claude.com/docs/en/memory>
-- <https://code.claude.com/docs/en/skills>
-- <https://code.claude.com/docs/en/plugins-reference>
-- <https://code.claude.com/docs/en/claude-directory>
+- Hooks:
+  - Hooks reference: <https://code.claude.com/docs/en/hooks>
+  - Hooks guide: <https://code.claude.com/docs/en/hooks-guide>
+- Settings and configuration directory:
+  - Settings files and precedence: <https://code.claude.com/docs/en/settings>
+  - Settings reference: <https://code.claude.com/docs/en/settings-reference>
+  - `.claude` directory reference: <https://code.claude.com/docs/en/claude-directory>
+  - Environment variables reference: <https://code.claude.com/docs/en/env-vars>
+- MCP:
+  - Model Context Protocol (MCP): <https://code.claude.com/docs/en/mcp>
+- Memory and instructions:
+  - How Claude remembers your project: <https://code.claude.com/docs/en/memory>
+- Skills and plugins:
+  - Skills reference: <https://code.claude.com/docs/en/skills>
+  - Plugin manifest reference: <https://code.claude.com/docs/en/plugins/manifest-reference> (legacy alias: <https://code.claude.com/docs/en/plugins-reference>)

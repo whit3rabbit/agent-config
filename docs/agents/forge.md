@@ -2,22 +2,43 @@
 
 ID: `forge` — `agent_config::by_id("forge")`
 
+**Status:** registered for project + global prompt rules in `AGENTS.md`,
+MCP servers, skills, and instructions. Forge has no config-file hook surface;
+hook installs require a `rules` body and otherwise refuse with `MissingSpecField`.
+
 ## Surfaces
 
-| Surface | Scope          | Notes                                  |
-| ------- | -------------- | -------------------------------------- |
-| Hooks   | -              | Not part of Forge's documented surface |
-| Prompt  | Global + Local | Fenced block in `AGENTS.md`            |
-| MCP     | Global + Local | `mcpServers` JSON map at `.mcp.json`   |
-| Skills  | Global + Local | `SKILL.md` directories                 |
+| Surface      | Scope          | Notes                                  |
+| ------------ | -------------- | -------------------------------------- |
+| Hooks        | -              | Not part of Forge's documented surface |
+| Prompt       | Global + Local | Fenced block in `AGENTS.md`            |
+| MCP          | Global + Local | `mcpServers` JSON map at `.mcp.json`   |
+| Skills       | Global + Local | `SKILL.md` directories                 |
+| Instructions | Global + Local | `InlineBlock` in `AGENTS.md`           |
+
+Forge is a universal CLI for AI coding agents built on the open Agent Client
+Protocol (ACP). It has no config-driven hook surface; this integration accepts
+a [`HookSpec`] *only* if `rules` is set.
 
 ## Prompt instructions
+
+### Memory file support
+
+- **Supported format**: `AGENTS.md`.
+- **Primary memory file**: `~/.forge/AGENTS.md` (global) and `<root>/AGENTS.md` (local).
+- **`AGENTS.md` support**: Native; Forge standardizes on `AGENTS.md` as its context instructions file.
+
 
 | | |
 | --- | --- |
 | User scope file | `~/.forge/AGENTS.md` |
 | Project scope file | `<root>/AGENTS.md` |
 | Format | Tagged HTML-comment fence |
+
+Project-local `AGENTS.md` is the standard cross-harness memory file. Forge
+checks `AGENTS.md` in the current project (walking up directory trees) as well
+as the user-level configuration path. The fenced HTML-comment block keeps our
+content scoped so other tools reading the same file do not misinterpret it.
 
 ## Instructions
 
@@ -46,10 +67,10 @@ HTML-comment fenced block in the existing memory file.
 
 ## MCP servers
 
-| Scope | File |
-| --- | --- |
+| Scope  | File                 |
+| ------ | -------------------- |
 | Global | `~/.forge/.mcp.json` |
-| Local | `<root>/.mcp.json` |
+| Local  | `<root>/.mcp.json`   |
 
 ```json
 {
@@ -62,18 +83,30 @@ HTML-comment fenced block in the existing memory file.
 }
 ```
 
-Ownership is recorded in a sidecar `<config-dir>/.agent-config-mcp.json` ledger.
+Ownership is recorded in a sidecar `.agent-config-mcp.json` ledger:
+- Global: `~/.forge/.agent-config-mcp.json`
+- Local: `<root>/.agent-config-mcp.json`
 
 ## Skills
 
 | Scope | Path |
 | --- | --- |
-| User | `~/.forge/skills/<name>/` |
-| Project | `<root>/.forge/skills/<name>/` |
+| Global (User) | `~/.forge/skills/<name>/` |
+| Local (Project) | `<root>/.forge/skills/<name>/` |
+
+Each skill is a directory containing a `SKILL.md` file along with any optional
+subdirectories (`scripts/`, `references/`, `assets/`).
+
+Ownership is recorded in a sidecar `.agent-config-skills.json` ledger:
+- Global: `~/.forge/skills/.agent-config-skills.json`
+- Local: `<root>/.forge/skills/.agent-config-skills.json`
 
 ## References
 
-- <https://forgecode.dev/docs>
-- <https://github.com/forge-agents/forge>
+- Official website: <https://forgeagents.dev>
+- GitHub repository: <https://github.com/forge-agents/forge>
+- Architecture overview: <https://github.com/forge-agents/forge/blob/dev/ARCHITECTURE.md>
+- Agent Client Protocol (ACP): <https://agentclientprotocol.com>
+- Model Context Protocol (MCP): <https://modelcontextprotocol.io>
 
-Accessed: 2026-04-26.
+Accessed: 2026-11-08.

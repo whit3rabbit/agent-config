@@ -8,6 +8,13 @@ Not supported. Prompt-level integration only.
 
 ## Prompt instructions
 
+### Memory file support
+
+- **Supported format**: Both own rules (`.kilo/rules/`) and `AGENTS.md`.
+- **Primary rules directory**: `<root>/.kilo/rules/<name>.md`.
+- **`AGENTS.md` support**: Native; Kilo Code explicitly documents support for `<root>/AGENTS.md` and global `~/.config/kilo/AGENTS.md`.
+
+
 ### Project scope (`Scope::Local(<root>)`)
 
 | | |
@@ -23,7 +30,8 @@ writes only the per-consumer rules directory above.
 
 ### User scope (`Scope::Global`)
 
-Not supported in v0.1. Kilo's global rules live at `~/.kilo/rules/`.
+Not supported in v0.1. Upstream Kilo Code configures global instructions via the
+`instructions` key in `~/.config/kilo/kilo.jsonc` or via `~/.config/kilo/AGENTS.md`.
 Calling with `Scope::Global` returns `AgentConfigError::UnsupportedScope`.
 
 ## Instructions
@@ -49,6 +57,7 @@ include needed.
 | File | `~/.config/kilo/kilo.jsonc` |
 | Format | JSONC |
 | Key | `mcp` (object keyed by server name) |
+| Ledger | `~/.config/kilo/.agent-config-mcp.json` |
 
 ### Project scope (`Scope::Local(<root>)`)
 
@@ -57,6 +66,7 @@ include needed.
 | File | `<root>/kilo.jsonc`, or existing `<root>/.kilo/kilo.jsonc` |
 | Format | JSONC |
 | Key | `mcp` (object keyed by server name) |
+| Ledger | `<root>/.agent-config-mcp.json` or `<root>/.kilo/.agent-config-mcp.json` |
 
 ### Configuration
 
@@ -76,11 +86,11 @@ include needed.
 
 ## Skills
 
-| Scope | Path |
-| --- | --- |
-| User | `~/.kilo/skills/<name>/` |
-| Project | `.agents/skills/<name>/` |
-| Project legacy drain | `.kilo/skills/<name>/` (status/uninstall only) |
+| Scope | Path | Ledger |
+| --- | --- | --- |
+| User | `~/.kilo/skills/<name>/` | `~/.kilo/skills/.agent-config-skills.json` |
+| Project | `.agents/skills/<name>/` | `.agents/skills/.agent-config-skills.json` |
+| Project legacy drain | `.kilo/skills/<name>/` (status/uninstall only) | `.kilo/skills/.agent-config-skills.json` |
 
 Current Kilo builds load project skills from the standard `.agents/skills/`
 directory first, so `agent-config` writes that for Local installs. `.kilo/skills/`
@@ -89,9 +99,11 @@ detected and removed. The global directory stays `~/.kilo/skills/`.
 
 ## References
 
+- <https://kilo.ai/docs/getting-started/settings>
 - <https://kilo.ai/docs/customize/agents-md>
 - <https://kilo.ai/docs/customize/custom-rules>
+- <https://kilo.ai/docs/customize/custom-instructions>
 - <https://kilo.ai/docs/automate/mcp/using-in-kilo-code>
 - <https://kilo.ai/docs/customize/skills>
 
-Accessed: 2026-11-07.
+Accessed: 2026-11-08.

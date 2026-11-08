@@ -2,10 +2,17 @@
 
 **ID:** `hermes`
 
-**Status:** registered for prompt rules, global MCP, and skills (global +
-project scope).
+**Status:** registered for prompt rules, instructions (project scope), global
+MCP, and skills (global + project scope).
 
 ## Prompt
+
+### Memory file support
+
+- **Supported format**: Both own file (`.hermes.md` / `HERMES.md`) and `AGENTS.md`.
+- **Primary memory file**: `<root>/.hermes.md` or `<root>/HERMES.md`.
+- **`AGENTS.md` support**: Native; Hermes context discovery hierarchy checks `.hermes.md` -> `HERMES.md` -> `AGENTS.override.md` -> `AGENTS.md` -> `CLAUDE.md`.
+
 
 Hermes loads project context from `.hermes.md` / `HERMES.md` before falling
 back to other project instruction files. This crate writes `.hermes.md`.
@@ -34,12 +41,12 @@ file.
 
 ## MCP
 
-Hermes reads MCP server config from `~/.hermes/config.yaml` under
-`mcp_servers`.
+Hermes reads MCP server config from `$HERMES_HOME/config.yaml` (default
+`~/.hermes/config.yaml`) under `mcp_servers`.
 
 | Scope | File | Shape |
 | --- | --- | --- |
-| Global | `~/.hermes/config.yaml` | `mcp_servers.<name>` |
+| Global | `$HERMES_HOME/config.yaml` (default `~/.hermes/config.yaml`) | `mcp_servers.<name>` |
 
 MCP is global-only in this crate. Local MCP install returns
 `AgentConfigError::UnsupportedScope`.
@@ -70,9 +77,11 @@ separately, but this crate does not edit `skills.external_dirs`.
 
 ## References
 
-- <https://hermes-agent.nousresearch.com/docs/user-guide/configuration/>
+- <https://hermes-agent.nousresearch.com/docs/user-guide/which-file-does-what>
+- <https://hermes-agent.nousresearch.com/docs/user-guide/configuration>
+- <https://hermes-agent.nousresearch.com/docs/user-guide/features/context-files>
 - <https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp>
-- <https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference/>
-- <https://hermes-agent.nousresearch.com/docs/user-guide/features/skills/>
+- <https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference>
+- <https://hermes-agent.nousresearch.com/docs/user-guide/features/skills>
 
-Accessed: 2026-11-07.
+Accessed: 2026-11-08.

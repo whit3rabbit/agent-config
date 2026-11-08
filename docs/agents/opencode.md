@@ -2,7 +2,7 @@
 
 ID: `opencode` — `agent_config::by_id("opencode")`
 
-(`sst/opencode` — the open-source AI coding agent.)
+(`anomalyco/opencode`, formerly `sst/opencode` — the open-source AI coding agent.)
 
 ## Hooks
 
@@ -22,9 +22,9 @@ ID: `opencode` — `agent_config::by_id("opencode")`
 | Mechanism | One TypeScript plugin file per consumer |
 | Backup | `<file>.bak` (only if the file already existed before install) |
 
-> OpenCode also supports plugins listed in the `plugin` array of
-> `opencode.json`, auto-installed via Bun. Not used here; we drop a single
-> file in the plugins directory.
+> OpenCode also supports plugins listed in the `plugins` (formerly `plugin`)
+> array of `opencode.json(c)`, auto-installed via package manager. Not used
+> here; we drop a single TypeScript file in the plugins directory.
 
 ### Format
 
@@ -70,6 +70,13 @@ The `Matcher` enum is dynamically compiled into a guard block in the hook callba
 - `Matcher::Regex(pattern)` compiles to `if (!new RegExp("<pattern>").test(input.tool)) return;`.
 
 ## Prompt instructions
+
+### Memory file support
+
+- **Supported format**: `AGENTS.md`.
+- **Primary memory file**: `~/.config/opencode/AGENTS.md` (global) and `<root>/AGENTS.md` (local).
+- **`AGENTS.md` support**: Native; OpenCode V2 standardizes on `AGENTS.md` as its primary instruction format.
+
 
 OpenCode reads system instructions from `AGENTS.md`.
 
@@ -137,6 +144,10 @@ file.
 }
 ```
 
+> In OpenCode V2, native configuration introduces `mcp.servers` (`{ "mcp": { "servers": { ... } } }`),
+> but OpenCode maintains full backwards compatibility for V1's flat `mcp` object map
+> (`{ "mcp": { "<name>": ... } }`), which `agent-config` targets.
+
 OpenCode automatically handles OAuth for remote servers and supports both local
 (command array) and remote (url) transports.
 
@@ -153,8 +164,12 @@ OpenCode also scans Claude-compatible and `.agents/skills` locations, but
 ## References
 
 - <https://opencode.ai/docs/plugins/>
-- <https://opencode.ai/docs/rules/>
+- <https://opencode.ai/docs/build/plugins>
+- <https://opencode.ai/docs/build/plugins/server>
+- <https://opencode.ai/docs/instructions/>
+- <https://opencode.ai/docs/rules/> (legacy V1 rules doc redirect)
 - <https://opencode.ai/docs/config/>
 - <https://opencode.ai/docs/mcp-servers/>
-- <https://opencode.ai/docs/skills>
-- <https://github.com/sst/opencode>
+- <https://opencode.ai/docs/skills/>
+- <https://opencode.ai/docs/migrate-v1/>
+- <https://github.com/anomalyco/opencode>

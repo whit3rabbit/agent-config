@@ -2,7 +2,7 @@
 
 ID: `crush` — `agent_config::by_id("crush")`
 
-**Status:** registered for hooks (currently only `PreToolUse` fires upstream),
+**Status:** registered for hooks (upstream supports 13 lifecycle events including `PreToolUse` and `PostToolUse`),
 prompt rules in `AGENTS.md`, MCP servers, skills, and instructions.
 
 ## Surfaces
@@ -37,7 +37,9 @@ prompt rules in `AGENTS.md`, MCP servers, skills, and instructions.
 | Backup | `<root>/crush.json.bak` (first patch only) |
 
 Crush also accepts `.crush.json` at the project root; this crate writes the
-unhidden filename to match the auto-init Crush ships with.
+unhidden filename to match the auto-init Crush ships with. Crush also supports
+Bash-based configuration (`crushrc` / `.crushrc`); this crate targets the JSONC
+`crush.json` configuration file, which Crush continues to support and merge.
 
 ### Format
 
@@ -70,8 +72,10 @@ no nested `hooks: [{type:"command", command}]` array.
 
 Crush event names are case-insensitive (`PreToolUse`, `pre_tool_use`, and
 `PRETOOLUSE` all resolve to the same event). This crate emits the canonical
-PascalCase spelling. Upstream currently only fires `PreToolUse`; other
-entries are written through and ignored until support lands.
+PascalCase spelling. Upstream supports 13 lifecycle events: `PreToolUse`,
+`PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `PermissionResult`,
+`SessionStart`, `SessionEnd`, `TurnStart`, `TurnEnd`, `StopFailure`,
+`Interrupt`, `PreCompact`, and `PostCompact`.
 
 ### Matcher mapping
 
@@ -88,6 +92,13 @@ Crush matches the matcher as an RE2 regex against the lowercase tool name
 | `Regex(s)`          | `s` (verbatim)                        |
 
 ## Prompt instructions
+
+### Memory file support
+
+- **Supported format**: Both `AGENTS.md` and own file (`CRUSH.md`).
+- **Primary memory files**: `<root>/AGENTS.md` (default initialization target via `initialize_as: "AGENTS.md"`) and `~/.config/crush/CRUSH.md` / `<root>/CRUSH.md`.
+- **`AGENTS.md` support**: Native; Crush defaults to `AGENTS.md` for workspace instructions.
+
 
 | | |
 | --- | --- |
@@ -155,8 +166,13 @@ to avoid colliding with cross-host skill sets.
 ## References
 
 - <https://github.com/charmbracelet/crush>
+- <https://github.com/charmbracelet/crush/blob/main/docs/config/README.md>
 - <https://github.com/charmbracelet/crush/blob/main/docs/hooks/README.md>
+- <https://github.com/charmbracelet/crush/blob/main/schema.json>
 - <https://github.com/charmbracelet/crush/blob/cd592e80fd4758155f12b8a0fbf9930e44ea9024/README.md?plain=1#L295>
 - <https://charm.land/crush.json>
+- <https://github.com/charmbracelet/crush#agent-skills>
+- <https://github.com/charmbracelet/crush#global-context-files>
+- <https://github.com/charmbracelet/crush#initialization>
 
-Accessed: 2026-05-30.
+Accessed: 2026-11-08.

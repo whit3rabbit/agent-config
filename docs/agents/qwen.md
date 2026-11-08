@@ -7,14 +7,22 @@ shape mirrors Gemini's.
 
 ## Surfaces
 
-| Surface | Scope          | Notes                                  |
-| ------- | -------------- | -------------------------------------- |
-| Hooks   | -              | Not part of Qwen's documented surface  |
-| Prompt  | Global + Local | Fenced block in `QWEN.md`              |
-| MCP     | Global + Local | `mcpServers` JSON map in `settings.json` |
-| Skills  | Global + Local | `SKILL.md` directories                 |
+| Surface      | Scope          | Notes                                                                                       |
+| ------------ | -------------- | ------------------------------------------------------------------------------------------- |
+| Hooks        | -              | Upstream supports lifecycle hooks in `settings.json`; `agent-config` only supports prompt rules |
+| Prompt       | Global + Local | Fenced block in `QWEN.md`                                                                   |
+| MCP          | Global + Local | `mcpServers` JSON map in `settings.json`                                                    |
+| Skills       | Global + Local | `SKILL.md` directories                                                                      |
+| Instructions | Global + Local | `InlineBlock` in `QWEN.md`                                                                  |
 
 ## Prompt instructions
+
+### Memory file support
+
+- **Supported format**: Both own file (`QWEN.md`) and `AGENTS.md`.
+- **Primary memory file**: `~/.qwen/QWEN.md` (global) and `<root>/QWEN.md` (local).
+- **`AGENTS.md` support**: Upstream Qwen Code natively reads `QWEN.md` and also discovers project-root `AGENTS.md`.
+
 
 | | |
 | --- | --- |
@@ -77,6 +85,14 @@ Ownership is recorded in a sidecar `<config-dir>/.agent-config-mcp.json` ledger.
 ## References
 
 - <https://qwenlm.github.io/qwen-code-docs/>
+- <https://qwen.ai/qwencode>
 - <https://github.com/QwenLM/qwen-code>
+- <https://qwenlm.github.io/qwen-code-docs/en/users/overview/>
+- <https://qwenlm.github.io/qwen-code-docs/en/users/configuration/settings/>
+- <https://qwenlm.github.io/qwen-code-docs/en/users/features/memory/>
+- <https://qwenlm.github.io/qwen-code-docs/en/users/features/rules/>
+- <https://qwenlm.github.io/qwen-code-docs/en/users/features/mcp/>
+- <https://qwenlm.github.io/qwen-code-docs/en/users/features/skills/>
+- <https://qwenlm.github.io/qwen-code-docs/en/users/features/hooks/>
 
-Accessed: 2026-04-26.
+Accessed: 2026-11-08.

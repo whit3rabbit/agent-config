@@ -23,11 +23,18 @@ This integration accepts a [`HookSpec`] *only* if `rules` is set.
 
 ## Prompt instructions
 
+### Memory file support
+
+- **Supported format**: `AGENTS.md`.
+- **Primary memory file**: `~/.pi/agent/AGENTS.md` (global) and `<root>/AGENTS.md` (local).
+- **`AGENTS.md` support**: Native; Pi coding agent natively uses `AGENTS.md` for session instructions.
+
+
 | | |
 | --- | --- |
 | User scope file | `~/.pi/agent/AGENTS.md` (or `$PI_CODING_AGENT_DIR/AGENTS.md`) |
 | Project scope file | `<root>/AGENTS.md` |
-| Format | Tagged HTML-comment fence |
+| Format | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG:<tag> -->`) |
 
 The project-local `AGENTS.md` is the standard cross-harness memory file (also
 read by Codex, Claude Code, and others). The fenced HTML-comment block keeps
@@ -40,22 +47,34 @@ variable when set (defaulting to `~/.pi/agent`).
 
 ## Instructions
 
-Inline-block placement, sharing the same host file as the prompt rules
-surface.
+Standalone instruction files installed via `InstructionSurface`. Uses
+`InstructionPlacement::InlineBlock` sharing the same host file as the prompt
+rules surface.
+
+### User scope (`Scope::Global`)
 
 | | |
 | --- | --- |
-| User scope ledger | `~/.pi/agent/.agent-config-instructions.json` |
-| Project scope ledger | `<root>/.pi/.agent-config-instructions.json` |
-| Host file | Same as prompt (`AGENTS.md`) |
+| Host file | `~/.pi/agent/AGENTS.md` (or `$PI_CODING_AGENT_DIR/AGENTS.md`) |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
+| Ledger | `~/.pi/agent/.agent-config-instructions.json` |
+| Placement | `InstructionPlacement::InlineBlock` |
+
+### Project scope (`Scope::Local(<root>)`)
+
+| | |
+| --- | --- |
+| Host file | `<root>/AGENTS.md` |
+| Mechanism | Tagged HTML-comment fence (`<!-- BEGIN AGENT-CONFIG-INSTR:<name> -->`) |
+| Ledger | `<root>/.pi/.agent-config-instructions.json` |
 | Placement | `InstructionPlacement::InlineBlock` |
 
 ## MCP servers
 
-| Scope  | File                          |
-| ------ | ----------------------------- |
-| Global | `~/.pi/agent/mcp.json` (or `$PI_CODING_AGENT_DIR/mcp.json`) |
-| Local  | `<root>/.pi/mcp.json`         |
+| Scope  | File                          | Ledger |
+| ------ | ----------------------------- | ------ |
+| Global | `~/.pi/agent/mcp.json` (or `$PI_CODING_AGENT_DIR/mcp.json`) | `~/.pi/agent/.agent-config-mcp.json` |
+| Local  | `<root>/.pi/mcp.json`         | `<root>/.pi/.agent-config-mcp.json` |
 
 Pi 1.0+ supports MCP natively in core via standard `{"mcpServers": { ... }}`
 JSON maps in the user's agent directory (`~/.pi/agent/mcp.json` or
@@ -77,26 +96,44 @@ Cursor, or Codex may also read.
 }
 ```
 
-Ownership is recorded in a sidecar `<config-dir>/.agent-config-mcp.json`
-ledger.
+Ownership is recorded in a sidecar `.agent-config-mcp.json` ledger next to the
+config file.
 
 ## Skills
 
-| Scope  | Path                          |
-| ------ | ----------------------------- |
-| Global | `~/.pi/agent/skills/<name>/`  |
-| Local  | `<root>/.pi/skills/<name>/`   |
+| Scope  | Path                          | Ledger |
+| ------ | ----------------------------- | ------ |
+| Global | `~/.pi/agent/skills/<name>/` (or `$PI_CODING_AGENT_DIR/skills/<name>/`) | `~/.pi/agent/skills/.agent-config-skills.json` |
+| Local  | `<root>/.pi/skills/<name>/`   | `<root>/.pi/skills/.agent-config-skills.json` |
 
 Each skill is a folder with `SKILL.md` plus optional `scripts/`,
 `references/`, `assets/`. Pi also picks up
 `~/.agents/skills/` and `<root>/.agents/skills/` (cross-harness paths); this
-crate writes only into the Pi-namespaced root to avoid collisions.
+crate writes only into the Pi-namespaced root to avoid collisions. Ownership
+is recorded in `.agent-config-skills.json` at the root of the skills directory.
 
 ## References
 
+### Official Documentation
 - <https://pi.dev>
+- <https://pi.dev/docs/latest>
+- <https://pi.dev/docs/latest/configuration>
+- <https://pi.dev/docs/latest/mcp>
+- <https://pi.dev/docs/latest/skills>
+- <https://pi.dev/docs/latest/extensions>
+- <https://pi.dev/docs/latest/environment-variables>
+
+### Repository & Upstream Docs
 - <https://github.com/earendil-works/pi>
 - <https://github.com/earendil-works/pi/tree/main/packages/coding-agent>
+- <https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/configuration.md>
+- <https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/mcp.md>
+- <https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md>
+- <https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md>
+- <https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/environment-variables.md>
+
+### Ecosystem & Specifications
 - <https://github.com/nicobailon/pi-mcp-adapter>
+- <https://agentskills.io/specification>
 
 Accessed: 2026-11-08.

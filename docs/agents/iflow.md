@@ -4,14 +4,17 @@ ID: `iflow` — `agent_config::by_id("iflow")`
 
 iFlow combines hooks and MCP servers in a single `settings.json`.
 
+> **Note**: Upstream iFlow CLI announced a shutdown scheduled for April 17, 2026,
+> with migration to Qoder (`qodercli`).
+
 ## Surfaces
 
-| Surface | Scope          | Notes                                  |
-| ------- | -------------- | -------------------------------------- |
-| Hooks   | Global + Local | Claude-shape JSON envelope             |
-| Prompt  | -              | Not part of iFlow's documented surface |
-| MCP     | Global + Local | `mcpServers` JSON map (same `settings.json`) |
-| Skills  | -              | Not part of iFlow's documented surface |
+| Surface | Scope          | Notes                                                          |
+| ------- | -------------- | -------------------------------------------------------------- |
+| Hooks   | Global + Local | Claude-shape JSON envelope                                     |
+| Prompt  | -              | Not implemented in this crate (upstream uses `IFLOW.md`)       |
+| MCP     | Global + Local | `mcpServers` JSON map (same `settings.json`)                   |
+| Skills  | -              | Not implemented in this crate (upstream uses `.iflow/skills/`) |
 
 ## Hooks
 
@@ -47,10 +50,16 @@ iFlow combines hooks and MCP servers in a single `settings.json`.
 }
 ```
 
-iFlow exposes `IFLOW_TOOL_NAME` and `IFLOW_TOOL_ARGS` env vars to hook
-processes.
+iFlow exposes special environment variables to hook processes:
+- Common variables: `IFLOW_SESSION_ID`, `IFLOW_TRANSCRIPT_PATH`, `IFLOW_CWD`, `IFLOW_HOOK_EVENT_NAME`.
+- Tool-specific variables (PreToolUse/PostToolUse): `IFLOW_TOOL_NAME`, `IFLOW_TOOL_ARGS`, `IFLOW_TOOL_ALIASES`.
 
 ### Event mapping
+
+iFlow CLI natively defines 9 lifecycle events: `PreToolUse`, `PostToolUse`,
+`SetUpEnvironment`, `Stop`, `SubagentStop`, `SessionStart`, `SessionEnd`,
+`UserPromptSubmit`, and `Notification`. This crate maps `PreToolUse`,
+`PostToolUse`, and arbitrary custom event names:
 
 | `Event::*`     | iFlow string  |
 | -------------- | ------------- |
@@ -67,6 +76,14 @@ processes.
 | `Exact(s)`          | `s`          |
 | `AnyOf([a, b])`     | `a\|b`       |
 | `Regex(s)`          | `s` (verbatim) |
+
+## Prompt instructions
+
+### Memory file support
+
+- **Supported format**: Both own file (`IFLOW.md`) and `AGENTS.md`.
+- **Primary memory file**: `~/.iflow/IFLOW.md` (global) and `<root>/IFLOW.md` (local).
+- **`AGENTS.md` support**: Upstream iFlow CLI supports hierarchical `IFLOW.md` memory files and also parses project-root `AGENTS.md` if present. (Note: `agent-config` currently implements Hooks and MCP surfaces only for iFlow).
 
 ## MCP servers
 
@@ -86,6 +103,10 @@ processes.
 }
 ```
 
+While iFlow also recognizes standalone MCP files (`~/.iflow/mcp/config.json`
+and `<root>/.iflow/mcp.json`), `agent-config` uses the unified `settings.json`
+configuration file documented under Method 5 in upstream MCP documentation.
+
 Per-server `includeTools` / `excludeTools` arrays are supported by iFlow but
 are caller-provided via the standard `McpSpec` plus harness defaults; this
 crate does not synthesise either.
@@ -97,5 +118,8 @@ so MCP and hooks coexist in the same file.
 
 - <https://platform.iflow.cn/en/cli/configuration/settings>
 - <https://platform.iflow.cn/en/cli/examples/hooks>
+- <https://platform.iflow.cn/en/cli/examples/mcp>
+- <https://platform.iflow.cn/en/cli/configuration/iflow>
+- <https://platform.iflow.cn/en/cli/examples/skill>
 
-Accessed: 2026-04-26.
+Accessed: 2026-11-08.

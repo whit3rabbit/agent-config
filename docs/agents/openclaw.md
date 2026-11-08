@@ -8,6 +8,13 @@ work, not a stable file-backed hook contract.
 
 ## Prompt
 
+### Memory file support
+
+- **Supported format**: `AGENTS.md`.
+- **Primary memory file**: `<root>/AGENTS.md`.
+- **`AGENTS.md` support**: Native; OpenClaw agent workspace templates standardize on `<root>/AGENTS.md` for workspace operating instructions.
+
+
 OpenClaw project instructions use the workspace `AGENTS.md` file.
 
 | Scope | File |
@@ -33,8 +40,8 @@ injected as a tagged HTML-comment fenced block in the existing memory file.
 
 ## MCP
 
-OpenClaw stores outbound MCP server definitions in its JSON5 config under
-`mcp.servers`.
+OpenClaw stores outbound MCP server definitions in its JSON5 config at
+`~/.openclaw/openclaw.json` under `mcp.servers`.
 
 | Scope | File | Shape |
 | --- | --- | --- |
@@ -55,13 +62,16 @@ the config.
 
 ## Skills
 
-OpenClaw loads AgentSkills-compatible skill folders from several roots. The
-crate writes these roots:
+OpenClaw loads AgentSkills-compatible skill folders from several roots in a
+defined precedence order (workspace skills, project agent skills
+`<workspace>/.agents/skills`, personal agent skills `~/.agents/skills`, managed
+skills `~/.openclaw/skills`, workshop skills, bundled skills, and extraDirs).
+The crate writes these roots:
 
-| Scope | Root |
-| --- | --- |
-| Global | `~/.openclaw/skills/<name>/` |
-| Local | `<root>/.agents/skills/<name>/` |
+| Scope | Root | Precedence |
+| --- | --- | --- |
+| Global | `~/.openclaw/skills/<name>/` | Managed / local skills |
+| Local | `<root>/.agents/skills/<name>/` | Project agent skills |
 
 Each skill directory contains `SKILL.md` plus optional caller-supplied
 `scripts/`, `references/`, and `assets/`.
@@ -75,11 +85,24 @@ shell out to the OpenClaw CLI in this pass.
 
 ## References
 
-- <https://docs.openclaw.ai/tools/plugin>
-- <https://docs.openclaw.ai/plugins/manifest>
-- <https://docs.openclaw.ai/cli/mcp>
-- <https://docs.openclaw.ai/tools/skills>
-- <https://docs.openclaw.ai/tools/creating-skills>
-- <https://docs.openclaw.ai/reference/templates/AGENTS>
+- Configuration:
+  - <https://docs.openclaw.ai/gateway/configuration> (JSON5 config at `~/.openclaw/openclaw.json`)
+  - <https://docs.openclaw.ai/gateway/config-extensions> (`mcp.servers`, `skills`, and `plugins` schema)
+- Prompt / Instructions / Workspace:
+  - <https://docs.openclaw.ai/reference/templates/AGENTS> (`AGENTS.md` template)
+  - <https://docs.openclaw.ai/concepts/agent-workspace> (Agent workspace layout and operating instructions)
+- MCP:
+  - <https://docs.openclaw.ai/cli/mcp> (`openclaw mcp` CLI index)
+  - <https://docs.openclaw.ai/cli/mcp/registry> (Outbound MCP server client registry)
+  - <https://docs.openclaw.ai/cli/mcp/transports> (Transport specifications for Stdio, Streamable HTTP, and SSE)
+  - <https://docs.openclaw.ai/tools/mcp> (MCP capabilities and server configuration)
+- Skills:
+  - <https://docs.openclaw.ai/tools/skills> (Skills overview, directory roots, and loading order)
+  - <https://docs.openclaw.ai/tools/skills-config> (Skills configuration reference)
+  - <https://docs.openclaw.ai/tools/creating-skills> (AgentSkills authoring with `SKILL.md`)
+- Plugins & CLI Lifecycle:
+  - <https://docs.openclaw.ai/tools/plugin> (Plugin overview and runtime capabilities)
+  - <https://docs.openclaw.ai/plugins/manifest> (Native plugin manifest `openclaw.plugin.json`)
+  - <https://docs.openclaw.ai/cli/plugins/install> (`openclaw plugins install` command reference)
 
-Accessed: 2026-04-25.
+Accessed: 2026-11-08.

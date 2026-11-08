@@ -9,7 +9,7 @@ Tabnine packs hooks and MCP servers into a single `settings.json`.
 | Surface | Scope          | Notes                                  |
 | ------- | -------------- | -------------------------------------- |
 | Hooks   | Global + Local | Tabnine event names (`BeforeTool`, etc.) |
-| Prompt  | -              | No dedicated rules markdown file       |
+| Prompt  | -              | No dedicated rules markdown file (guidelines managed remotely/via MCP) |
 | MCP     | Global + Local | `mcpServers` JSON map (same `settings.json`) |
 | Skills  | -              | Tabnine uses `skills.enabled/disabled` arrays, not directories |
 
@@ -55,9 +55,10 @@ Tabnine packs hooks and MCP servers into a single `settings.json`.
 | `PostToolUse`  | `AfterTool`    |
 | `Custom(s)`    | `s`            |
 
-Tabnine documents nine events: `BeforeTool`, `AfterTool`, `BeforeAgent`,
-`AfterAgent`, `SessionStart`, `SessionEnd`, `PreCompress`, `BeforeModel`,
-`AfterModel`, `BeforeToolSelection`. Use `Event::Custom` for the others.
+Tabnine documents 11 events: `BeforeTool`, `AfterTool`, `BeforeAgent`,
+`AfterAgent`, `Notification`, `SessionStart`, `SessionEnd`, `PreCompress`,
+`BeforeModel`, `AfterModel`, `BeforeToolSelection`. Use `Event::Custom`
+for events beyond `PreToolUse` / `PostToolUse`.
 
 ### Matcher mapping
 
@@ -68,6 +69,14 @@ Tabnine documents nine events: `BeforeTool`, `AfterTool`, `BeforeAgent`,
 | `Exact(s)`          | `s`            |
 | `AnyOf([a, b])`     | `a\|b`         |
 | `Regex(s)`          | `s` (verbatim) |
+
+## Prompt instructions
+
+### Memory file support
+
+- **Supported format**: Neither / Remote MCP only.
+- **Native memory**: Tabnine does not read standalone local markdown memory files (`AGENTS.md` or proprietary files).
+- **Guideline support**: Guidelines and agent steering are configured through the Tabnine web console or dynamically injected via Tabnine's Coaching Guidelines MCP server.
 
 ## MCP servers
 
@@ -95,7 +104,13 @@ Ownership is recorded in a sidecar `<config-dir>/.agent-config-mcp.json` ledger.
 
 ## References
 
-- <https://docs.tabnine.com/main/getting-started/tabnine-cli/>
+- <https://docs.tabnine.com/main/getting-started/tabnine-cli>
+- <https://docs.tabnine.com/main/getting-started/tabnine-cli/features/settings>
 - <https://docs.tabnine.com/main/getting-started/tabnine-cli/features/settings/settings-reference>
+- <https://docs.tabnine.com/main/getting-started/tabnine-cli/features/hooks>
+- <https://docs.tabnine.com/main/getting-started/tabnine-cli/features/hooks/configuration>
+- <https://docs.tabnine.com/main/getting-started/tabnine-cli/features/hooks/event-reference>
+- <https://docs.tabnine.com/main/getting-started/tabnine-agent/mcp-intro-and-setup/mcp-server-config>
+- <https://docs.tabnine.com/main/getting-started/tabnine-cli/features/agent-guidelines-cli>
 
-Accessed: 2026-04-26.
+Accessed: 2026-11-08.

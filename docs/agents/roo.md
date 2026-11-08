@@ -17,6 +17,13 @@ Not supported. Prompt-level integration only.
 
 ## Prompt instructions
 
+### Memory file support
+
+- **Supported format**: Both own rules (`.roo/rules/`) and `AGENTS.md`.
+- **Primary rules directory**: `<root>/.roo/rules/<name>.md` (and mode-specific `.roo/rules-{mode}/`).
+- **`AGENTS.md` support**: Native; Roo Code discovers project-root `AGENTS.md` in addition to its rules directory.
+
+
 ### Project scope (`Scope::Local(<root>)`)
 
 | | |
@@ -29,8 +36,9 @@ Not supported. Prompt-level integration only.
 
 ### User scope (`Scope::Global`)
 
-Not supported in v0.1. Roo Code can read global rules, but this crate only
-writes project-local rules.
+Not supported in v0.1. Roo Code reads global rules from `~/.roo/rules/` and
+mode-specific `~/.roo/rules-{modeSlug}/` (`%USERPROFILE%\.roo\rules\` on Windows),
+but this crate only writes project-local rules (`Scope::Local`).
 
 ### AGENTS.md support
 
@@ -63,7 +71,7 @@ include needed.
 
 | | |
 | --- | --- |
-| File | `~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json` on macOS |
+| File | `<vscode-globalStorage>/rooveterinaryinc.roo-cline/settings/mcp_settings.json`<br>- macOS: `~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json`<br>- Linux: `~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json`<br>- Windows: `%APPDATA%\Code\User\globalStorage\rooveterinaryinc.roo-cline\settings\mcp_settings.json` |
 | Format | JSON |
 | Key | `mcpServers` |
 
@@ -75,15 +83,39 @@ include needed.
 | Format | JSON |
 | Key | `mcpServers` |
 
+### Configuration
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "node",
+      "args": ["/path/to/server.js"],
+      "env": {
+        "API_KEY": "secret"
+      }
+    }
+  }
+}
+```
+
 ## Skills — Not registered
 
-No official Roo Code skill path has been identified, so Roo is intentionally
-left out of `SkillSurface`. Roo's own docs also describe a product sunset on
-May 15, 2026, which makes new surface work lower priority than registered,
-actively documented skill harnesses.
+While Roo Code v3.47.0+ added official skills support (reading `<root>/.roo/skills/<name>/SKILL.md`
+or `<root>/.agents/skills/<name>/SKILL.md` locally, and `~/.roo/skills/<name>/SKILL.md` or
+`~/.agents/skills/<name>/SKILL.md` globally), Roo Code is intentionally not registered
+for `SkillSurface` in `agent-config`. Because the product was sunset on May 15, 2026,
+this crate maintains existing integration surfaces (rules, standalone instructions, and MCP)
+for migration and compatibility, but did not add new surface implementations.
 
 ## References
 
-- <https://docs.roocode.com/features/custom-instructions>
-- <https://docs.roocode.com/features/mcp/using-mcp-in-roo>
-- <https://docs.roocode.com/update-notes/v3.47.0>
+- <https://docs.roocode.com/sunset> (archive: <https://roocodeinc.github.io/Roo-Code/sunset/>)
+- <https://docs.roocode.com/features/custom-instructions> (archive: <https://roocodeinc.github.io/Roo-Code/features/custom-instructions/>)
+- <https://docs.roocode.com/features/mcp/using-mcp-in-roo> (archive: <https://roocodeinc.github.io/Roo-Code/features/mcp/using-mcp-in-roo/>)
+- <https://docs.roocode.com/features/mcp/overview> (archive: <https://roocodeinc.github.io/Roo-Code/features/mcp/overview/>)
+- <https://docs.roocode.com/features/skills> (archive: <https://roocodeinc.github.io/Roo-Code/features/skills/>)
+- <https://docs.roocode.com/update-notes/v3.47.0> (archive: <https://roocodeinc.github.io/Roo-Code/update-notes/v3.47.0/>)
+- <https://github.com/RooCodeInc/Roo-Code>
+
+Accessed: 2026-11-08.
