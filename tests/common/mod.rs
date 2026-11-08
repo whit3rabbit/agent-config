@@ -61,6 +61,7 @@ impl IsolatedGlobalEnv {
             "CODEX_HOME",
             "CLAUDE_CONFIG_DIR",
             "HERMES_HOME",
+            "PI_CODING_AGENT_DIR",
         ];
         let saved = vars
             .into_iter()
@@ -78,6 +79,7 @@ impl IsolatedGlobalEnv {
         // no-override layout the fixtures and assertions expect.
         env::set_var("CLAUDE_CONFIG_DIR", home_canon.join(".claude"));
         env::set_var("HERMES_HOME", home_canon.join(".hermes"));
+        env::set_var("PI_CODING_AGENT_DIR", home_canon.join(".pi").join("agent"));
 
         Self {
             _lock: lock,

@@ -905,6 +905,7 @@ impl EnvGuard {
             "CODEX_HOME",
             "CLAUDE_CONFIG_DIR",
             "HERMES_HOME",
+            "PI_CODING_AGENT_DIR",
         ];
         let guard = Self {
             vars: keys
@@ -922,6 +923,7 @@ impl EnvGuard {
         // on the host cannot redirect writes mid-fixture.
         std::env::set_var("CLAUDE_CONFIG_DIR", env.home.join(".claude"));
         std::env::set_var("HERMES_HOME", env.home.join(".hermes"));
+        std::env::set_var("PI_CODING_AGENT_DIR", env.home.join(".pi").join("agent"));
         guard
     }
 }

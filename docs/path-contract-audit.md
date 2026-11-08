@@ -45,7 +45,7 @@ feature but not this crate's exact file location, the row stays `Observed`.
 | Forge | `Observed` | [docs](https://forgecode.dev/docs), [repository](https://github.com/forge-agents/forge) | `AGENTS.md` and `.mcp.json` are documented. The fetched docs did not expose every global or local skill path this crate writes. |
 | iFlow CLI | `StableDocumented` | [settings](https://platform.iflow.cn/en/cli/configuration/settings), [hooks](https://platform.iflow.cn/en/cli/examples/hooks) | `.iflow/settings.json`, hooks, and `mcpServers` are documented. |
 | JetBrains Junie | `StableDocumented` | [guidelines and memory](https://junie.jetbrains.com/docs/guidelines-and-memory.html), [Junie CLI MCP](https://junie.jetbrains.com/docs/junie-cli-mcp-configuration.html), [JetBrains MCP settings](https://www.jetbrains.com/help/junie/mcp-settings.html) | `.junie/mcp/mcp.json`, `~/.junie/mcp/mcp.json`, and `mcpServers` are documented. Re-verified 2026-06-21: `.junie/AGENTS.md` is the current default guideline file (with fallback to root `AGENTS.md`); `.junie/guidelines.md` is the legacy format. This crate's `.junie/AGENTS.md` path is correct. |
-| Pi | `Observed` | [repository](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent), [adapter](https://github.com/nicobailon/pi-mcp-adapter) | Prompt and skill paths are documented. MCP paths use the pi-mcp-adapter extension conventions. |
+| Pi | `StableDocumented` | [pi.dev](https://pi.dev), [repository](https://github.com/earendil-works/pi), [skills](https://pi.dev/docs) | Rules in `~/.pi/agent/AGENTS.md` and `<root>/AGENTS.md`. MCP in `~/.pi/agent/mcp.json` and `<root>/.pi/mcp.json` is native in Pi 1.0+ (`mcpServers` JSON map; compatible with `pi-mcp-adapter`). Global config honors `PI_CODING_AGENT_DIR` (re-verified 2026-11-08). Skills supported at `~/.pi/agent/skills/` (Global) and `.pi/skills/` (Local). |
 | Qoder CLI | `Observed` | [CLI docs](https://docs.qoder.com/en/cli/using-cli) | `AGENTS.md` memory layout (`~/.qoder/AGENTS.md`, `${project}/AGENTS.md`) is documented. Open re-audit item (2026-06-21): current docs expose neither `~/.qoder.json` nor a clear global MCP file path; MCP is added via `qodercli mcp add` with an undocumented file location. MCP shape stays repository-observed. |
 | Qwen Code | `StableDocumented` | [MCP](https://qwenlm.github.io/qwen-code-docs/en/users/features/mcp/), [skills](https://qwenlm.github.io/qwen-code-docs/en/users/features/skills/), [settings source](https://github.com/QwenLM/qwen-code/blob/main/docs/users/configuration/settings.md) | `.qwen/settings.json`, `~/.qwen/settings.json`, `mcpServers`, and `.qwen/skills` are documented. |
 | Tabnine CLI | `StableDocumented` | [CLI](https://docs.tabnine.com/main/getting-started/tabnine-cli/), [settings reference](https://docs.tabnine.com/main/getting-started/tabnine-cli/features/settings/settings-reference) | `.tabnine/agent/settings.json`, hooks, and `mcpServers` are documented. |
@@ -125,3 +125,22 @@ codex, openclaw, pi, windsurf, crush, codebuddy, qwen, trae, forge.
   ([skills](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills)),
   and nested category directories (e.g. `agent-config/<name>`) are an official
   layout, so the category convention is kept in both scopes.
+
+## 2026-11-08 audit and verification pass
+
+Follow-up audit of recently migrated and updated agent harnesses (`pi`, `amp`,
+`cline`, `hermes`, `kilocode`, `antigravity`, `antigravitycli`):
+
+- **Pi** — promoted to `StableDocumented`. Upstream repository moved to
+  `earendil-works/pi` (`@earendil-works/pi-coding-agent`). In Pi 1.0+, MCP is
+  natively supported in core via `mcp.json` (`mcpServers` object) under
+  `~/.pi/agent/mcp.json` (Global) and `.pi/mcp.json` (Local), without requiring
+  the `pi-mcp-adapter` extension. `paths::pi_home()` now honors the documented
+  `PI_CODING_AGENT_DIR` override.
+- **Antigravity & Antigravity CLI** — documentation surface matrix synchronized:
+  both harnesses support `hooks.json` (Global + Local) and Skills (`.agents/skills`
+  Local, `~/.gemini/config/skills` Global). Summary tables in `CLAUDE.md` and
+  `README.md` updated from stale `-` entries to reflect full surface support.
+- **Amp, Cline, Hermes, Kilo Code** — cross-checked all non-skill surfaces (MCP,
+  hooks, rules, instructions) against live upstream docs, confirming exact
+  file contracts and behavior.

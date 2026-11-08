@@ -357,15 +357,20 @@ pub fn crush_home() -> Result<PathBuf, AgentConfigError> {
     Ok(config_dir()?.join("crush"))
 }
 
-/// Pi coding-agent's per-user config directory: `~/.pi/agent`.
+/// `$PI_CODING_AGENT_DIR` if set, else `~/.pi/agent`.
 ///
-/// Pi keeps its global memory file (`AGENTS.md`), MCP file (`mcp.json` for the
-/// `pi-mcp-adapter`), skills (`skills/`), and extensions all under this root.
+/// Pi (`@earendil-works/pi-coding-agent`, formerly `@mariozechner/pi-coding-agent`)
+/// keeps its global memory file (`AGENTS.md`), MCP file (`mcp.json`),
+/// skills (`skills/`), and extensions all under this root. Pi honors
+/// `PI_CODING_AGENT_DIR` as an explicit override for this directory.
 ///
 /// # Errors
 ///
 /// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`].
 pub fn pi_home() -> Result<PathBuf, AgentConfigError> {
+    if let Some(dir) = env_path("PI_CODING_AGENT_DIR") {
+        return Ok(dir);
+    }
     Ok(home_dir()?.join(".pi").join("agent"))
 }
 
@@ -375,10 +380,10 @@ mod tests {
     use std::sync::{Mutex, OnceLock};
 
     // Serializes env-var mutations across the tests below. CLAUDE_CONFIG_DIR,
-    // CODEX_HOME, and HERMES_HOME are read by these tests, but other tests in
-    // the suite that share the process can mutate HOME / USERPROFILE / APPDATA,
-    // so any test that mutates env vars must hold this mutex to avoid
-    // cross-test interference under parallel execution.
+    // CODEX_HOME, HERMES_HOME, and PI_CODING_AGENT_DIR are read by these tests,
+    // but other tests in the suite that share the process can mutate HOME /
+    // USERPROFILE / APPDATA, so any test that mutates env vars must hold this
+    // mutex to avoid cross-test interference under parallel execution.
     fn env_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(|| Mutex::new(()))
@@ -431,6 +436,21 @@ mod tests {
         match prev {
             Some(v) => std::env::set_var("HERMES_HOME", v),
             None => std::env::remove_var("HERMES_HOME"),
+        }
+        assert_eq!(resolved, path);
+    }
+
+    #[test]
+    fn pi_home_respects_env_var() {
+        let _guard = env_lock().lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_path_buf();
+        let prev = std::env::var_os("PI_CODING_AGENT_DIR");
+        std::env::set_var("PI_CODING_AGENT_DIR", &path);
+        let resolved = pi_home().unwrap();
+        match prev {
+            Some(v) => std::env::set_var("PI_CODING_AGENT_DIR", v),
+            None => std::env::remove_var("PI_CODING_AGENT_DIR"),
         }
         assert_eq!(resolved, path);
     }

@@ -347,3 +347,29 @@ fn hermes_local_skills_install_under_project() {
     hermes.uninstall_skill(&scope, "probe", "app").unwrap();
     assert!(!project.join(".hermes/skills/agent-config/probe").exists());
 }
+
+// --- F8: PI_CODING_AGENT_DIR ----------------------------------------------
+
+#[test]
+fn pi_global_skills_respect_pi_coding_agent_dir() {
+    let env = IsolatedGlobalEnv::new();
+    let custom = env.home_path().join("custom-pi-agent");
+    fs::create_dir_all(&custom).unwrap();
+    std::env::set_var("PI_CODING_AGENT_DIR", &custom);
+
+    let pi = skill_by_id("pi").unwrap();
+    pi.install_skill(&Scope::Global, &skill("probe", "app"))
+        .unwrap();
+
+    assert!(custom.join("skills/probe/SKILL.md").exists());
+    assert!(pi.is_skill_installed(&Scope::Global, "probe").unwrap());
+
+    pi.uninstall_skill(&Scope::Global, "probe", "app").unwrap();
+    assert!(!custom.join("skills/probe").exists());
+
+    // Restore the IsolatedGlobalEnv-pinned value before the guard drops.
+    std::env::set_var(
+        "PI_CODING_AGENT_DIR",
+        env.home_path().join(".pi").join("agent"),
+    );
+}

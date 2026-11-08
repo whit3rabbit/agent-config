@@ -1,19 +1,20 @@
 //! Pi coding-agent integration.
 //!
-//! Pi (`@mariozechner/pi-coding-agent`) is a minimal terminal harness whose
-//! built-in surface is intentionally small: four file-system tools and an
-//! extension system implemented in TypeScript. There is no JSON-config-driven
-//! hook surface — Pi extensions register `pi.on("tool_call", ...)` handlers
-//! programmatically — so this integration refuses any [`HookSpec`] that lacks
-//! a `rules` body.
+//! Pi (`@earendil-works/pi-coding-agent`, formerly `@mariozechner/pi-coding-agent`)
+//! is a minimal terminal harness whose built-in surface is intentionally small:
+//! file-system tools, native MCP support in 1.0+, and an extension system
+//! implemented in TypeScript. There is no JSON-config-driven hook surface — Pi
+//! extensions register `pi.on("tool_call", ...)` handlers programmatically —
+//! so this integration refuses any [`HookSpec`] that lacks a `rules` body.
 //!
 //! Surfaces:
 //!
 //! 1. **Prompt rules**: tagged HTML-comment fence in `AGENTS.md` (Pi reads
-//!    `~/.pi/agent/AGENTS.md` globally and walks up from cwd locally).
+//!    `~/.pi/agent/AGENTS.md` globally and walks up from cwd locally). Global
+//!    agent root honors `PI_CODING_AGENT_DIR`.
 //! 2. **MCP servers**: standard `mcpServers` JSON map at `~/.pi/agent/mcp.json`
-//!    (Global) or `<root>/.pi/mcp.json` (Local). Pi's optional
-//!    `pi-mcp-adapter` extension reads this shape. We intentionally write to
+//!    (Global) or `<root>/.pi/mcp.json` (Local). Natively supported in Pi 1.0+
+//!    (and compatible with earlier `pi-mcp-adapter`). We intentionally write to
 //!    Pi-owned files only, never to the cross-host `~/.config/mcp/mcp.json`
 //!    or top-level `.mcp.json`.
 //! 3. **Skills**: directory-scoped skills at `~/.pi/agent/skills/<name>/`
