@@ -263,13 +263,13 @@ fn instruction_surface(agent: &dyn InstructionSurface) -> Option<Value> {
 }
 
 fn instruction_placement_for(id: &str) -> InstructionPlacement {
-    match id {
-        "claude" => InstructionPlacement::ReferencedFile,
-        "cline" | "roo" | "kilocode" | "windsurf" | "antigravity" => {
-            InstructionPlacement::StandaloneFile
-        }
-        _ => InstructionPlacement::InlineBlock,
-    }
+    // Delegates to the public registry table; falls back to `InlineBlock` so
+    // ids outside the instruction surface keep rendering the historical
+    // default (the schema only probes instruction-capable agents anyway).
+    crate::registry::instruction_placements(id)
+        .first()
+        .copied()
+        .unwrap_or(InstructionPlacement::InlineBlock)
 }
 
 fn placement_label(p: InstructionPlacement) -> &'static str {

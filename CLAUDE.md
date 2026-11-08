@@ -249,6 +249,23 @@ take `&Scope` and route writes through `safe_fs` (symlink-aware).
 to call `scope.ensure_contained()` before delegating. Both patterns are
 intentional; match the surrounding surface when extending.
 
+### `agent-config-cli` crate (`agentconfig` binary)
+
+Manifest-driven installs of hooks, instructions, MCP, and skills (skills have
+their own `skills-cli`/`skills-store` path that does not call the library).
+The manifest (`agent.config.toml`, reference in `docs/manifest.md`) parses in
+`src/manifest.rs`, maps to library specs in `src/mapping.rs`, resolves
+targets and drives `plan_*`/`install`/`uninstall`/`status` in `src/engine.rs`,
+and records provenance in `src/lockfile.rs`. Sources (`owner/repo` shorthand,
+git URLs, local paths) live in `src/source.rs`, which shells out to `git`.
+The engine never writes harness files itself; every mutation goes through the
+library so ledgers, backups, idempotency, and plan purity hold. `add` writes
+only its own lockfiles (`agent.config.lock.json` project-side,
+`<config_dir>/agentconfig/lock.json` global). Error shape is
+`[AGENTCONFIG_CODE] why` + `fix:` (`src/diag.rs`). E2E coverage runs the
+compiled binary against `tests/fixtures/sample-pkg` in tempdirs
+(`tests/install_e2e.rs`); unit tests cover parse/map/hash/lockfile/sanitize.
+
 ### Dry-run planning
 
 Every public surface has a side-effect-free planner:
@@ -338,8 +355,8 @@ release-facing path contract is in
 | roo                  | -     | done   | done  | -      | done (Local, StandaloneFile) |
 | windsurf             | done  | done   | done  | done   | done (Local, StandaloneFile) |
 | kilocode             | -     | done   | done  | done   | done (Local, StandaloneFile) |
-| antigravity          | -     | done   | done  | done   | done (Local, StandaloneFile) |
-| antigravitycli       | -     | done   | done  | -      | done (InlineBlock) |
+| antigravity          | done  | done   | done  | done   | done (Local, StandaloneFile) |
+| antigravitycli       | done  | done   | done  | done   | done (InlineBlock) |
 | openclaw             | -     | done   | done  | done   | done (Local, InlineBlock) |
 | hermes               | -     | done   | done  | done   | done (Local, InlineBlock) |
 | amp                  | -     | done   | done  | done   | done (InlineBlock) |
@@ -436,11 +453,12 @@ warrant a third shim for one consumer.
 
 - Auto-detecting which harnesses are installed on the host. Consumer's job.
 - Shipping default markdown content. Consumer supplies it.
-- A general CLI binary for the `agent-config` library itself (hooks, MCP,
-  prompts). Lives downstream. Skills are the exception: the workspace ships
-  the `skills` CLI (`skills-cli/`) and the `skills-store` engine, both
-  wizard-compatible with vercel-labs/skills. See README "Install skills from
-  the command line".
+- A general CLI binary for the `agent-config` library itself. This bullet is
+  historical: the downstream consumer now exists in-repo as `agent-config-cli`
+  (the `agentconfig` binary, manifest-driven installs of hooks/instructions/
+  MCP/skills via `agent.config.toml`; see `docs/manifest.md`). Skills remain a
+  separate path: the `skills-cli`/`skills-store` crates stay wizard-compatible
+  with vercel-labs/skills and do not call the library.
 - A `ShellKind`/PowerShell rendering abstraction in `HookCommand`. v1 is
   POSIX-only; users targeting non-POSIX shells use `ShellUnchecked`.
 - Auto-targeting Windows host config from inside WSL. A binary running in
@@ -516,7 +534,7 @@ have skills or MCP — cannot be registered without speculating about file paths
 | vibe     | Skills documented (`.vibe/skills`, `$VIBE_HOME`-aware, confirmed 2026-11), but no rules/hook surface |
 
 **Pi** was previously deferred here (2026-04-26) as "MCP only via
-`pi-mcp-adapter`". Re-checked 2026-04-28: Pi natively reads `AGENTS.md`
-prompt rules and natively loads SKILL.md folders, so it qualifies via the
-prompt-rules + skills surfaces. Registered as `pi` (rules-only Integration,
-plus MCP / skills / instructions). See `src/agents/pi.rs`.
+`pi-mcp-adapter`". Re-checked 2026-04-28 and re-audited 2026-11-08: Pi natively reads
+`AGENTS.md` prompt rules, natively loads `SKILL.md` folders, natively supports MCP in
+Pi 1.0+ (`~/.pi/agent/mcp.json`), and honors `PI_CODING_AGENT_DIR`. Registered as `pi`
+(rules-only Integration, plus MCP / skills / instructions). See `src/agents/pi.rs`.

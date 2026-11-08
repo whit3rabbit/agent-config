@@ -1,0 +1,31 @@
+[package]
+name = "agent-config-cli"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.95"
+license = "MIT"
+description = "The `agentconfig` CLI: install hooks, prompt rules, MCP servers, skills, and instructions from an agent.config.toml manifest into AI coding harnesses."
+repository = "https://github.com/whit3rabbit/agent-config"
+keywords = ["ai", "cli", "agents", "mcp", "hooks"]
+categories = ["command-line-utilities"]
+
+[[bin]]
+name = "agentconfig"
+path = "src/main.rs"
+
+[dependencies]
+agent-config = { path = ".." }
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+toml = "0.8"
+yaml_serde = "0.10"
+sha2 = "0.10"
+tempfile = "3"
+
+[dev-dependencies]
+pretty_assertions = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"

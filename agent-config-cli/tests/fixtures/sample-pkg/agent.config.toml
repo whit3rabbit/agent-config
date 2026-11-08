@@ -1,0 +1,23 @@
+[package]
+name = "acme-toolkit"
+version = "0.1.0"
+description = "Sample package used by the agentconfig CLI integration tests."
+
+[[hooks]]
+tag = "acme-guard"
+command = ["scripts/guard.sh", "--strict"]
+event = "PreToolUse"
+matcher = "Bash"
+timeout = 30
+rules_file = "rules/guard.md"
+
+[[instructions]]
+name = "acme-style"
+file = "STYLE.md"
+
+[[mcp]]
+name = "acme-mcp"
+command = ["npx", "-y", "@acme/sample-mcp"]
+
+[[skills]]
+path = "skills/acme-notes"

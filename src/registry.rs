@@ -194,3 +194,52 @@ pub fn instruction_capable() -> Vec<Box<dyn InstructionSurface>> {
 pub fn instruction_by_id(id: &str) -> Option<Box<dyn InstructionSurface>> {
     instruction_capable().into_iter().find(|i| i.id() == id)
 }
+
+/// Returns the [`InstructionPlacement`] shapes this agent's instruction
+/// surface accepts, best first. Empty for agents without an instruction
+/// surface (e.g. `cursor`, `iflow`, `tabnine`).
+///
+/// Callers that let users say "place it wherever the harness expects" should
+/// take the first entry; the remaining entries are fallbacks for agents that
+/// accept more than one shape. Keep this table in sync with
+/// [`instruction_capable`]: every id listed there has a non-empty placement
+/// list.
+pub fn instruction_placements(id: &str) -> &'static [crate::spec::InstructionPlacement] {
+    use crate::spec::InstructionPlacement;
+    match id {
+        "claude" => &[InstructionPlacement::ReferencedFile],
+        "cline" | "roo" | "kilocode" | "windsurf" | "antigravity" => {
+            &[InstructionPlacement::StandaloneFile]
+        }
+        "amp" | "antigravitycli" | "codebuddy" | "codex" | "copilot" | "crush" | "forge"
+        | "gemini" | "hermes" | "junie" | "openclaw" | "opencode" | "pi" | "qodercli" | "qwen"
+        | "trae" => &[InstructionPlacement::InlineBlock],
+        _ => &[],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every instruction-capable agent must have a placement entry, and ids
+    /// outside the instruction surface must map to an empty list. This is the
+    /// invariant `placement = "auto"` consumers rely on.
+    #[test]
+    fn instruction_placements_cover_instruction_capable_agents() {
+        for agent in instruction_capable() {
+            let placements = instruction_placements(agent.id());
+            assert!(
+                !placements.is_empty(),
+                "instruction-capable agent {:?} has no placement entry",
+                agent.id()
+            );
+        }
+        for id in ["cursor", "iflow", "tabnine", "not-an-agent"] {
+            assert!(
+                instruction_placements(id).is_empty(),
+                "non-instruction agent {id:?} unexpectedly has placements"
+            );
+        }
+    }
+}

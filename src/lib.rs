@@ -152,8 +152,8 @@ pub use plan::{
     InstallPlan, PlanStatus, PlanTarget, PlanWarning, PlannedChange, RefusalReason, UninstallPlan,
 };
 pub use registry::{
-    all, by_id, instruction_by_id, instruction_capable, mcp_by_id, mcp_capable, skill_by_id,
-    skill_capable,
+    all, by_id, instruction_by_id, instruction_capable, instruction_placements, mcp_by_id,
+    mcp_capable, skill_by_id, skill_capable,
 };
 pub use scope::{Scope, ScopeKind};
 pub use spec::{

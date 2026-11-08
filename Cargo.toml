@@ -1,5 +1,5 @@
 [workspace]
-members = ["skills-store", "skills-cli"]
+members = ["skills-store", "skills-cli", "agent-config-cli"]
 resolver = "2"
 
 [package]
@@ -25,6 +25,7 @@ exclude = [
     "synrepo-context/",
     "skills-store/",
     "skills-cli/",
+    "agent-config-cli/",
 ]
 
 [dependencies]
@@ -54,3 +55,6 @@ path = "examples/tui_dry_run/main.rs"
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
+
+[profile.release]
+strip = true
