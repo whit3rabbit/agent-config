@@ -1,6 +1,6 @@
 [package]
 name = "skills-cli"
-version = "0.1.0"
+version = "0.5.0"
 edition = "2021"
 rust-version = "1.95"
 license = "MIT"
@@ -10,7 +10,7 @@ keywords = ["ai", "skills", "cli", "agents"]
 categories = ["command-line-utilities"]
 
 [[bin]]
-name = "skills"
+name = "skillz"
 path = "src/main.rs"
 
 [dependencies]

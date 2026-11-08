@@ -1,4 +1,4 @@
-//! The `skills init` command and `skills install` (restore from
+//! The `skillz init` command and `skillz install` (restore from
 //! skills-lock.json), ported from `cli.ts`'s `runInit` and `src/install.ts`.
 
 use std::path::Path;
@@ -11,7 +11,7 @@ use crate::color;
 use crate::common;
 use crate::prompt;
 
-/// The `skills init [name]` command (upstream `runInit`).
+/// The `skillz init [name]` command (upstream `runInit`).
 pub fn run_init(args: &[String]) {
     let cwd = common::current_dir();
     let has_name = !args.is_empty();
@@ -83,12 +83,12 @@ pub fn run_init(args: &[String]) {
     println!(
         "  {}Push to a repo, then {}",
         color::dim("GitHub:"),
-        color::text("skills add <owner>/<repo>")
+        color::text("skillz add <owner>/<repo>")
     );
     println!(
         "  {}Host the file, then {}",
         color::dim("URL:"),
-        color::text(&format!("skills add https://example.com/{display_path}"))
+        color::text(&format!("skillz add https://example.com/{display_path}"))
     );
     println!();
     println!(
@@ -191,7 +191,7 @@ pub fn resolve_restore_agents(
     Ok(combined)
 }
 
-/// The `skills experimental_install` entry point (upstream `runInstallFromLock`).
+/// The `skillz experimental_install` entry point (upstream `runInstallFromLock`).
 pub fn run_install_from_lock(args: &[String]) {
     let cwd = common::current_dir();
     let options = parse_install_options(args);
@@ -223,7 +223,7 @@ pub fn run_install_from_lock(args: &[String]) {
         prompt::log_warn("No project skills found in skills-lock.json");
         prompt::log_info(&format!(
             "Add project-level skills with {} (without {})",
-            color::cyan("skills add <package>"),
+            color::cyan("skillz add <package>"),
             color::cyan("-g")
         ));
         return;
@@ -391,7 +391,7 @@ pub fn run_install_from_lock(args: &[String]) {
             color::cyan(&node_module_skills.len().to_string())
         ));
         prompt::log_warn(
-            "node_modules skills are synced by `skills experimental_sync` (run it separately).",
+            "node_modules skills are synced by `skillz experimental_sync` (run it separately).",
         );
         failed_skills.extend(node_module_skills);
     }

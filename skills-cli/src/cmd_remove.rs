@@ -1,4 +1,4 @@
-//! The `skills remove` command, ported from `src/remove.ts`.
+//! The `skillz remove` command, ported from `src/remove.ts`.
 
 use std::collections::HashMap;
 
@@ -67,7 +67,7 @@ pub fn parse_remove_options(args: &[String]) -> (Vec<String>, RemoveOptions) {
     (skills, options)
 }
 
-/// The `skills remove` entry point (upstream `removeCommand`).
+/// The `skillz remove` entry point (upstream `removeCommand`).
 pub fn remove_command(skill_names: Vec<String>, mut options: RemoveOptions) {
     let agent_result = detect_agent::detect_agent();
     if agent_result.is_agent {

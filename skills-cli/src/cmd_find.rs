@@ -1,4 +1,4 @@
-//! The `skills find` command, ported from `src/find.ts`: API search with a
+//! The `skillz find` command, ported from `src/find.ts`: API search with a
 //! non-interactive result list and an fzf-style interactive prompt.
 
 use std::io::Write;
@@ -96,13 +96,13 @@ pub fn parse_find_options(args: &[String]) -> (FindOptions, Vec<skills_store::er
     )
 }
 
-/// The `skills find` entry point (upstream `runFind`).
+/// The `skillz find` entry point (upstream `runFind`).
 pub fn run_find(args: &[String]) {
     let (options, errors) = parse_find_options(args);
     let owner = options.owner.clone();
     let is_non_interactive = !is_tty();
     let agent_tip = format!(
-        "{}Tip: if running in a coding agent, follow these steps:{}\n{}  1) skills find [query] [--owner <owner>]{}\n{}  2) skills add <owner/repo@skill>{}",
+        "{}Tip: if running in a coding agent, follow these steps:{}\n{}  1) skillz find [query] [--owner <owner>]{}\n{}  2) skillz add <owner/repo@skill>{}",
         color::dim_gray(""),
         color::reset(""),
         color::dim_gray(""),
@@ -115,7 +115,7 @@ pub fn run_find(args: &[String]) {
         for error in errors {
             eprintln!("{}", error.plain());
         }
-        eprintln!("Usage: skills find <query> [--owner <owner>]");
+        eprintln!("Usage: skillz find <query> [--owner <owner>]");
         return;
     }
 
@@ -137,7 +137,7 @@ pub fn run_find(args: &[String]) {
             return;
         }
         println!(
-            "{}Install with{} skills add <owner/repo@skill>",
+            "{}Install with{} skillz add <owner/repo@skill>",
             color::dim_gray(""),
             color::reset("")
         );
@@ -173,7 +173,7 @@ pub fn run_find(args: &[String]) {
         println!("{agent_tip}");
         println!();
         println!(
-            "{}Usage: skills find <query> [--owner <owner>]{}",
+            "{}Usage: skillz find <query> [--owner <owner>]{}",
             color::dim_gray(""),
             color::reset("")
         );

@@ -15,7 +15,7 @@ detection. One spec installs across every supported harness, so downstream
 tools don't reimplement per-tool layout.
 
 Just want skills installed into your coding agents? Skip the Rust entirely:
-the bundled [`skills` CLI](#install-skills-from-the-command-line) does it from
+the bundled [`skillz` CLI](#install-skills-from-the-command-line) does it from
 your terminal, no code required.
 
 [![crates.io](https://img.shields.io/crates/v/agent-config.svg)](https://crates.io/crates/agent-config)
@@ -50,7 +50,7 @@ your terminal, no code required.
 
 ## Install skills from the command line
 
-The workspace also ships a drop-in replacement for the
+The workspace also ships a Rust rewrite of the
 [`vercel-labs/skills`](https://github.com/vercel-labs/skills) CLI, built on the
 [`skills-store`](skills-store/) engine: install, update, and remove Agent
 Skills across every coding agent through one canonical `.agents/skills`
@@ -58,13 +58,31 @@ directory plus per-agent symlinks.
 
 ### Get the binary
 
-From a clone of this repository:
+Download a prebuilt binary from
+[GitHub Releases](https://github.com/whit3rabbit/agent-config/releases).
+Prebuilts cover linux (x86_64, arm64, musl-static), macOS (Intel, Apple
+silicon), and Windows (x86_64), each with a `SHA256SUMS` to check against:
 
 ```bash
-cargo install --path skills-cli   # puts `skills` on your PATH
+curl -LO https://github.com/whit3rabbit/agent-config/releases/latest/download/skillz-v0.5.0-aarch64-apple-darwin.tar.gz
+tar -xzf skillz-v0.5.0-aarch64-apple-darwin.tar.gz
+```
+
+With a Rust toolchain, install from a clone of this repository:
+
+```bash
+cargo install --path skills-cli   # puts `skillz` on your PATH
+# or straight from the repo, no clone needed:
+cargo install --git https://github.com/whit3rabbit/agent-config skills-cli
 # or, without installing:
 cargo run -p skills-cli -- add vercel-labs/agent-skills
 ```
+
+The binary is named `skillz`, not `skills`: the npm `skills` package and a
+crates.io `skills-cli` both already ship a `skills` binary, and a second one
+would silently shadow whichever is first on your PATH. Everything else
+(subcommands, flags, wizard, lock files) matches the upstream CLI, so scripts
+only need the one-word rename.
 
 ### Install a skill
 
@@ -73,7 +91,7 @@ skill on [skills.sh](https://skills.sh), so it makes a good first run. From
 your project:
 
 ```bash
-skills add vercel-labs/agent-skills
+skillz add vercel-labs/agent-skills
 ```
 
 The wizard lists the skills in the repo and the agents detected on your
@@ -83,13 +101,13 @@ before writing anything. Non-interactive equivalent:
 
 ```bash
 # One skill, every detected agent, no prompts
-skills add vercel-labs/agent-skills --skill web-design-guidelines -y
+skillz add vercel-labs/agent-skills --skill web-design-guidelines -y
 
 # User-level instead of project-level
-skills add vercel-labs/agent-skills --skill web-design-guidelines -g -y
+skillz add vercel-labs/agent-skills --skill web-design-guidelines -g -y
 
 # One skill, one agent
-skills add vercel-labs/agent-skills --skill web-design-guidelines -a claude-code
+skillz add vercel-labs/agent-skills --skill web-design-guidelines -a claude-code
 ```
 
 The `-y` run installs once into the canonical directory and links the agents
@@ -117,16 +135,16 @@ with no directory in this project are skipped rather than created.
 
 | Command                          | Description                      |
 | -------------------------------- | -------------------------------- |
-| `skills find [query]`            | Search skills.sh                 |
-| `skills list` (`ls`)             | List installed skills            |
-| `skills use <source>@<skill>`    | Use one skill without installing |
-| `skills check`                   | Check for available updates      |
-| `skills update [skills...]`      | Update installed skills          |
-| `skills remove [skills...]`      | Remove installed skills          |
-| `skills experimental_install`    | Restore from `skills-lock.json`  |
-| `skills init [name]`             | Create a new skill               |
+| `skillz find [query]`            | Search skills.sh                 |
+| `skillz list` (`ls`)             | List installed skills            |
+| `skillz use <source>@<skill>`    | Use one skill without installing |
+| `skillz check`                   | Check for available updates      |
+| `skillz update [skills...]`      | Update installed skills          |
+| `skillz remove [skills...]`      | Remove installed skills          |
+| `skillz experimental_install`    | Restore from `skills-lock.json`  |
+| `skillz init [name]`             | Create a new skill               |
 
-`skills list` after the install above:
+`skillz list` after the install above:
 
 ```text
 Project Skills
@@ -154,10 +172,12 @@ Project Skills
 - The same diagnostics rendering (`[SKILLS_CODE] why` + `fix:` lines) and the
   same agent registry (79 agents including the neutral `universal` target).
 
-Deliberate divergences: no telemetry is sent anywhere, the Notion pack
-integration is not implemented, and `experimental_sync` covers the core
-node_modules flows (shipped skills, `npm:` entries, and staleness pruning) but
-not remote `skills`-field git sources.
+Deliberate divergences: the binary installs as `skillz` rather than `skills`
+(the upstream name is already taken by the npm package and a crates.io crate),
+no telemetry is sent anywhere, the Notion pack integration is not implemented,
+and `experimental_sync` covers the core node_modules flows (shipped skills,
+`npm:` entries, and staleness pruning) but not remote `skills`-field git
+sources.
 
 ### Embed it from Rust
 
@@ -186,7 +206,79 @@ for agent in skills_store::detect_installed_agents(Path::new(".")) {
 `skills-store` is network-free by design: fetch sources yourself (git clone,
 HTTPS download, and well-known discovery) and hand the material to
 `install_skill_dir` (directory on disk) or `install_skill_files` (in-memory
-files). The `skills` binary in `skills-cli/` wires the two together.
+files). The `skillz` binary in `skills-cli/` wires the two together.
+
+## Install everything from a repo with `agentconfig`
+
+The `skillz` CLI covers skills only. The `agentconfig` binary covers the other
+four surfaces: hooks, prompt rules, MCP servers, and instructions. A package is
+any repo or folder with an `agent.config.toml` manifest. `agentconfig add`
+resolves it, shows the plan, and installs into the harnesses you pick. Every
+write goes through the `agent-config` library, so ledgers, backups, idempotent
+re-installs, and dry-run plans behave exactly as the library documents them.
+
+Install it from a clone:
+
+```bash
+cargo install --path agent-config-cli   # puts `agentconfig` on your PATH
+```
+
+A package manifest is TOML, one section per surface:
+
+```toml
+[package]
+name = "acme-toolkit"            # becomes the ownership-ledger owner tag
+version = "0.1.0"
+
+[[hooks]]
+tag = "guard-secrets"
+command = ["scripts/guard.sh", "--strict"]   # argv array, POSIX-quoted; a plain string is raw shell
+event = "PreToolUse"
+matcher = "Bash"
+timeout = 30
+rules_file = "rules/guard.md"    # prompt rules injected next to the hook
+
+[[instructions]]
+name = "code-style"
+file = "STYLE.md"                # or body = "inline markdown"
+placement = "auto"               # auto | inline | referenced | standalone
+
+[[mcp]]
+name = "context7"
+command = ["npx", "-y", "@upstash/context7-mcp"]
+env = { API_KEY = "${CONTEXT7_API_KEY}" }    # placeholders keep secrets out of the manifest
+
+[[skills]]
+path = "skills/pdf-tools"        # a SKILL.md folder; contents become assets
+```
+
+Then, from your project:
+
+```bash
+agentconfig add acme/some-toolkit        # owner/repo, git URL, or local path
+agentconfig add ./some-toolkit --agent claude,codex,roo -y
+agentconfig list                         # what is installed, per harness
+agentconfig check                        # exit 1 when upstream changed (CI gate)
+agentconfig update                       # re-resolve and reinstall changed packages
+agentconfig remove acme-toolkit
+```
+
+`add` plans first and asks before writing. `--dry-run` stops after the plan.
+Each entry can carry its own `agents`/`skip` filters, intersected with your
+`--agent` flags. With no filter, every capable harness gets the entry, and
+placements resolve automatically (`placement = "auto"` uses the registry's
+per-agent placement table).
+
+Sources pin with `owner/repo@v1.2.3` or `--ref`, and the resolved commit
+lands in the lockfile. Project installs record `agent.config.lock.json` next
+to your project, global installs record one lockfile under the user config
+dir. A repo without a manifest still works if it follows the
+[Agent Plugins 1.0.0](https://agent-plugins.org) layout: `plugin.json`,
+`mcp.json`, and `skills/` are picked up. One markdown file with no manifest
+installs as a single instruction via `--instruction-file README.md`.
+
+The full manifest reference, including hook events, matchers, MCP transports,
+and skill frontmatter handling, is in [docs/manifest.md](docs/manifest.md).
 
 ## Use the library from Rust
 
@@ -265,8 +357,8 @@ all bundled examples see [`examples/README.md`](examples/README.md).
 | [Roo Code](docs/agents/roo.md)                | `roo`         | -                  | yes          | Global + Local   | -                | Local            |
 | [Windsurf](docs/agents/windsurf.md)           | `windsurf`    | Local              | yes          | Global + Local   | Global + Local   | Local            |
 | [Kilo Code](docs/agents/kilocode.md)          | `kilocode`    | -                  | yes          | Global + Local   | Global + Local   | Local            |
-| [Google Antigravity](docs/agents/antigravity.md) | `antigravity` | -                | yes          | Global + Local   | Global + Local   | Local            |
-| [Antigravity CLI](docs/agents/antigravitycli.md) | `antigravitycli` | -             | yes          | Global + Local   | Global + Local   | Global + Local   |
+| [Google Antigravity](docs/agents/antigravity.md) | `antigravity` | Global + Local   | yes          | Global + Local   | Global + Local   | Local            |
+| [Antigravity CLI](docs/agents/antigravitycli.md) | `antigravitycli` | Global + Local   | yes          | Global + Local   | Global + Local   | Global + Local   |
 | [Amp](docs/agents/amp.md)                     | `amp`         | -                  | yes          | Global + Local   | Global + Local   | Global + Local   |
 | [CodeBuddy CLI](docs/agents/codebuddy.md)     | `codebuddy`   | Global + Local     | yes          | -                | Global + Local   | Global + Local   |
 | [Charm Crush](docs/agents/crush.md)           | `crush`       | Global + Local     | yes          | Global + Local   | Global + Local   | Global + Local   |

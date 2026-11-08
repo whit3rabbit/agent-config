@@ -1,4 +1,4 @@
-//! The `skills list` command, ported from `src/list.ts`.
+//! The `skillz list` command, ported from `src/list.ts`.
 
 use std::collections::HashMap;
 
@@ -46,7 +46,7 @@ struct LockEntry {
     plugin_name: Option<String>,
 }
 
-/// The `skills list` entry point (upstream `runList`).
+/// The `skillz list` entry point (upstream `runList`).
 pub fn run_list(args: &[String]) {
     let options = parse_list_options(args);
     let scope = options.global;

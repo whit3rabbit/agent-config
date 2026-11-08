@@ -1,4 +1,4 @@
-//! The `skills` CLI — the open agent skills ecosystem. Wizard-compatible with
+//! The `skillz` CLI — the open agent skills ecosystem. Wizard-compatible with
 //! vercel-labs/skills; the on-disk engine lives in `skills-store`.
 
 mod archive;
@@ -63,20 +63,20 @@ fn show_banner() {
     println!("{DIM}The open agent skills ecosystem{RESET}");
     println!();
     println!(
-        "  {DIM}${RESET} {TEXT}skills add {DIM}<package>{RESET}        {DIM}Add a new skill{RESET}"
+        "  {DIM}${RESET} {TEXT}skillz add {DIM}<package>{RESET}        {DIM}Add a new skill{RESET}"
     );
-    println!("  {DIM}${RESET} {TEXT}skills use {DIM}<package>@<skill>{RESET} {DIM}Use a skill without installing{RESET}");
-    println!("  {DIM}${RESET} {TEXT}skills remove{RESET}               {DIM}Remove installed skills{RESET}");
-    println!("  {DIM}${RESET} {TEXT}skills list{RESET}                 {DIM}List installed skills{RESET}");
-    println!("  {DIM}${RESET} {TEXT}skills find {DIM}[query]{RESET}         {DIM}Search for skills{RESET}");
+    println!("  {DIM}${RESET} {TEXT}skillz use {DIM}<package>@<skill>{RESET} {DIM}Use a skill without installing{RESET}");
+    println!("  {DIM}${RESET} {TEXT}skillz remove{RESET}               {DIM}Remove installed skills{RESET}");
+    println!("  {DIM}${RESET} {TEXT}skillz list{RESET}                 {DIM}List installed skills{RESET}");
+    println!("  {DIM}${RESET} {TEXT}skillz find {DIM}[query]{RESET}         {DIM}Search for skills{RESET}");
     println!();
-    println!("  {DIM}${RESET} {TEXT}skills update{RESET}               {DIM}Update installed skills{RESET}");
+    println!("  {DIM}${RESET} {TEXT}skillz update{RESET}               {DIM}Update installed skills{RESET}");
     println!();
-    println!("  {DIM}${RESET} {TEXT}skills experimental_install{RESET} {DIM}Restore from skills-lock.json{RESET}");
-    println!("  {DIM}${RESET} {TEXT}skills init {DIM}[name]{RESET}          {DIM}Create a new skill{RESET}");
-    println!("  {DIM}${RESET} {TEXT}skills experimental_sync{RESET}    {DIM}Sync skills from node_modules{RESET}");
+    println!("  {DIM}${RESET} {TEXT}skillz experimental_install{RESET} {DIM}Restore from skills-lock.json{RESET}");
+    println!("  {DIM}${RESET} {TEXT}skillz init {DIM}[name]{RESET}          {DIM}Create a new skill{RESET}");
+    println!("  {DIM}${RESET} {TEXT}skillz experimental_sync{RESET}    {DIM}Sync skills from node_modules{RESET}");
     println!();
-    println!("{DIM}try:{RESET} skills add vercel-labs/agent-skills");
+    println!("{DIM}try:{RESET} skillz add vercel-labs/agent-skills");
     println!();
     println!("Discover more skills at {TEXT}https://skills.sh/{RESET}");
     println!();
@@ -85,54 +85,54 @@ fn show_banner() {
 #[allow(clippy::too_many_lines)]
 fn show_help() {
     let examples: Vec<(&str, Option<&str>)> = vec![
-        ("skills add vercel-labs/agent-skills", None),
+        ("skillz add vercel-labs/agent-skills", None),
         (
-            "skills use vercel-labs/agent-skills@vercel-optimize | claude",
+            "skillz use vercel-labs/agent-skills@vercel-optimize | claude",
             None,
         ),
         (
-            "skills use vercel-labs/agent-skills --skill vercel-optimize --agent claude-code",
+            "skillz use vercel-labs/agent-skills --skill vercel-optimize --agent claude-code",
             None,
         ),
-        ("skills add vercel-labs/agent-skills -g", None),
+        ("skillz add vercel-labs/agent-skills -g", None),
         (
-            "skills add vercel-labs/agent-skills --agent claude-code cursor",
-            None,
-        ),
-        (
-            "skills add vercel-labs/agent-skills --skill pr-review commit",
+            "skillz add vercel-labs/agent-skills --agent claude-code cursor",
             None,
         ),
         (
-            "skills add vercel-labs/agent-skills --json -y",
+            "skillz add vercel-labs/agent-skills --skill pr-review commit",
+            None,
+        ),
+        (
+            "skillz add vercel-labs/agent-skills --json -y",
             Some("JSON output"),
         ),
-        ("skills remove", Some("interactive remove")),
-        ("skills remove web-design", Some("remove by name")),
-        ("skills rm --global frontend-design", None),
-        ("skills list", Some("list project skills")),
-        ("skills ls -g", Some("list global skills")),
-        ("skills ls -a claude-code", Some("filter by agent")),
-        ("skills ls --json", Some("JSON output")),
-        ("skills find", Some("interactive search")),
-        ("skills find typescript", Some("search by keyword")),
+        ("skillz remove", Some("interactive remove")),
+        ("skillz remove web-design", Some("remove by name")),
+        ("skillz rm --global frontend-design", None),
+        ("skillz list", Some("list project skills")),
+        ("skillz ls -g", Some("list global skills")),
+        ("skillz ls -a claude-code", Some("filter by agent")),
+        ("skillz ls --json", Some("JSON output")),
+        ("skillz find", Some("interactive search")),
+        ("skillz find typescript", Some("search by keyword")),
         (
-            "skills find react --owner vercel",
+            "skillz find react --owner vercel",
             Some("search within an owner"),
         ),
-        ("skills update", None),
-        ("skills update my-skill", Some("update a single skill")),
-        ("skills update -g", Some("update global skills only")),
+        ("skillz update", None),
+        ("skillz update my-skill", Some("update a single skill")),
+        ("skillz update -g", Some("update global skills only")),
         (
-            "skills experimental_install",
+            "skillz experimental_install",
             Some("restore from skills-lock.json"),
         ),
-        ("skills init my-skill", None),
+        ("skillz init my-skill", None),
         (
-            "skills experimental_sync",
+            "skillz experimental_sync",
             Some("sync from node_modules (experimental)"),
         ),
-        ("skills experimental_sync -y", Some("sync without prompts")),
+        ("skillz experimental_sync -y", Some("sync without prompts")),
     ];
     let example_width = examples
         .iter()
@@ -154,7 +154,7 @@ fn show_help() {
 
     println!(
         r#"
-{BOLD}Usage:{RESET} skills <command> [options]
+{BOLD}Usage:{RESET} skillz <command> [options]
 
 {BOLD}Manage Skills:{RESET}
   add <package>        Add a skill package (alias: a)
@@ -249,7 +249,7 @@ Discover more skills at {TEXT}https://skills.sh/{RESET}
 fn show_remove_help() {
     println!(
         r#"
-{BOLD}Usage:{RESET} skills remove [skills...] [options]
+{BOLD}Usage:{RESET} skillz remove [skills...] [options]
 
 {BOLD}Description:{RESET}
   Remove installed skills from agents. If no skill names are provided,
@@ -266,13 +266,13 @@ fn show_remove_help() {
   --all              Remove every installed skill (-y implied). Do not combine with named skills.
 
 {BOLD}Examples:{RESET}
-  {DIM}${RESET} skills remove                           {DIM}# interactive selection{RESET}
-  {DIM}${RESET} skills remove my-skill                   {DIM}# remove specific skill{RESET}
-  {DIM}${RESET} skills remove skill1 skill2 -y           {DIM}# remove multiple skills{RESET}
-  {DIM}${RESET} skills remove --global my-skill          {DIM}# remove from global scope{RESET}
-  {DIM}${RESET} skills rm --agent claude-code my-skill   {DIM}# remove from specific agent{RESET}
-  {DIM}${RESET} skills remove --all                      {DIM}# remove all skills{RESET}
-  {DIM}${RESET} skills remove --skill '*' -a cursor      {DIM}# remove all skills from cursor{RESET}
+  {DIM}${RESET} skillz remove                           {DIM}# interactive selection{RESET}
+  {DIM}${RESET} skillz remove my-skill                   {DIM}# remove specific skill{RESET}
+  {DIM}${RESET} skillz remove skill1 skill2 -y           {DIM}# remove multiple skills{RESET}
+  {DIM}${RESET} skillz remove --global my-skill          {DIM}# remove from global scope{RESET}
+  {DIM}${RESET} skillz rm --agent claude-code my-skill   {DIM}# remove from specific agent{RESET}
+  {DIM}${RESET} skillz remove --all                      {DIM}# remove all skills{RESET}
+  {DIM}${RESET} skillz remove --skill '*' -a cursor      {DIM}# remove all skills from cursor{RESET}
 
 Discover more skills at {TEXT}https://skills.sh/{RESET}
 "#

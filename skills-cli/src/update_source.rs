@@ -99,7 +99,7 @@ fn append_folder_and_ref(source: &str, skill_path: &str, ref_: Option<&str>) -> 
     }
 }
 
-/// Build the `skills add` source argument for a global-lock update.
+/// Build the `skillz add` source argument for a global-lock update.
 #[must_use]
 pub fn build_update_install_source(entry: &LocalSkillLockEntry) -> Option<String> {
     let Some(skill_path) = &entry.skill_path else {
@@ -125,7 +125,7 @@ pub fn build_update_install_source(entry: &LocalSkillLockEntry) -> Option<String
     ))
 }
 
-/// Build the `skills add` source argument for a project-lock update.
+/// Build the `skillz add` source argument for a project-lock update.
 #[must_use]
 pub fn build_local_update_source(entry: &LocalSkillLockEntry) -> Option<String> {
     let source = get_local_source(entry)?;
@@ -139,7 +139,7 @@ pub fn build_local_update_source(entry: &LocalSkillLockEntry) -> Option<String> 
     }
 }
 
-/// Build the `skills add` source argument from a global-lock entry.
+/// Build the `skillz add` source argument from a global-lock entry.
 #[must_use]
 pub fn build_global_update_install_source(
     entry: &skills_store::locks::SkillLockEntry,

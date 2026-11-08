@@ -124,8 +124,8 @@ pub mod diag {
             "Cannot combine --all with specific skill names.",
         )
         .with_fix(format!(
-            "Use `skills remove --all` to remove every skill, or omit --all to remove only the named skills.\
-             \n   Example: skills remove {example} -y"
+            "Use `skillz remove --all` to remove every skill, or omit --all to remove only the named skills.\
+             \n   Example: skillz remove {example} -y"
         ))
     }
 
@@ -164,7 +164,7 @@ pub mod diag {
             "SKILLS_UNKNOWN_COMMAND",
             format!("Unknown command: {command}"),
         )
-        .with_fix("Run skills --help for usage.")
+        .with_fix("Run skillz --help for usage.")
     }
 
     /// `SKILLS_REMOVE_GLOBALLY_TRACKED`
@@ -174,7 +174,7 @@ pub mod diag {
             format!("Tracked in the global lock: {}", skills.join(", ")),
         )
         .with_fix(format!(
-            "Remove globally with: skills remove {} -g",
+            "Remove globally with: skillz remove {} -g",
             skills.join(" ")
         ))
     }
@@ -265,7 +265,7 @@ pub mod diag {
             format!(
                 "No skills found for the scoped path '{scope_path}' on {root_url}. \
                  Not falling back to the root skills index because that would install every skill the host publishes. \
-                 Check the URL, or run 'skills add {root_url}' to install from the root index."
+                 Check the URL, or run 'skillz add {root_url}' to install from the root index."
             ),
         )
     }
@@ -309,7 +309,7 @@ pub mod diag {
             format!(
                 "Clone timed out after {seconds}s. Common causes:\n\
                  \x20 - Large repository: raise the timeout with SKILLS_CLONE_TIMEOUT_MS=600000 (10m)\n\
-                 \x20 - Slow network: retry, or clone manually and pass the local path to 'skills add'\n\
+                 \x20 - Slow network: retry, or clone manually and pass the local path to 'skillz add'\n\
                  \x20 - Private repo without credentials: ensure auth is configured\n\
                  \x20\x20\x20\x20 - For SSH: ssh-add -l (to check loaded keys)\n\
                  \x20\x20\x20\x20 - For HTTPS: gh auth status (if using GitHub CLI)"
@@ -401,7 +401,7 @@ pub mod diag {
                 skills.join(", ")
             ),
         )
-        .with_fix("To let `skills update` fetch it again, serve it from a URL without them.")
+        .with_fix("To let `skillz update` fetch it again, serve it from a URL without them.")
     }
 
     /// `SKILLS_ARCHIVE_INVALID`
@@ -584,7 +584,7 @@ pub mod diag {
             format!("Running {agent} is not supported yet."),
         )
         .with_fix(format!(
-            "Supported agents for skills use --agent: {}",
+            "Supported agents for skillz use --agent: {}",
             supported.join(", ")
         ))
     }
@@ -601,7 +601,7 @@ pub mod diag {
     pub fn use_agent_wildcard() -> SkillsError {
         SkillsError::new(
             "SKILLS_USE_AGENT_WILDCARD",
-            "skills use --agent does not support '*'; specify exactly one agent.",
+            "skillz use --agent does not support '*'; specify exactly one agent.",
         )
     }
 
@@ -609,7 +609,7 @@ pub mod diag {
     pub fn use_multiple_agents() -> SkillsError {
         SkillsError::new(
             "SKILLS_USE_MULTIPLE_AGENTS",
-            "skills use --agent accepts exactly one agent.",
+            "skillz use --agent accepts exactly one agent.",
         )
     }
 

@@ -1,4 +1,4 @@
-//! The `skills update` / `skills check` command, ported from `src/update.ts`
+//! The `skillz update` / `skillz check` command, ported from `src/update.ts`
 //! (sequential source checks; same outputs and lock handling).
 
 use std::path::Path;
@@ -221,7 +221,7 @@ fn print_skipped_skills(skipped: &[(&String, &str, &locks::SkillLockEntry)]) {
         }
         let update_source = update_source::format_source_input(source_url, *ref_);
         println!(
-            "    {}To update: {}skills add {update_source} -g -y{}",
+            "    {}To update: {}skillz add {update_source} -g -y{}",
             color::dim(""),
             color::text(""),
             color::reset("")
@@ -230,7 +230,7 @@ fn print_skipped_skills(skipped: &[(&String, &str, &locks::SkillLockEntry)]) {
     }
 }
 
-/// The `skills update` / `skills check` entry point.
+/// The `skillz update` / `skillz check` entry point.
 pub fn run_update(args: &[String], mode: &'static str) {
     let (mut options, positional) = parse_update_options(args);
     if mode == "check" {
@@ -320,7 +320,7 @@ pub fn run_update(args: &[String], mode: &'static str) {
             );
         }
         println!(
-            "{}{} skill(s) can be updated; run {}skills update{} to install{}",
+            "{}{} skill(s) can be updated; run {}skillz update{} to install{}",
             color::text(""),
             outdated.len(),
             color::bold(""),
@@ -419,7 +419,7 @@ fn update_global_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) {
             color::reset("")
         );
         println!(
-            "{}Install skills with{} {}skills add <package> -g{}",
+            "{}Install skills with{} {}skillz add <package> -g{}",
             color::dim_gray(""),
             color::reset(""),
             color::text(""),
@@ -879,7 +879,7 @@ fn update_project_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) 
             color::reset("")
         );
         println!(
-            "{}Install project skills with{} {}skills add <package>{}",
+            "{}Install project skills with{} {}skillz add <package>{}",
             color::dim_gray(""),
             color::reset(""),
             color::text(""),

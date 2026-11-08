@@ -4,10 +4,30 @@ All notable changes to this crate are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 follows [SemVer](https://semver.org/) once 1.0 ships.
 
-## [Unreleased]
+## [0.5.0] - 2026-11-08
 
 ### Added
 
+- **`agent-config-cli` crate** — an `agentconfig` binary that installs all
+  four library surfaces (hooks, instructions/prompt rules, MCP servers,
+  skills) from a declarative `agent.config.toml` manifest. `agentconfig add`
+  accepts `owner/repo` shorthand, `owner/repo@ref` pins, git URLs, and local
+  directories, prints the library's dry-run plan, and installs into every
+  capable target (entry-level `agents`/`skip` filters intersect with
+  `--agent` flags). Also ships: `remove` (lockfile-keyed uninstall),
+  `list` (lockfile x library status reports), `update`/`check` (content-hash
+  based, `check` exits 1 as a CI gate), `init` (manifest scaffold), and
+  `--instruction-file` manifest-less mode. Recognizes the Agent Plugins 1.0.0
+  directory layout (`plugin.json`/`mcp.json`/`skills/`) as a fallback, and
+  records provenance in `agent.config.lock.json` (project) plus a per-scope
+  global lockfile. Every write goes through the library, so ledgers,
+  backups, idempotency, and plan purity match the library contract. See
+  [docs/manifest.md](docs/manifest.md).
+- **`registry::instruction_placements`** — a public per-agent table of the
+  `InstructionPlacement` shapes each tool accepts, powering the manifest's
+  `placement = "auto"`. `schema.rs` now derives its placement probe from the
+  same table, and the generated `schema/agents.json` is unchanged (golden
+  test green).
 - **`skills-store` crate** — a network-free Rust engine for the canonical
   Agent Skills store: installs skills once into `.agents/skills` (project) or
   `~/.agents/skills` (home) and symlinks the agents that do not read those
@@ -17,7 +37,7 @@ follows [SemVer](https://semver.org/) once 1.0 ships.
   recursive skill discovery (priority containers, `skills.sh.json` paths,
   plugin manifests), folder hashing, and safe copy semantics (symlink
   escape/cycle rejection, `metadata.json`/`.git`/`__pycache__` exclusion).
-- **`skills-cli` crate** — a `skills` binary wizard-compatible with
+- **`skills-cli` crate** — the `skillz` binary, wizard-compatible with
   vercel-labs/skills@`d3701c1`: `add`/`install`/`i` (interactive wizard with
   searchable multiselect, locked universal section, scope + install-method
   prompts, installation summary, `--json`/`--all`/`--copy`/`-g`/`-y`/`-l`
@@ -32,8 +52,8 @@ follows [SemVer](https://semver.org/) once 1.0 ships.
   v0.2.0 digests), direct SKILL.md/archive downloads with strict zip/tar
   validation, and git clone fallbacks (commit-SHA fetch, `gh` retry, SSH).
 - **Workspace layout**: the repo is now a Cargo workspace
-  (`agent-config` + `skills-store` + `skills-cli`); the library crate is
-  unchanged.
+  (`agent-config` + `skills-store` + `skills-cli` + `agent-config-cli`). The
+  library crate is unchanged.
 
 ### Compatibility
 
@@ -41,18 +61,30 @@ follows [SemVer](https://semver.org/) once 1.0 ships.
   bidirectionally against `skills@1.7.6`: skills installed by either tool are
   listed and removed by the other, and both tools read and extend the same
   lock files without clobbering each other's entries.
-- Deliberate divergences: no telemetry is sent anywhere; the Notion pack
-  integration is not implemented; `experimental_sync` does not cover remote
-  `skills`-field git sources.
-
-## [0.5.0] - 2026-11-07
+- Deliberate divergences: no telemetry is sent anywhere, the Notion pack
+  integration is not implemented, `experimental_sync` does not cover remote
+  `skills`-field git sources, and the CLI binary installs as `skillz` rather
+  than `skills`.
 
 ### Changed
 
+- **`skillz` binary rename**: the CLI binary installs as `skillz`, not
+  `skills`. The name is contested: the npm `skills` package (vercel-labs)
+  installs global `skills` + `add-skill` binaries, and the unrelated
+  crates.io `skills-cli` crate ships a `skills` binary of its own, so a
+  second `skills` on PATH silently shadows one of them. Subcommands, flags,
+  the wizard, and lock files are unchanged. Only the invocation name differs.
+- **Version alignment**: `skills-cli` and `skills-store` bump to 0.5.0 so the
+  binary's `--version` matches the release tag that now carries its binaries.
+- **Release binaries**: the release workflow now builds `skillz` for
+  `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`,
+  `aarch64-apple-darwin`, `x86_64-apple-darwin`, and `x86_64-pc-windows-msvc`
+  on tag push, and attaches the archives plus a `SHA256SUMS` to the GitHub
+  Release. `[profile.release] strip = true` keeps the downloads small.
 - **Amp**: global skills moved from `~/.config/amp/skills/` to Amp's current
   canonical `~/.config/agents/skills/` (built from the home directory, not
   the XDG config dir). `~/.config/amp/` keeps `settings.json` (MCP) and the
-  instruction ledger; legacy `~/.config/amp/skills/` installs remain visible
+  instruction ledger. Legacy `~/.config/amp/skills/` installs remain visible
   to status and drain on uninstall. Project scope (`.agents/skills`) is
   unchanged.
 - **Antigravity**: global skills moved from the legacy
@@ -80,23 +112,33 @@ follows [SemVer](https://semver.org/) once 1.0 ships.
   global `$HERMES_HOME/skills/agent-config/<name>/` root
   (nested category directories are an official Hermes layout).
 
+### Fixed
+
+- **Pi**: `paths::pi_home()` now honors the documented `PI_CODING_AGENT_DIR`
+  environment variable (overriding `~/.pi/agent`). Documentation and support
+  matrix updated to reflect native MCP support in Pi 1.0+ (`~/.pi/agent/mcp.json`
+  and `.pi/mcp.json`).
+- **Antigravity & Antigravity CLI**: Synchronized summary surface matrices in
+  `README.md` and `CLAUDE.md` to reflect `hooks.json` (Global + Local) and Skills
+  support on both harnesses.
+
 ### Documentation
 
 - Refreshed `path-contract-audit.md` with a 2026-11-07 verification pass
   driven by the vercel-labs/skills audit. Confirmed the
   verified-correct paths for claude, cursor, gemini, copilot, opencode, codex,
   openclaw, pi, windsurf, crush, codebuddy, qwen, trae, and forge.
-- Updated `docs/support-matrix.md` and per-agent docs for every moved root;
-  corrected the README harness-table Skills cell for `antigravitycli`, which
+- Updated `docs/support-matrix.md` and per-agent docs for every moved root,
+  and corrected the README harness-table Skills cell for `antigravitycli`, which
   had drifted.
 - Re-dated the deferred-harness rationale in AGENTS.md for kimi, bob, goose,
   kiro-cli, and vibe against vercel's now-public skills contracts.
 
 ### Migration notes
 
-- Path moves change where new skills are written; pre-0.5 skills at legacy
-  locations are not auto-migrated. Reinstall to populate the new roots;
-  legacy installs are picked up by `skill_status` and removed by
+- Path moves change where new skills are written. Pre-0.5 skills at legacy
+  locations are not auto-migrated. Reinstall to populate the new roots.
+  Legacy installs are picked up by `skill_status` and removed by
   `uninstall_skill`.
 
 ## [0.4.0] - 2026-06-21
@@ -119,10 +161,10 @@ follows [SemVer](https://semver.org/) once 1.0 ships.
 - Marked **Roo Code** retired/EOL (all products shut down 2026-05-15) in the
   support matrix, README, and per-agent doc. Integration kept for compatibility.
 - Marked **Gemini CLI** legacy/conditional across the same docs. Consumer-tier
-  serving stopped 2026-06-18; enterprise and paid API users remain supported.
+  serving stopped 2026-06-18. Enterprise and paid API users remain supported.
 - Corrected the **Cline** support-matrix/doc rows to the standalone-CLI global
   MCP path `~/.cline/data/settings/cline_mcp_settings.json`. The code was
-  already migrated; the docs were stale.
+  already migrated. The docs were stale.
 - Refreshed `path-contract-audit.md` with a 2026-06-21 verification pass.
   Re-verified Roo, Gemini, Amp, Cline, Kilo. Disproved a Junie claim
   (`.junie/AGENTS.md` is the current default, not `.junie/guidelines.md`).
@@ -132,7 +174,7 @@ follows [SemVer](https://semver.org/) once 1.0 ships.
 
 - Amp and Kilo path moves change where new config is written. Pre-0.4 files at
   the old locations are left in place (not auto-migrated). Reinstall to populate
-  the new paths; remove old files manually if desired.
+  the new paths. Remove old files manually if desired.
 
 ## [0.3.3] - 2026-06-07
 
@@ -206,7 +248,7 @@ follows [SemVer](https://semver.org/) once 1.0 ships.
   fence with a distinct prefix:
   `<!-- BEGIN AGENT-CONFIG-INSTR:<name> --> ... <!-- END AGENT-CONFIG-INSTR:<name> -->`.
   Hook rules continue to use `<!-- BEGIN AGENT-CONFIG:<tag> -->`. Before,
-  a hook with `tag = T` and an instruction with `name = T` installed into
+  a hook with `tag = T`, and an instruction with `name = T` installed into
   the same memory file (e.g. `~/.claude/CLAUDE.md`, `AGENTS.md`,
   `GEMINI.md`) would silently overwrite each other.
 - Status detection and uninstall on the instruction surface accept the
@@ -222,14 +264,14 @@ follows [SemVer](https://semver.org/) once 1.0 ships.
 - README now notes that `schema/agents.json` is the Linux-canonical view of
   agent path layouts. macOS and Windows views differ for any agent whose
   config dir flows through `paths::config_dir()` (Cline, Roo). Regenerate
-  on Linux for byte-stable output; the companion snapshot test
+  on Linux for byte-stable output. The companion snapshot test
   (`tests/schema_golden.rs`) only enforces equality on Linux.
 - `CLAUDE.md` records that the Crush hook integration relies on Crush's
   Go decoder ignoring unknown JSON fields, even though Crush's `HookConfig`
   schema declares `additionalProperties: false`. A strict-decoding switch
   upstream would push the inline `_agent_config_tag` marker into a sidecar
   ledger like the existing MCP / skills / instructions ones. No hook ledger
-  infrastructure exists today; the migration is deferred until needed.
+  infrastructure exists today. The migration is deferred until needed.
 
 ### Migration notes
 

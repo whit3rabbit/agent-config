@@ -1,4 +1,4 @@
-//! The `skills add` command: the full interactive install wizard, ported from
+//! The `skillz add` command: the full interactive install wizard, ported from
 //! `src/add.ts` of the upstream CLI.
 
 use std::collections::HashSet;
@@ -424,7 +424,7 @@ fn global_dir_supported(agent: &AgentConfig) -> bool {
     agent.global_skills_dir(&ctx).is_some()
 }
 
-/// The `skills add` entry point (upstream `runAdd`).
+/// The `skillz add` entry point (upstream `runAdd`).
 #[allow(clippy::too_many_lines)]
 pub fn run_add(sources: Vec<String>, mut options: AddOptions) {
     let mut json_results: Vec<AddJsonResult> = Vec::new();
@@ -440,7 +440,7 @@ pub fn run_add(sources: Vec<String>, mut options: AddOptions) {
         println!("{}", color::dim("  Usage:"));
         println!(
             "    {} {} {}",
-            color::cyan("skills add"),
+            color::cyan("skillz add"),
             color::yellow("<source>"),
             color::dim("[options]")
         );
@@ -448,7 +448,7 @@ pub fn run_add(sources: Vec<String>, mut options: AddOptions) {
         println!("{}", color::dim("  Example:"));
         println!(
             "    {} {}",
-            color::cyan("skills add"),
+            color::cyan("skillz add"),
             color::yellow("vercel-labs/agent-skills")
         );
         println!();
@@ -500,7 +500,7 @@ pub fn run_add(sources: Vec<String>, mut options: AddOptions) {
 
     println!();
     if !agent_result.is_agent {
-        prompt::intro(&color::bg_cyan(&color::black(" skills ")));
+        prompt::intro(&color::bg_cyan(&color::black(" skillz ")));
     }
 
     if agent_result.is_agent {
@@ -1747,7 +1747,7 @@ fn prompt_for_find_skills(options: &AddOptions, target_agents: &[&'static AgentC
                 let _ = locks::write_skill_lock(&lock);
             }
             prompt::log_plain(&color::dim(
-                "You can install it later with: skills add vercel-labs/skills@find-skills",
+                "You can install it later with: skillz add vercel-labs/skills@find-skills",
             ));
         }
         None => {

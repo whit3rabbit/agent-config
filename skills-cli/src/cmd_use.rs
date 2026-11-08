@@ -1,4 +1,4 @@
-//! The `skills use` command, ported from `src/use.ts`: generate a prompt for
+//! The `skillz use` command, ported from `src/use.ts`: generate a prompt for
 //! using one skill without installing it.
 
 use std::path::{Path, PathBuf};
@@ -113,17 +113,17 @@ fn validate_use_agent_option(agent_values: &[String]) -> Vec<SkillsError> {
 
 fn get_use_help() -> String {
     format!(
-        "Usage: skills use <source>[@<skill>] [options]\n\n\
+        "Usage: skillz use <source>[@<skill>] [options]\n\n\
          Generate a prompt for using one skill without installing it.\n\n\
          Options:\n  \
          -s, --skill <skill>   Select the skill to use\n  \
          -a, --agent <agent>   Start one supported agent interactively ({})\n  \
-         --full-depth          Search nested directories like skills add --full-depth\n  \
+         --full-depth          Search nested directories like skillz add --full-depth\n  \
          -h, --help            Show this help message\n\n\
          Examples:\n  \
-         skills use vercel-labs/agent-skills@web-design-guidelines | claude\n  \
-         skills use vercel-labs/agent-skills --skill web-design-guidelines --agent claude-code\n  \
-         skills use vercel-labs/agent-skills@web-design-guidelines --agent codex",
+         skillz use vercel-labs/agent-skills@web-design-guidelines | claude\n  \
+         skillz use vercel-labs/agent-skills --skill web-design-guidelines --agent claude-code\n  \
+         skillz use vercel-labs/agent-skills@web-design-guidelines --agent codex",
         supported_use_agents().join(", ")
     )
 }
@@ -171,7 +171,7 @@ impl UseSkill {
     }
 }
 
-/// The `skills use` entry point (upstream `runUse`).
+/// The `skillz use` entry point (upstream `runUse`).
 pub fn run_use(sources: Vec<String>, options: UseOptions, parse_errors: Vec<SkillsError>) {
     if options.help {
         println!("{}", get_use_help());

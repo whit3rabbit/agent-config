@@ -28,3 +28,6 @@ synrepo-context/
 .syntext/
 .mcp.json
 artifacts/
+
+# ZCode session state (per-developer)
+.zcode/

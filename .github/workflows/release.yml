@@ -40,3 +40,102 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo publish --locked
+
+  binaries:
+    # Prebuilt `skillz` CLI binaries attached to the tag's GitHub Release.
+    # Runs after the crates.io publish so a broken release never ships assets.
+    name: binaries (${{ matrix.target }})
+    needs: publish
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Static musl builds: ureq's rustls keeps the toolchain OpenSSL-free.
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            use-cross: true
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            use-cross: true
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross (musl targets)
+        if: matrix.use-cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Build
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.use-cross }}" = "true" ]; then
+            cross build --locked --release -p skills-cli --target "${{ matrix.target }}"
+          else
+            cargo build --locked --release -p skills-cli --target "${{ matrix.target }}"
+          fi
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive_ext="tar.gz"
+          bin_ext=""
+          case "${{ matrix.target }}" in
+            *windows*) archive_ext="zip"; bin_ext=".exe" ;;
+          esac
+          artifact="skillz-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          mkdir -p stage dist
+          cp "target/${{ matrix.target }}/release/skillz${bin_ext}" "stage/"
+          if [ "$archive_ext" = "zip" ]; then
+            # Git-bash on the runner has no `zip`; the image ships 7-Zip.
+            (cd stage && 7z a -tzip "../dist/${artifact}.zip" "skillz${bin_ext}" > /dev/null)
+          else
+            tar -czf "dist/${artifact}.tar.gz" -C stage "skillz${bin_ext}"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: dist/
+
+  attach-release:
+    # Collect the per-target archives, checksum them, and attach everything
+    # to the GitHub Release for the pushed tag.
+    name: attach release assets
+    needs: binaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum ./* > SHA256SUMS
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true

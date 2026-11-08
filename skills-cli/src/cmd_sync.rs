@@ -1,4 +1,4 @@
-//! The `skills experimental_sync` command, ported from `src/sync.ts`:
+//! The `skillz experimental_sync` command, ported from `src/sync.ts`:
 //! install skills shipped by the project's node_modules dependencies and by
 //! `skills` fields in package.json files.
 
@@ -458,7 +458,7 @@ fn blocked_reason(
 ) -> Option<String> {
     if let Some(entry) = lock_entry {
         if !installed_by_sync(Some(entry)) {
-            return Some(format!("installed with `skills add` from {}", entry.source));
+            return Some(format!("installed with `skillz add` from {}", entry.source));
         }
     }
     let canonical_dir = installer::get_canonical_path(name, false, cwd);
@@ -479,7 +479,7 @@ fn blocked_reason(
     None
 }
 
-/// The `skills experimental_sync` entry point (upstream `runSync`).
+/// The `skillz experimental_sync` entry point (upstream `runSync`).
 #[allow(clippy::too_many_lines)]
 pub fn run_sync(_args: &[String], mut options: SyncOptions) {
     let cwd = common::current_dir();
@@ -506,7 +506,7 @@ pub fn run_sync(_args: &[String], mut options: SyncOptions) {
 
     println!();
     if !agent_result.is_agent {
-        prompt::intro(&color::bg_cyan(&color::black(" skills experimental_sync ")));
+        prompt::intro(&color::bg_cyan(&color::black(" skillz experimental_sync ")));
     }
     if agent_result.is_agent {
         let name = agent_result.agent.clone().unwrap_or_default();
