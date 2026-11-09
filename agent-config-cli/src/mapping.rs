@@ -964,7 +964,13 @@ path = "skills/pdf"
         );
         assert!(spec.body.contains("Do things."));
         assert_eq!(spec.assets.len(), 1);
+        // The exec bit is a Unix-only concept here: `is_executable` is
+        // hardcoded `false` on non-Unix platforms, so the expected value
+        // follows the platform.
+        #[cfg(unix)]
         assert!(spec.assets[0].executable);
+        #[cfg(not(unix))]
+        assert!(!spec.assets[0].executable);
         assert_eq!(
             spec.assets[0].relative_path,
             PathBuf::from("scripts/run.sh")
