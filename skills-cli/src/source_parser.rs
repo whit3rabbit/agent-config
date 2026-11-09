@@ -69,7 +69,11 @@ pub fn host_and_path(url: &str) -> Option<(String, String)> {
 }
 
 fn is_local_path(input: &str) -> bool {
-    Path::new(input).is_absolute()
+    // `has_root` rather than `is_absolute`: upstream's Node
+    // `path.win32.isAbsolute` treats rooted-but-driveless paths
+    // (`/abs/path`) as local on Windows, where Rust's `is_absolute`
+    // demands a drive prefix. On Unix the two are equivalent.
+    Path::new(input).has_root()
         || input.starts_with("./")
         || input.starts_with("../")
         || input == "."
