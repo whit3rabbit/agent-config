@@ -42,6 +42,7 @@ the current file-backed locations implemented by this crate.
 | [Qwen Code](qwen.md)             | - | ✓ | ✓ (Global + Local) | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) | Both (`QWEN.md` + `AGENTS.md`) |
 | [Tabnine CLI](tabnine.md)        | ✓ (Global + Local) | - | ✓ (Global + Local) | - | - | MCP only (Coaching Guidelines) |
 | [Trae](trae.md)                  | - | ✓ (Local) | - | ✓ (Global + Local) | ✓ (Local, InlineBlock) | Both (`.trae/project_rules.md` + `AGENTS.md`) |
+| [DeepSeek Harness](dsh.md)       | - | ✓ (Global + Local) | - | ✓ (Global + Local) | ✓ (Global + Local, InlineBlock) | `AGENTS.md` |
 
 ## Conventions
 

@@ -372,6 +372,7 @@ all bundled examples see [`examples/README.md`](examples/README.md).
 | [Trae](docs/agents/trae.md)                   | `trae`        | -                  | yes (Local)  | -                | Global + Local   | Local            |
 | [OpenClaw](docs/agents/openclaw.md)           | `openclaw`    | -                  | yes (Local)  | Global           | Global + Local   | Local            |
 | [Hermes Agent](docs/agents/hermes.md)         | `hermes`      | -                  | yes (Local)  | Global           | Global + Local   | Local            |
+| [DeepSeek Harness](docs/agents/dsh.md)        | `dsh`         | -                  | yes          | -                | Global + Local   | Global + Local   |
 
 **Lifecycle notes:**
 
@@ -602,7 +603,7 @@ Three placement modes are available. Pick the one that matches the harness:
     ├─ InlineBlock      →  inject body as a fenced block inside the host file (no separate file)
     │                       (Codex, Gemini, Antigravity CLI, Copilot, CodeBuddy,
     │                        Amp, Crush, Forge, Pi, Qoder, Qwen, Junie, Trae,
-    │                        OpenClaw, Hermes)
+    │                        OpenClaw, Hermes, DSH)
     │
     └─ StandaloneFile   →  write <name>.md only, no host edit
                             (Cline, Roo, Kilo Code, Windsurf, Antigravity —

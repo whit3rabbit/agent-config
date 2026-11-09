@@ -373,3 +373,43 @@ fn pi_global_skills_respect_pi_coding_agent_dir() {
         env.home_path().join(".pi").join("agent"),
     );
 }
+
+// --- F9: DSH_HOME + project scope -----------------------------------------
+
+#[test]
+fn dsh_global_skills_respect_dsh_home() {
+    let env = IsolatedGlobalEnv::new();
+    let custom = env.home_path().join("custom-dsh");
+    fs::create_dir_all(&custom).unwrap();
+    std::env::set_var("DSH_HOME", &custom);
+
+    let dsh = skill_by_id("dsh").unwrap();
+    dsh.install_skill(&Scope::Global, &skill("probe", "app"))
+        .unwrap();
+
+    assert!(custom.join("skills/probe/SKILL.md").exists());
+    assert!(dsh.is_skill_installed(&Scope::Global, "probe").unwrap());
+
+    dsh.uninstall_skill(&Scope::Global, "probe", "app").unwrap();
+    assert!(!custom.join("skills/probe").exists());
+
+    // Restore the IsolatedGlobalEnv-pinned value before the guard drops.
+    std::env::set_var("DSH_HOME", env.home_path().join(".dsh"));
+}
+
+#[test]
+fn dsh_local_skills_install_under_project() {
+    let env = IsolatedGlobalEnv::new();
+    let project = env.home_path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    let dsh = skill_by_id("dsh").unwrap();
+    let scope = Scope::Local(project.clone());
+
+    dsh.install_skill(&scope, &skill("probe", "app")).unwrap();
+
+    assert!(project.join(".dsh/skills/probe/SKILL.md").exists());
+    assert!(dsh.is_skill_installed(&scope, "probe").unwrap());
+
+    dsh.uninstall_skill(&scope, "probe", "app").unwrap();
+    assert!(!project.join(".dsh/skills/probe").exists());
+}

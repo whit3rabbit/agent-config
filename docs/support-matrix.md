@@ -51,6 +51,7 @@ Last upstream path-contract audit: 2026-11-07.
 | Qwen Code | `qwen` | Prompt: `~/.qwen/QWEN.md`, `<root>/QWEN.md` | `~/.qwen/settings.json`, `<root>/.qwen/settings.json` | `~/.qwen/skills/<name>/`, `<root>/.qwen/skills/<name>/` | `~/.qwen/QWEN.md`, `<root>/QWEN.md` (InlineBlock) | StableDocumented | 2026-04-26 upstream audit | No hook surface is registered. |
 | Tabnine CLI | `tabnine` | Hooks: `~/.tabnine/agent/settings.json`, `<root>/.tabnine/agent/settings.json` | `~/.tabnine/agent/settings.json`, `<root>/.tabnine/agent/settings.json` | - | - | StableDocumented | 2026-04-26 upstream audit | Hooks and MCP share `settings.json`. |
 | Trae | `trae` | Prompt: `<root>/.trae/project_rules.md` | - | `~/.trae/skills/<name>/`, `<root>/.trae/skills/<name>/` | `<root>/.trae/project_rules.md` (InlineBlock; Local-only) | Observed | 2026-04-26 upstream audit | Prompt writes are project-local; fetched official docs did not expose exact file paths. |
+| DeepSeek Harness | `dsh` | Prompt: `$DSH_HOME/AGENTS.md` (default `~/.dsh/AGENTS.md`), `<root>/AGENTS.md` | - | `$DSH_HOME/skills/<name>/` (default `~/.dsh/skills/<name>/`), `<root>/.dsh/skills/<name>/` | `$DSH_HOME/AGENTS.md` (default `~/.dsh/AGENTS.md`), `<root>/AGENTS.md` (InlineBlock) | StableDocumented | 2026-11-08 upstream audit | Upstream Cordis architecture treats hooks and MCP as plugins (`@deepseek-ai/dsh-hooks-claude-code`, `@deepseek-ai/dsh-mcp-client`), so they are deferred. Skills and AGENTS.md instructions are native. |
 
 Ownership sidecars:
 

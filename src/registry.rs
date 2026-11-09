@@ -15,8 +15,8 @@ use crate::integration::{InstructionSurface, Integration, McpSurface, SkillSurfa
 pub fn all() -> Vec<Box<dyn Integration>> {
     use crate::agents::{
         AmpAgent, AntigravityAgent, AntigravityCliAgent, ClaudeAgent, ClineAgent, CodeBuddyAgent,
-        CodexAgent, CopilotAgent, CrushAgent, CursorAgent, ForgeAgent, GeminiAgent, HermesAgent,
-        IFlowAgent, JunieAgent, KiloCodeAgent, OpenClawAgent, OpenCodeAgent, PiAgent,
+        CodexAgent, CopilotAgent, CrushAgent, CursorAgent, DshAgent, ForgeAgent, GeminiAgent,
+        HermesAgent, IFlowAgent, JunieAgent, KiloCodeAgent, OpenClawAgent, OpenCodeAgent, PiAgent,
         QoderCliAgent, QwenAgent, RooAgent, TabnineAgent, TraeAgent, WindsurfAgent,
     };
     vec![
@@ -37,6 +37,7 @@ pub fn all() -> Vec<Box<dyn Integration>> {
         Box::new(AmpAgent::new()),
         Box::new(CodeBuddyAgent::new()),
         Box::new(CrushAgent::new()),
+        Box::new(DshAgent::new()),
         Box::new(ForgeAgent::new()),
         Box::new(IFlowAgent::new()),
         Box::new(JunieAgent::new()),
@@ -108,8 +109,9 @@ pub fn mcp_by_id(id: &str) -> Option<Box<dyn McpSurface>> {
 pub fn skill_capable() -> Vec<Box<dyn SkillSurface>> {
     use crate::agents::{
         AmpAgent, AntigravityAgent, AntigravityCliAgent, ClaudeAgent, ClineAgent, CodeBuddyAgent,
-        CodexAgent, CopilotAgent, CrushAgent, CursorAgent, ForgeAgent, GeminiAgent, HermesAgent,
-        KiloCodeAgent, OpenClawAgent, OpenCodeAgent, PiAgent, QwenAgent, TraeAgent, WindsurfAgent,
+        CodexAgent, CopilotAgent, CrushAgent, CursorAgent, DshAgent, ForgeAgent, GeminiAgent,
+        HermesAgent, KiloCodeAgent, OpenClawAgent, OpenCodeAgent, PiAgent, QwenAgent, TraeAgent,
+        WindsurfAgent,
     };
     vec![
         Box::new(ClaudeAgent::new()),
@@ -128,6 +130,7 @@ pub fn skill_capable() -> Vec<Box<dyn SkillSurface>> {
         Box::new(AmpAgent::new()),
         Box::new(CodeBuddyAgent::new()),
         Box::new(CrushAgent::new()),
+        Box::new(DshAgent::new()),
         Box::new(ForgeAgent::new()),
         Box::new(PiAgent::new()),
         Box::new(QwenAgent::new()),
@@ -159,9 +162,9 @@ pub fn skill_by_id(id: &str) -> Option<Box<dyn SkillSurface>> {
 pub fn instruction_capable() -> Vec<Box<dyn InstructionSurface>> {
     use crate::agents::{
         AmpAgent, AntigravityAgent, AntigravityCliAgent, ClaudeAgent, ClineAgent, CodeBuddyAgent,
-        CodexAgent, CopilotAgent, CrushAgent, ForgeAgent, GeminiAgent, HermesAgent, JunieAgent,
-        KiloCodeAgent, OpenClawAgent, OpenCodeAgent, PiAgent, QoderCliAgent, QwenAgent, RooAgent,
-        TraeAgent, WindsurfAgent,
+        CodexAgent, CopilotAgent, CrushAgent, DshAgent, ForgeAgent, GeminiAgent, HermesAgent,
+        JunieAgent, KiloCodeAgent, OpenClawAgent, OpenCodeAgent, PiAgent, QoderCliAgent, QwenAgent,
+        RooAgent, TraeAgent, WindsurfAgent,
     };
     vec![
         Box::new(ClaudeAgent::new()),
@@ -178,6 +181,7 @@ pub fn instruction_capable() -> Vec<Box<dyn InstructionSurface>> {
         Box::new(CodeBuddyAgent::new()),
         Box::new(AmpAgent::new()),
         Box::new(CrushAgent::new()),
+        Box::new(DshAgent::new()),
         Box::new(ForgeAgent::new()),
         Box::new(PiAgent::new()),
         Box::new(QoderCliAgent::new()),
@@ -211,9 +215,9 @@ pub fn instruction_placements(id: &str) -> &'static [crate::spec::InstructionPla
         "cline" | "roo" | "kilocode" | "windsurf" | "antigravity" => {
             &[InstructionPlacement::StandaloneFile]
         }
-        "amp" | "antigravitycli" | "codebuddy" | "codex" | "copilot" | "crush" | "forge"
-        | "gemini" | "hermes" | "junie" | "openclaw" | "opencode" | "pi" | "qodercli" | "qwen"
-        | "trae" => &[InstructionPlacement::InlineBlock],
+        "amp" | "antigravitycli" | "codebuddy" | "codex" | "copilot" | "crush" | "dsh"
+        | "forge" | "gemini" | "hermes" | "junie" | "openclaw" | "opencode" | "pi"
+        | "qodercli" | "qwen" | "trae" => &[InstructionPlacement::InlineBlock],
         _ => &[],
     }
 }

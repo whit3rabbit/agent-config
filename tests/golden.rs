@@ -694,7 +694,7 @@ fn prose_path(agent_id: &str, root: &Path) -> Option<PathBuf> {
     Some(match agent_id {
         "claude" => root.join("CLAUDE.md"),
         "gemini" => root.join("GEMINI.md"),
-        "codex" | "openclaw" => root.join("AGENTS.md"),
+        "codex" | "openclaw" | "dsh" => root.join("AGENTS.md"),
         "copilot" => root.join(".github").join("copilot-instructions.md"),
         "hermes" => root.join(".hermes.md"),
         _ => return None,
@@ -906,6 +906,7 @@ impl EnvGuard {
             "CLAUDE_CONFIG_DIR",
             "HERMES_HOME",
             "PI_CODING_AGENT_DIR",
+            "DSH_HOME",
         ];
         let guard = Self {
             vars: keys
@@ -924,6 +925,7 @@ impl EnvGuard {
         std::env::set_var("CLAUDE_CONFIG_DIR", env.home.join(".claude"));
         std::env::set_var("HERMES_HOME", env.home.join(".hermes"));
         std::env::set_var("PI_CODING_AGENT_DIR", env.home.join(".pi").join("agent"));
+        std::env::set_var("DSH_HOME", env.home.join(".dsh"));
         guard
     }
 }

@@ -370,6 +370,7 @@ release-facing path contract is in
 | qwen                 | -     | done   | done  | done   | done (InlineBlock) |
 | tabnine              | done  | -      | done  | -      | -            |
 | trae                 | -     | done   | -     | done   | done (Local, InlineBlock) |
+| dsh                  | -     | done   | -     | done   | done (InlineBlock) |
 
 ## Instruction surface
 
@@ -381,7 +382,7 @@ Three placement modes ([`InstructionPlacement`](src/spec/instruction.rs)):
 - **`InlineBlock`** — inject the body as a tagged HTML-comment fenced block
   inside the harness's existing memory file (Codex, Gemini, Antigravity CLI,
   Copilot, CodeBuddy, Amp, Crush, Forge, Pi, Qoder, Qwen, Junie, Trae,
-  OpenClaw, Hermes).
+  OpenClaw, Hermes, DSH).
 - **`StandaloneFile`** — write `<rules-dir>/<NAME>.md` only, no host edit
   (Cline, Roo, Kilo Code, Windsurf, Antigravity — agents whose memory model
   is a per-file rules dir).

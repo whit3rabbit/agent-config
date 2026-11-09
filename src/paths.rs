@@ -374,6 +374,22 @@ pub fn pi_home() -> Result<PathBuf, AgentConfigError> {
     Ok(home_dir()?.join(".pi").join("agent"))
 }
 
+/// `$DSH_HOME` if set, else `~/.dsh`.
+///
+/// `DSH_HOME` is DeepSeek Harness's documented home-directory override;
+/// its file config, skills, and user-level instruction files live under it.
+///
+/// # Errors
+///
+/// Propagates [`AgentConfigError::PathResolution`] from [`home_dir`] when
+/// `DSH_HOME` is unset and the home directory cannot be resolved.
+pub fn dsh_home() -> Result<PathBuf, AgentConfigError> {
+    if let Some(dir) = env_path("DSH_HOME") {
+        return Ok(dir);
+    }
+    Ok(home_dir()?.join(".dsh"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -456,6 +472,21 @@ mod tests {
     }
 
     #[test]
+    fn dsh_home_respects_env_var() {
+        let _guard = env_lock().lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_path_buf();
+        let prev = std::env::var_os("DSH_HOME");
+        std::env::set_var("DSH_HOME", &path);
+        let resolved = dsh_home().unwrap();
+        match prev {
+            Some(v) => std::env::set_var("DSH_HOME", v),
+            None => std::env::remove_var("DSH_HOME"),
+        }
+        assert_eq!(resolved, path);
+    }
+
+    #[test]
     fn home_dirs_append_correct_suffix() {
         let _guard = env_lock().lock().unwrap();
         let cases: Vec<(Result<PathBuf, AgentConfigError>, &str)> = vec![
@@ -464,6 +495,7 @@ mod tests {
             (gemini_home(), ".gemini"),
             (openclaw_home(), ".openclaw"),
             (hermes_home(), ".hermes"),
+            (dsh_home(), ".dsh"),
         ];
         for (path, suffix) in cases {
             let p = path.expect("path resolved");

@@ -51,6 +51,7 @@ const LOCAL_SKILL_AGENTS: &[&str] = &[
     "kilocode",
     "antigravity",
     "openclaw",
+    "dsh",
     "cline",
 ];
 

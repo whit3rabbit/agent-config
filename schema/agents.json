@@ -2176,6 +2176,115 @@
       }
     },
     {
+      "id": "dsh",
+      "display_name": "DeepSeek Harness",
+      "supported_scopes": [
+        "global",
+        "local"
+      ],
+      "surfaces": {
+        "hook": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.dsh/AGENTS.md"
+              ],
+              "directories": [
+                "~/.dsh"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>"
+              ],
+              "ledger_files": [],
+              "refusals": []
+            }
+          }
+        },
+        "skill": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.dsh/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "~/.dsh",
+                "~/.dsh/skills",
+                "~/.dsh/skills/placeholder"
+              ],
+              "ledger_files": [
+                "~/.dsh/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/.dsh/skills/placeholder/SKILL.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.dsh",
+                "<project>/.dsh/skills",
+                "<project>/.dsh/skills/placeholder"
+              ],
+              "ledger_files": [
+                "<project>/.dsh/skills/.agent-config-skills.json"
+              ],
+              "refusals": []
+            }
+          }
+        },
+        "instruction": {
+          "supported_scopes": [
+            "global",
+            "local"
+          ],
+          "placement": "inline_block",
+          "scopes": {
+            "global": {
+              "config_files": [
+                "~/.dsh/AGENTS.md"
+              ],
+              "directories": [
+                "~/.dsh"
+              ],
+              "ledger_files": [
+                "~/.dsh/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            },
+            "local": {
+              "config_files": [
+                "<project>/AGENTS.md"
+              ],
+              "directories": [
+                "<project>",
+                "<project>/.dsh"
+              ],
+              "ledger_files": [
+                "<project>/.dsh/.agent-config-instructions.json"
+              ],
+              "refusals": []
+            }
+          }
+        }
+      }
+    },
+    {
       "id": "forge",
       "display_name": "Forge",
       "supported_scopes": [

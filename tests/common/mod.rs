@@ -62,6 +62,7 @@ impl IsolatedGlobalEnv {
             "CLAUDE_CONFIG_DIR",
             "HERMES_HOME",
             "PI_CODING_AGENT_DIR",
+            "DSH_HOME",
         ];
         let saved = vars
             .into_iter()
@@ -80,6 +81,7 @@ impl IsolatedGlobalEnv {
         env::set_var("CLAUDE_CONFIG_DIR", home_canon.join(".claude"));
         env::set_var("HERMES_HOME", home_canon.join(".hermes"));
         env::set_var("PI_CODING_AGENT_DIR", home_canon.join(".pi").join("agent"));
+        env::set_var("DSH_HOME", home_canon.join(".dsh"));
 
         Self {
             _lock: lock,
