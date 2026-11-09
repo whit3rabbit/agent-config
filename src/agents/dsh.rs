@@ -421,10 +421,7 @@ mod tests {
         agent
             .install_skill(&scope, &skill_spec("alpha-skill", "myapp"))
             .unwrap();
-        assert!(dir
-            .path()
-            .join(".dsh/skills/alpha-skill/SKILL.md")
-            .exists());
+        assert!(dir.path().join(".dsh/skills/alpha-skill/SKILL.md").exists());
     }
 
     #[test]

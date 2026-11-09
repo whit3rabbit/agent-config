@@ -4,6 +4,43 @@ All notable changes to this crate are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 follows [SemVer](https://semver.org/) once 1.0 ships.
 
+## [0.5.1] - 2026-11-08
+
+### Added
+
+- **`dsh` (DeepSeek Harness) integration**: prompt rules, instructions
+  (`InlineBlock`), and skills across Global and Local scopes.
+  `paths::dsh_home()` honors a `DSH_HOME` override. Registered in `all()`,
+  `skill_capable()`, and `instruction_capable()`, with golden fixtures and
+  [docs/agents/dsh.md](docs/agents/dsh.md).
+- End-to-end test suites for both CLIs (`agentconfig`, `skillz`) that drive
+  the compiled binaries against fixture packages in tempdirs.
+
+### Fixed
+
+- **CLI skill installs and package lifecycle** ([#2]): the `agentconfig`
+  lockfile now records the effective ref and subpath so `check` and `update`
+  fetch the same source again. `update` keeps tracking components that an
+  upstream package dropped or renamed so a later `remove` can clean them up,
+  and `remove` no longer loses lockfile rows when a harness refuses deletion
+  (re-add an agent with `add --agent` after a filtered removal). `skillz`
+  `add`/`init`/`update` were rebuilt around a shared skill payload path.
+- **Windows support**: `skillz` local-source parsing now accepts
+  rooted-but-driveless paths such as `/abs/path`, matching upstream Node
+  semantics (`has_root` instead of `is_absolute`). Skill assets document the
+  exec bit as a Unix-only concept. The `%HOMEDRIVE%%HOMEPATH%` home fallback
+  in `skills-store` joins paths correctly, which un-breaks the
+  `x86_64-pc-windows-msvc` release binary build.
+
+### Changed
+
+- Docs: full audit of every supported harness with updated official links,
+  plus memory-file support documented per tool.
+- Version alignment: `skills-cli` and `skills-store` bump to 0.5.1 with the
+  library.
+
+[#2]: https://github.com/whit3rabbit/agent-config/pull/2
+
 ## [0.5.0] - 2026-11-08
 
 ### Added

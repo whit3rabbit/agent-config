@@ -64,8 +64,8 @@ Prebuilts cover linux (x86_64, arm64, musl-static), macOS (Intel, Apple
 silicon), and Windows (x86_64), each with a `SHA256SUMS` to check against:
 
 ```bash
-curl -LO https://github.com/whit3rabbit/agent-config/releases/latest/download/skillz-v0.5.0-aarch64-apple-darwin.tar.gz
-tar -xzf skillz-v0.5.0-aarch64-apple-darwin.tar.gz
+curl -LO https://github.com/whit3rabbit/agent-config/releases/latest/download/skillz-v0.5.1-aarch64-apple-darwin.tar.gz
+tar -xzf skillz-v0.5.1-aarch64-apple-darwin.tar.gz
 ```
 
 With a Rust toolchain, install from a clone of this repository:

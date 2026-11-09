@@ -216,8 +216,8 @@ pub fn instruction_placements(id: &str) -> &'static [crate::spec::InstructionPla
             &[InstructionPlacement::StandaloneFile]
         }
         "amp" | "antigravitycli" | "codebuddy" | "codex" | "copilot" | "crush" | "dsh"
-        | "forge" | "gemini" | "hermes" | "junie" | "openclaw" | "opencode" | "pi"
-        | "qodercli" | "qwen" | "trae" => &[InstructionPlacement::InlineBlock],
+        | "forge" | "gemini" | "hermes" | "junie" | "openclaw" | "opencode" | "pi" | "qodercli"
+        | "qwen" | "trae" => &[InstructionPlacement::InlineBlock],
         _ => &[],
     }
 }
