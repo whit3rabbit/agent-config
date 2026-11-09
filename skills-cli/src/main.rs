@@ -21,6 +21,7 @@ mod http;
 mod prompt;
 mod resolver;
 mod search_multiselect;
+mod skill_payload;
 mod source_parser;
 mod update_source;
 mod wellknown;

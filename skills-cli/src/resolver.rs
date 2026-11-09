@@ -18,7 +18,7 @@ pub struct ResolvedSkills {
     /// Blob result when the fast path succeeded.
     pub blob_result: Option<blob::BlobInstallResult>,
     /// Temp dir cleaned up when dropped.
-    pub temp_dir: Option<TempClone>,
+    _temp_dir: Option<TempClone>,
     /// Directory skills were discovered in (the source root).
     pub root_dir: Option<PathBuf>,
     /// Commit checked out for git sources.
@@ -53,7 +53,7 @@ pub fn resolve_skills(
     #[allow(unused_assignments)]
     let mut discovery: Option<Discovery> = None;
     let mut blob_result: Option<blob::BlobInstallResult> = None;
-    let mut temp_dir: Option<PathBuf> = None;
+    let mut temp_dir: Option<TempClone> = None;
     let mut root_dir: Option<PathBuf> = None;
     let mut commit: Option<String> = None;
 
@@ -70,6 +70,7 @@ pub fn resolve_skills(
                 .clone()
                 .unwrap_or_else(|| PathBuf::from(&parsed.url));
             spinner_message(spinner, "Discovering skills…");
+            root_dir = Some(local_path.clone());
             discovery = Some(discover(
                 local_path,
                 parsed.subpath.as_deref(),
@@ -80,7 +81,7 @@ pub fn resolve_skills(
         SourceKind::WellKnown | SourceKind::Download => {
             spinner_message(spinner, "Downloading source...");
             let downloaded = download_source(&parsed.url)?;
-            temp_dir = Some(downloaded.temp_dir.clone()); // downloads: caller-visible path
+            temp_dir = Some(TempClone(downloaded.temp_dir));
             root_dir = Some(downloaded.root_dir.clone());
             spinner_message(
                 spinner,
@@ -128,12 +129,14 @@ pub fn resolve_skills(
                 spinner_message(spinner, &format!("Found {} skill(s)", blob.skills.len()));
             } else {
                 spinner_message(spinner, "Cloning repository…");
-                temp_dir = Some(git::clone_repo(&parsed.url, parsed.ref_.as_deref())?);
-                commit = temp_dir.as_deref().and_then(git::get_head_commit);
+                let checkout = git::clone_repo(&parsed.url, parsed.ref_.as_deref())?;
+                temp_dir = Some(TempClone(checkout.clone()));
+                commit = git::get_head_commit(&checkout);
+                root_dir = Some(checkout.clone());
                 spinner_message(spinner, "Repository cloned");
                 spinner_message(spinner, "Discovering skills…");
                 discovery = Some(discover(
-                    temp_dir.clone().unwrap(),
+                    checkout,
                     parsed.subpath.as_deref(),
                     options,
                     &mut missing_retry(parsed),
@@ -142,12 +145,14 @@ pub fn resolve_skills(
         }
         SourceKind::GitHub | SourceKind::GitLab | SourceKind::Git => {
             spinner_message(spinner, "Cloning repository…");
-            temp_dir = Some(git::clone_repo(&parsed.url, parsed.ref_.as_deref())?);
-            commit = temp_dir.as_deref().and_then(git::get_head_commit);
+            let checkout = git::clone_repo(&parsed.url, parsed.ref_.as_deref())?;
+            temp_dir = Some(TempClone(checkout.clone()));
+            commit = git::get_head_commit(&checkout);
+            root_dir = Some(checkout.clone());
             spinner_message(spinner, "Repository cloned");
             spinner_message(spinner, "Discovering skills…");
             discovery = Some(discover(
-                temp_dir.clone().unwrap(),
+                checkout,
                 parsed.subpath.as_deref(),
                 options,
                 &mut missing_retry(parsed),
@@ -159,7 +164,7 @@ pub fn resolve_skills(
     Ok(ResolvedSkills {
         discovery,
         blob_result,
-        temp_dir: temp_dir.map(TempClone),
+        _temp_dir: temp_dir,
         root_dir,
         commit,
     })
@@ -262,15 +267,6 @@ pub struct ResolveOptions {
     pub include_duplicate_names: bool,
     /// Skill-name filter applied to blob results.
     pub skill_filter: Option<String>,
-}
-
-/// Whether no valid skills were discovered.
-#[must_use]
-pub fn no_skills(resolved: &ResolvedSkills) -> bool {
-    if let Some(blob) = &resolved.blob_result {
-        return blob.skills.is_empty();
-    }
-    resolved.discovery.skills.is_empty()
 }
 
 /// The "no skills" diagnostic.

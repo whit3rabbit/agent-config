@@ -165,32 +165,38 @@ Follow it."
 | Git URLs                    | `https://...`, `git@host:...`, any `.git` URL |
 | Local directories           | `./pkg`, `/abs/path`, `~/pkg`    |
 
-Git sources clone shallow into a tempdir (`git clone --depth 1`, pinned ref,
-or fetched commit), resolve HEAD, and are discarded after install. The
-lockfile records what was installed so `check`/`update`/`remove` can work
-without re-fetching.
+Git sources clone shallow into a tempdir. The lockfile records the effective
+ref and subpath so `check` and `update` can fetch the same source again.
+`remove` works from the lockfile and the installed files.
 
-- Project lockfile: `agent.config.lock.json` next to your project, meant to
-  be committed.
-- Global lockfile: `lock.json` under the user config dir (`agentconfig/`
-  subdirectory).
+- Project lockfile: `agent.config.lock.json` in the project directory.
+- Global lockfile: `agentconfig/lock.json` under the user config directory.
 
-Each package entry records source, ref, resolved commit, content hash
-(SHA-256 over every contributed file), installed-at timestamp, scope, the
-agent filter, and surfaces used, plus one row per installed (surface, name,
-agent). `check` exits 1 when the upstream hash differs,
-which makes it a CI gate. `update` re-resolves, diffs the hash, and
-reinstalls changed packages, replaying the original filters.
+`check` exits 1 when package content changes or a previous install is
+incomplete. `update` replays the saved filters. It keeps tracking older
+components when an upstream package drops or renames them, so a later
+`remove` can clean them up. If a harness refuses removal, the row stays in
+the lockfile. Use `add --agent` to re-add an agent after a filtered removal.
 
 ## Fallback layouts
 
-With no `agent.config.toml`, `add` recognizes the
-[Agent Plugins 1.0.0](https://agent-plugins.org) directory layout:
-`plugin.json` (name only), `mcp.json` (`mcpServers` shape, including
-`streamable-http` mapped to `http`), and `skills/<name>/SKILL.md` folders.
-Hooks and instructions have no foreign standard, so they need the native
-manifest. `--instruction-file <path>` installs one markdown file as a single
-instruction, with the package name taken from the directory.
+When the source has no `agent.config.toml`, `agentconfig add` imports skills
+and supported MCP entries. It reads `plugin.json` for the package name,
+`mcp.json` for servers, and `skills/<name>/SKILL.md` for skills. A Claude
+plugin with `.claude-plugin/plugin.json` can also supply its default
+`.mcp.json`. [Agent Plugins specification](https://agent-plugins.org/specification),
+[Claude Code plugin manifest reference](https://code.claude.com/docs/en/plugins-reference)
+
+The importer supports stdio, Streamable HTTP, and SSE where the target
+harness supports the transport. Use a PATH executable or an absolute host
+executable for stdio. Entries that need a plugin-relative executable,
+`cwd`, or plugin runtime variables are skipped with a diagnostic. Valid
+servers and skills in the same package can still install.
+
+Use the native manifest for hooks and instructions, or pass
+`--instruction-file <path>` for one Markdown instruction. Package file
+references resolve within the source directory. Each file is capped at
+8 MiB.
 
 ## Diagnostics
 

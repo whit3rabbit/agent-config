@@ -290,9 +290,7 @@ pub fn parse(text: &str) -> CliResult<(Manifest, Vec<Diag>)> {
 
 /// Parse a manifest from a file on disk.
 pub fn load(path: &Path) -> CliResult<(Manifest, Vec<Diag>)> {
-    let text = std::fs::read_to_string(path)
-        .map_err(|e| Diag::new(codes::IO, format!("cannot read {}: {e}", path.display())))?;
-    parse(&text)
+    parse(&crate::source::read_text(path)?)
 }
 
 fn entry<T: for<'de> Deserialize<'de>>(

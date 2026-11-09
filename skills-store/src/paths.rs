@@ -21,7 +21,11 @@ pub fn home_dir() -> PathBuf {
 fn home_fallback_windows() -> Option<PathBuf> {
     // shutil-style fallback: %HOMEDRIVE%%HOMEPATH%
     match (env_path("HOMEDRIVE"), env_path("HOMEPATH")) {
-        (Some(drive), Some(path)) => Some(drive.join(path.trim_start_matches('\\'))),
+        // Keep HOMEPATH's leading separator: joining a rooted-but-prefixless
+        // path (`\Users\me`) onto `C:` preserves the drive prefix, yielding
+        // `C:\Users\me` (a stripped relative join would produce the
+        // drive-relative `C:Users\me`).
+        (Some(drive), Some(path)) => Some(drive.join(path)),
         _ => None,
     }
 }

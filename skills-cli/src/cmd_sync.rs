@@ -847,6 +847,7 @@ pub fn run_sync(_args: &[String], mut options: SyncOptions) {
                         subagents: None,
                         well_known_digest: None,
                         install_mode: None,
+                        placements: vec![],
                     },
                 );
             }

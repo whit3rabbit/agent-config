@@ -17,6 +17,7 @@ use serde::Deserialize;
 
 use crate::diag::{codes, CliResult, Diag};
 use crate::manifest::{HookCommandSpec, Manifest, MatcherSpec, McpEntry, SkillEntry};
+use crate::source::{package_path, read_capped, read_text};
 
 /// Upper bound for any single file the CLI ingests from a package, matching
 /// the library's `read_capped` limit.
@@ -126,32 +127,47 @@ pub struct InstructionTemplate {
 /// Build installable entries from a manifest. `base` is the directory the
 /// manifest lives in; relative file references resolve against it.
 pub fn build_entries(manifest: &Manifest, base: &Path) -> (Vec<Entry>, Vec<Diag>) {
+    let (entries, diags, _) = build_entries_with_files(manifest, base);
+    (entries, diags)
+}
+
+pub(crate) fn build_entries_with_files(
+    manifest: &Manifest,
+    base: &Path,
+) -> (Vec<Entry>, Vec<Diag>, Vec<PathBuf>) {
     let owner = manifest.package.name.clone();
     let mut diags = Vec::new();
     let mut entries = Vec::new();
+    let mut files = Vec::new();
 
     for hook in &manifest.hooks {
         match build_hook(hook, base, &mut diags) {
-            Ok(spec) => entries.push(Entry {
-                surface: SurfaceKind::Hooks,
-                name: hook.tag.clone(),
-                spec: ItemSpec::Hook(Box::new(spec)),
-                agents: hook.agents.clone(),
-                skip: hook.skip.clone(),
-            }),
+            Ok(spec) => {
+                files.extend(hook.rules_file.iter().map(PathBuf::from));
+                entries.push(Entry {
+                    surface: SurfaceKind::Hooks,
+                    name: hook.tag.clone(),
+                    spec: ItemSpec::Hook(Box::new(spec)),
+                    agents: hook.agents.clone(),
+                    skip: hook.skip.clone(),
+                });
+            }
             Err(diag) => diags.push(entry_diag("hooks", &hook.tag, diag)),
         }
     }
 
     for instruction in &manifest.instructions {
         match build_instruction(instruction, base, &owner, &mut diags) {
-            Ok(template) => entries.push(Entry {
-                surface: SurfaceKind::Instructions,
-                name: instruction.name.clone(),
-                spec: ItemSpec::Instruction(template),
-                agents: instruction.agents.clone(),
-                skip: instruction.skip.clone(),
-            }),
+            Ok(template) => {
+                files.extend(instruction.file.iter().map(PathBuf::from));
+                entries.push(Entry {
+                    surface: SurfaceKind::Instructions,
+                    name: instruction.name.clone(),
+                    spec: ItemSpec::Instruction(template),
+                    agents: instruction.agents.clone(),
+                    skip: instruction.skip.clone(),
+                });
+            }
             Err(diag) => diags.push(entry_diag("instructions", &instruction.name, diag)),
         }
     }
@@ -171,18 +187,29 @@ pub fn build_entries(manifest: &Manifest, base: &Path) -> (Vec<Entry>, Vec<Diag>
 
     for skill in &manifest.skills {
         match build_skill(skill, base, &owner, &mut diags) {
-            Ok(spec) => entries.push(Entry {
-                surface: SurfaceKind::Skills,
-                name: spec.name.clone(),
-                spec: ItemSpec::Skill(Box::new(spec)),
-                agents: skill.agents.clone(),
-                skip: skill.skip.clone(),
-            }),
+            Ok(spec) => {
+                if let Some(path) = &skill.path {
+                    let dir = Path::new(path);
+                    files.push(dir.join("SKILL.md"));
+                    files.extend(
+                        spec.assets
+                            .iter()
+                            .map(|asset| dir.join(&asset.relative_path)),
+                    );
+                }
+                entries.push(Entry {
+                    surface: SurfaceKind::Skills,
+                    name: spec.name.clone(),
+                    spec: ItemSpec::Skill(Box::new(spec)),
+                    agents: skill.agents.clone(),
+                    skip: skill.skip.clone(),
+                });
+            }
             Err(diag) => diags.push(entry_diag("skills", skill_name_label(skill), diag)),
         }
     }
 
-    (entries, diags)
+    (entries, diags, files)
 }
 
 fn entry_diag(section: &str, name: &str, diag: Diag) -> Diag {
@@ -244,7 +271,7 @@ fn build_hook(
         builder = builder.rules(inline.clone());
     }
     if let Some(rel) = &hook.rules_file {
-        let text = read_text_capped(&base.join(rel))?;
+        let text = read_text(&package_path(base, Path::new(rel))?)?;
         builder = builder.rules(text);
     }
     if let Some(timeout) = hook.timeout {
@@ -276,7 +303,7 @@ fn build_instruction(
             ));
         }
         (Some(inline), None) => inline.clone(),
-        (None, Some(rel)) => read_text_capped(&base.join(rel))?,
+        (None, Some(rel)) => read_text(&package_path(base, Path::new(rel))?)?,
         (None, None) => {
             return Err(Diag::new(
                 codes::INVALID_ENTRY,
@@ -477,8 +504,8 @@ fn read_skill_dir(
     owner: &str,
     diags: &mut Vec<Diag>,
 ) -> CliResult<SkillSpec> {
-    let dir = base.join(rel);
-    let meta = std::fs::symlink_metadata(&dir)
+    let dir = package_path(base, Path::new(rel))?;
+    let meta = std::fs::symlink_metadata(base.join(rel))
         .map_err(|e| Diag::new(codes::IO, format!("cannot stat {}: {e}", dir.display())))?;
     if meta.is_symlink() || !meta.is_dir() {
         return Err(Diag::new(
@@ -491,7 +518,7 @@ fn read_skill_dir(
     }
 
     let skill_md = dir.join("SKILL.md");
-    let text = read_text_capped(&skill_md)?;
+    let text = read_text(&package_path(base, &Path::new(rel).join("SKILL.md"))?)?;
     let (yaml, body) = split_frontmatter(&text).ok_or_else(|| {
         Diag::new(
             codes::INVALID_ENTRY,
@@ -512,7 +539,13 @@ fn read_skill_dir(
     let name = fm
         .name
         .clone()
-        .unwrap_or_else(|| dir_name.clone())
+        .unwrap_or_else(|| {
+            if rel == "." {
+                owner.to_string()
+            } else {
+                dir_name
+            }
+        })
         .trim()
         .to_string();
     let description = fm.description.clone().ok_or_else(|| {
@@ -644,33 +677,35 @@ fn collect_assets(root: &Path, dir: &Path, diags: &mut Vec<Diag>) -> CliResult<V
         {
             continue;
         }
+        let relative = path
+            .strip_prefix(root)
+            .expect("asset came from the skill directory");
+        let canonical = match package_path(root, relative) {
+            Ok(canonical) if canonical == path => canonical,
+            Ok(_) => {
+                diags.push(Diag::new(
+                    codes::SYMLINK_SKIPPED,
+                    format!("skipping linked skill asset {}", path.display()),
+                ));
+                continue;
+            }
+            Err(diag) => {
+                diags.push(diag);
+                continue;
+            }
+        };
         if meta.is_dir() {
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if matches!(name, ".git" | "node_modules") {
                 continue;
             }
-            assets.extend(collect_assets(root, &path, diags)?);
+            assets.extend(collect_assets(root, &canonical, diags)?);
             continue;
         }
-        let bytes = std::fs::read(&path)
-            .map_err(|e| Diag::new(codes::IO, format!("cannot read {}: {e}", path.display())))?;
-        if bytes.len() as u64 > MAX_FILE_BYTES {
-            return Err(Diag::new(
-                codes::FILE_TOO_LARGE,
-                format!(
-                    "{} is {} bytes; skill assets are capped at {MAX_FILE_BYTES}",
-                    path.display(),
-                    bytes.len()
-                ),
-            ));
-        }
-        let relative = path
-            .strip_prefix(root)
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|_| path.clone());
+        let bytes = read_capped(&canonical)?;
         let executable = is_executable(&meta);
         assets.push(SkillAsset {
-            relative_path: relative,
+            relative_path: relative.to_path_buf(),
             bytes,
             executable,
         });
@@ -745,27 +780,6 @@ fn parse_matcher(spec: &MatcherSpec) -> CliResult<Matcher> {
             }
         }
     }
-}
-
-fn read_text_capped(path: &Path) -> CliResult<String> {
-    let bytes = std::fs::read(path)
-        .map_err(|e| Diag::new(codes::IO, format!("cannot read {}: {e}", path.display())))?;
-    if bytes.len() as u64 > MAX_FILE_BYTES {
-        return Err(Diag::new(
-            codes::FILE_TOO_LARGE,
-            format!(
-                "{} is {} bytes; capped at {MAX_FILE_BYTES}",
-                path.display(),
-                bytes.len()
-            ),
-        ));
-    }
-    String::from_utf8(bytes).map_err(|e| {
-        Diag::new(
-            codes::IO,
-            format!("{} is not valid UTF-8: {e}", path.display()),
-        )
-    })
 }
 
 #[cfg(test)]
@@ -950,7 +964,13 @@ path = "skills/pdf"
         );
         assert!(spec.body.contains("Do things."));
         assert_eq!(spec.assets.len(), 1);
+        // The exec bit is a Unix-only concept here: `is_executable` is
+        // hardcoded `false` on non-Unix platforms, so the expected value
+        // follows the platform.
+        #[cfg(unix)]
         assert!(spec.assets[0].executable);
+        #[cfg(not(unix))]
+        assert!(!spec.assets[0].executable);
         assert_eq!(
             spec.assets[0].relative_path,
             PathBuf::from("scripts/run.sh")

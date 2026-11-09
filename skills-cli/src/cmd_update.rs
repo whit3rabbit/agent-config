@@ -1,6 +1,7 @@
 //! The `skillz update` / `skillz check` command, ported from `src/update.ts`
 //! (sequential source checks; same outputs and lock handling).
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use skills_store::error::SkillsError;
@@ -11,7 +12,7 @@ use skills_store::{installer, locks};
 use crate::color;
 use crate::common;
 use crate::prompt;
-use crate::source_parser::{self, ParsedSource};
+use crate::skill_payload::{find_locked, SkillPayload};
 use crate::update_source;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -140,97 +141,7 @@ fn matches_skill_filter(name: &str, filter: &[String]) -> bool {
             .any(|f| f.to_lowercase() == name.to_lowercase())
 }
 
-fn get_skip_reason(entry: &locks::SkillLockEntry) -> &'static str {
-    if entry.source_type == "local" {
-        return "Local path";
-    }
-    if entry.source_type == "git" {
-        return "Git URL";
-    }
-    if entry.source_type == "well-known" {
-        return "Well-known skill";
-    }
-    if entry.skill_folder_hash.is_empty() {
-        return "Private or deleted repo";
-    }
-    if entry.skill_path.is_none() {
-        return "No skill path recorded";
-    }
-    "No version tracking"
-}
-
-fn get_install_source(source_url: &str, source_type: &str, ref_: Option<&str>) -> String {
-    let mut url = source_url.to_string();
-    if source_type == "well-known" {
-        if let Some(index) = url.find("/.well-known/") {
-            url.truncate(index);
-        }
-    }
-    update_source::format_source_input(&url, ref_)
-}
-
-fn print_skipped_skills(skipped: &[(&String, &str, &locks::SkillLockEntry)]) {
-    if skipped.is_empty() {
-        return;
-    }
-    println!();
-    println!(
-        "{}{} skill(s) cannot be checked automatically:{}",
-        color::dim_gray(""),
-        skipped.len(),
-        color::reset("")
-    );
-    #[allow(clippy::type_complexity)]
-    let mut grouped: Vec<(String, Vec<&str>, &str, Option<&str>, String)> = Vec::new();
-    for (name, reason, entry) in skipped {
-        let source =
-            get_install_source(&entry.source_url, &entry.source_type, entry.ref_.as_deref());
-        match grouped
-            .iter_mut()
-            .find(|(source_key, _, _, _, _)| *source_key == source)
-        {
-            Some((_, names, _, _, _)) => names.push(name),
-            None => grouped.push((
-                source,
-                vec![name],
-                reason,
-                entry.ref_.as_deref(),
-                entry.source_url.clone(),
-            )),
-        }
-    }
-    for (source, names, reason, ref_, source_url) in &grouped {
-        if names.len() == 1 {
-            println!(
-                "  {}{} {}({}){}",
-                color::text("•"),
-                names[0],
-                color::dim("("),
-                reason,
-                color::reset(")")
-            );
-        } else {
-            println!(
-                "  {}{} {}({}){}",
-                color::text("•"),
-                names.join(", "),
-                color::dim("("),
-                reason,
-                color::reset(")")
-            );
-        }
-        let update_source = update_source::format_source_input(source_url, *ref_);
-        println!(
-            "    {}To update: {}skillz add {update_source} -g -y{}",
-            color::dim(""),
-            color::text(""),
-            color::reset("")
-        );
-        let _ = source;
-    }
-}
-
-/// The `skillz update` / `skillz check` entry point.
+/// Check for updates or reinstall changed skills in their recorded scope.
 pub fn run_update(args: &[String], mode: &'static str) {
     let (mut options, positional) = parse_update_options(args);
     if mode == "check" {
@@ -340,781 +251,360 @@ fn report_outdated(options: &UpdateCheckOptions, name: &str) {
     }
 }
 
-fn placement_agents(global: bool) -> Vec<&'static AgentConfig> {
-    let mut agents = common::non_interactive_target_agents(&common::current_dir());
-    if global {
-        let supported: Vec<&AgentConfig> = agents
-            .iter()
-            .copied()
-            .filter(|a| registry_global_dir(a).is_some())
-            .collect();
-        if !supported.is_empty() {
-            agents = supported;
-        }
-    }
-    agents
+fn report_failure(name: &str, error: &SkillsError) {
+    prompt::log_error(&format!("{}: {}", sanitize_metadata(name), error.plain()));
 }
 
-fn registry_global_dir(agent: &AgentConfig) -> Option<std::path::PathBuf> {
-    agent.global_skills_dir(&skills_store::registry::DetectContext::from_env(
-        &common::current_dir(),
-    ))
+struct TrackedSkill<'a> {
+    name: &'a str,
+    path: Option<&'a str>,
+    hash: Option<&'a str>,
+    tree_hash: Option<&'a str>,
+    mode: Option<&'a str>,
+    placements: &'a [locks::SkillPlacement],
+    subagents: &'a [String],
 }
 
-fn print_fetching(count: usize) {
-    if count == 0 {
-        return;
-    }
-    println!(
-        "{}Fetching {} source{}…{}",
-        color::dim_gray(""),
-        count,
-        if count == 1 { "" } else { "s" },
-        color::reset("")
-    );
+struct UpdatedSkill {
+    name: String,
+    hash: String,
+    tree_hash: Option<String>,
+    path: Option<String>,
+    placements: Vec<locks::SkillPlacement>,
 }
 
-fn report_install(name: &str, ok: bool, failures: &[String], error: Option<&str>) -> bool {
-    let safe_name = sanitize_metadata(name);
-    for failure in failures {
-        println!(
-            "  {}{}{}",
-            color::dim_gray("\u{2717} "),
-            failure,
-            color::reset("")
-        );
-    }
-    if ok && error.is_none() {
-        println!(
-            "  {}\u{2713}{} Updated {safe_name}",
-            color::text(""),
-            color::reset("")
-        );
-        return true;
-    }
-    println!(
-        "  {}Failed to update {safe_name}{}{}",
-        color::dim_gray("\u{2717}"),
-        error.map(|err| format!(": {err}")).unwrap_or_default(),
-        color::reset("")
-    );
-    false
+type SourceGroups<'a> = BTreeMap<(&'a str, &'a str, Option<&'a str>), Vec<TrackedSkill<'a>>>;
+
+fn is_git(kind: &str) -> bool {
+    matches!(kind, "github" | "gitlab" | "git")
 }
 
 fn update_global_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) {
-    let lock = locks::read_skill_lock().unwrap_or_default();
-    let skill_names: Vec<String> = lock
-        .skills
-        .keys()
-        .filter(|name| matches_skill_filter(name, &options.skills))
-        .cloned()
-        .collect();
-    let mut success_count = 0;
-    let mut fail_count = 0;
-
-    if skill_names.is_empty() && options.skills.is_empty() {
-        println!(
-            "{}No global skills tracked in lock file.{}",
-            color::dim_gray(""),
-            color::reset("")
-        );
-        println!(
-            "{}Install skills with{} {}skillz add <package> -g{}",
-            color::dim_gray(""),
-            color::reset(""),
-            color::text(""),
-            color::reset("")
-        );
-        return (0, 0, 0);
-    }
-
-    let mut skipped: Vec<(String, &'static str, locks::SkillLockEntry)> = Vec::new();
-    let mut checkable: Vec<(String, locks::SkillLockEntry)> = Vec::new();
-
-    for skill_name in &skill_names {
-        let Some(entry) = lock.skills.get(skill_name) else {
-            continue;
-        };
-        if entry.skill_folder_hash.is_empty() || entry.skill_path.is_none() {
-            skipped.push((skill_name.clone(), get_skip_reason(entry), entry.clone()));
+    let mut lock = match locks::read_skill_lock() {
+        Ok(lock) => lock,
+        Err(err) => {
+            report_failure("global lockfile", &err);
+            return (0, 1, 0);
+        }
+    };
+    let mut groups = SourceGroups::new();
+    let mut found = 0;
+    for (name, entry) in &lock.skills {
+        if !matches_skill_filter(name, &options.skills) {
             continue;
         }
-        checkable.push((skill_name.clone(), entry.clone()));
-    }
-
-    let on_disk: std::collections::HashSet<String> =
-        installer::list_installed_skills(Some(true), &common::current_dir(), None)
-            .into_iter()
-            .map(|skill| skill.name)
-            .collect();
-
-    // Group by source + ref.
-    type GlobalGroup = (String, Option<String>, Vec<(String, locks::SkillLockEntry)>);
-    let mut groups: Vec<GlobalGroup> = Vec::new();
-    for (name, entry) in &checkable {
-        let name = name.clone();
-        let entry = entry.clone();
-        let key_source = entry.source.clone();
-        match groups
-            .iter_mut()
-            .find(|(source, ref_, _)| *source == key_source && *ref_ == entry.ref_)
-        {
-            Some((_, _, items)) => items.push((name, entry)),
-            None => groups.push((key_source, entry.ref_.clone(), vec![(name, entry)])),
-        }
-    }
-
-    print_fetching(groups.len());
-    let mut updates: Vec<(String, locks::SkillLockEntry, String)> = Vec::new();
-    for (source, _ref_, items) in &groups {
-        println!(
-            "{}Checking skills from source: {}{}\x1b[K",
-            color::dim_gray(""),
-            source,
-            color::reset("")
-        );
-        let first_entry = &items[0].1;
-        let _parsed = parse_update_source(&first_entry.source_url, &first_entry.source_type);
-        let checkout: Result<(Option<crate::blob::RepoTree>, Option<std::path::PathBuf>), ()> =
-            (|| {
-                if first_entry.source_type == "github" {
-                    if let Some(tree) =
-                        crate::blob::fetch_repo_tree(source, first_entry.ref_.as_deref())
-                    {
-                        let tree_paths: std::collections::HashSet<&str> = tree
-                            .tree
-                            .iter()
-                            .filter(|entry| entry.kind == "blob")
-                            .map(|entry| entry.path.as_str())
-                            .collect();
-                        let all_present = items.iter().all(|(_, entry)| {
-                            entry
-                                .skill_path
-                                .as_ref()
-                                .map(|path| tree_paths.contains(path.as_str()))
-                                .unwrap_or(true)
-                        });
-                        if all_present {
-                            return Ok((Some(tree), None));
-                        }
-                        println!(
-                            "  {}Skill paths changed; resolving via Git clone{}",
-                            color::dim_gray(""),
-                            color::reset("")
-                        );
-                    } else {
-                        println!(
-                            "  {}GitHub API unavailable; checking via Git clone{}",
-                            color::dim_gray(""),
-                            color::reset("")
-                        );
-                    }
-                }
-                let temp =
-                    crate::git::clone_repo(&first_entry.source_url, first_entry.ref_.as_deref())
-                        .map_err(|_| ())?;
-                Ok((None, Some(temp)))
-            })();
-
-        match checkout {
-            Err(()) => {
-                println!(
-                    "  {}Failed to check skills from {source}{}",
-                    color::dim_gray(""),
-                    color::reset("")
-                );
-                fail_count += items.len();
-                continue;
-            }
-            Ok((tree, temp_dir)) => {
-                if let Some(tree) = &tree {
-                    for (name, entry) in items {
-                        let latest = entry.skill_path.as_ref().and_then(|path| {
-                            crate::blob::get_skill_folder_hash_from_tree(tree, path)
-                        });
-                        if let Some(latest) = latest {
-                            if latest != entry.skill_folder_hash || !on_disk.contains(name) {
-                                updates.push((name.clone(), entry.clone(), latest));
-                            }
-                        }
-                    }
-                } else if let Some(temp_dir) = temp_dir {
-                    let discovery = skills_store::skills::discover_skills(
-                        &temp_dir,
-                        None,
-                        &skills_store::skills::DiscoverOptions {
-                            full_depth: true,
-                            include_duplicate_names: true,
-                            ..Default::default()
-                        },
-                    );
-                    match discovery {
-                        Ok(discovered) => {
-                            for (name, entry) in items {
-                                let Some(locked_path) = &entry.skill_path else {
-                                    continue;
-                                };
-                                // Find the skill with the same name (exact path or relocation).
-                                let matches: Vec<&skills_store::skills::Skill> = discovered
-                                    .skills
-                                    .iter()
-                                    .filter(|skill| {
-                                        skills_store::sanitize::normalize_skill_name(&skill.name)
-                                            == skills_store::sanitize::normalize_skill_name(name)
-                                    })
-                                    .collect();
-                                if matches.is_empty() {
-                                    continue;
-                                }
-                                if matches.len() > 1 {
-                                    println!(
-                                        "  {}Multiple current paths match {name}; skipping{}",
-                                        color::dim_gray(""),
-                                        color::reset("")
-                                    );
-                                    continue;
-                                }
-                                let current = matches[0];
-                                let folder_hash = locks::compute_folder_hash(&current.path).ok();
-                                let relocated = format!(
-                                    "{}/SKILL.md",
-                                    current.path.to_string_lossy().replace('\\', "/")
-                                ) != *locked_path;
-                                if relocated
-                                    || folder_hash.as_ref().is_some_and(|hash| {
-                                        *hash != entry.skill_folder_hash || !on_disk.contains(name)
-                                    })
-                                {
-                                    let mut entry = entry.clone();
-                                    entry.skill_path = Some(format!(
-                                        "{}/SKILL.md",
-                                        relative_path(&temp_dir, &current.path)
-                                    ));
-                                    updates.push((
-                                        name.clone(),
-                                        entry,
-                                        folder_hash.unwrap_or_default(),
-                                    ));
-                                }
-                            }
-                        }
-                        Err(_) => {
-                            println!(
-                                "  {}Failed to check skills from {source}{}",
-                                color::dim_gray(""),
-                                color::reset("")
-                            );
-                        }
-                    }
-                    let _ = crate::git::cleanup_temp_dir(&temp_dir);
-                }
-            }
-        }
-    }
-
-    let checked_count = skill_names.len();
-    if checkable.is_empty() && skipped.is_empty() {
-        return (0, 0, 0);
-    }
-    if updates.is_empty() {
-        println!(
-            "{}\u{2713} All global skills are up to date{}",
-            color::text(""),
-            color::reset("")
-        );
-        print_skipped_skills(
-            &skipped
-                .iter()
-                .map(|(name, reason, entry)| (name, *reason, entry))
-                .collect::<Vec<_>>(),
-        );
-        return (0, 0, checked_count);
-    }
-    if options.report_outdated {
-        for (name, _, _) in &updates {
-            report_outdated(options, name);
-        }
-        print_skipped_skills(
-            &skipped
-                .iter()
-                .map(|(name, reason, entry)| (name, *reason, entry))
-                .collect::<Vec<_>>(),
-        );
-        return (0, 0, checked_count);
-    }
-
-    println!(
-        "{}Found {} global update(s){}",
-        color::text(""),
-        updates.len(),
-        color::reset("")
-    );
-    println!();
-
-    let agents = placement_agents(true);
-    for (name, entry, new_hash) in &updates {
-        println!(
-            "{}Updating {}…{}",
-            color::text(""),
-            sanitize_metadata(name),
-            color::reset("")
-        );
-        let install_url = update_source::build_global_update_install_source(entry);
-        let Some(install_url) = install_url else {
+        found += 1;
+        if !is_git(&entry.source_type) {
             println!(
-                "  {}Cannot update {}: lock file is missing sourceUrl for this generic Git source{}",
-                color::dim_gray("\u{2717}"),
+                "{}: source type {} has no Git update",
                 sanitize_metadata(name),
-                color::reset("")
+                entry.source_type
             );
-            fail_count += 1;
             continue;
-        };
-        let parsed = parse_update_source(&install_url, &entry.source_type);
-        let full_depth = update_source::should_use_full_depth_for_global(entry);
-        match reinstall_skill(
-            &parsed,
-            name,
-            &agents,
-            false,
-            entry.install_mode.as_deref() == Some("copy"),
-            full_depth,
-        ) {
-            Ok(()) => {
-                if let Ok(mut lock) = locks::read_skill_lock() {
-                    if let Some(mut entry) = lock.skills.get(name).cloned() {
-                        entry.skill_folder_hash = new_hash.clone();
-                        entry.updated_at = crate::cmd_add::iso_now();
-                        lock.skills.insert(name.clone(), entry);
-                        let _ = locks::write_skill_lock(&lock);
-                    }
-                }
-                if report_install(name, true, &[], None) {
-                    success_count += 1;
-                }
-            }
-            Err(error) => {
-                if report_install(name, false, &[error], None) {
-                    success_count += 1;
-                } else {
-                    fail_count += 1;
-                }
-            }
         }
+        groups
+            .entry((&entry.source_type, &entry.source_url, entry.ref_.as_deref()))
+            .or_default()
+            .push(TrackedSkill {
+                name,
+                path: entry.skill_path.as_deref(),
+                hash: entry.computed_hash.as_deref(),
+                tree_hash: Some(entry.skill_folder_hash.as_str()).filter(|hash| !hash.is_empty()),
+                mode: entry.install_mode.as_deref(),
+                placements: &entry.placements,
+                subagents: &[],
+            });
     }
-
-    print_skipped_skills(
-        &skipped
-            .iter()
-            .map(|(name, reason, entry)| (name, *reason, entry))
-            .collect::<Vec<_>>(),
-    );
-    (success_count, fail_count, checked_count)
-}
-
-fn parse_update_source(install_url: &str, source_type: &str) -> ParsedSource {
-    if source_type == "github" {
-        source_parser::parse_source_with_host(install_url, "github.com")
-    } else {
-        source_parser::parse_source(install_url)
-    }
-}
-
-fn relative_path(base: &Path, path: &Path) -> String {
-    path.strip_prefix(base)
-        .map(|p| p.to_string_lossy().replace('\\', "/"))
-        .unwrap_or_default()
-}
-
-fn reinstall_skill(
-    parsed: &ParsedSource,
-    skill_name: &str,
-    agents: &[&'static AgentConfig],
-    global: bool,
-    copy: bool,
-    full_depth: bool,
-) -> Result<(), String> {
-    let resolve_options = crate::resolver::ResolveOptions {
-        full_depth,
-        include_internal: true,
-        ..Default::default()
-    };
-    let resolved = crate::resolver::resolve_skills(parsed, &resolve_options, None)
-        .map_err(|error| error.plain())?;
-    let present = if resolved.blob_result.is_some() {
-        resolved
-            .blob_result
-            .as_ref()
-            .map(|blob| {
-                blob.skills
-                    .iter()
-                    .any(|skill| skill.name.eq_ignore_ascii_case(skill_name))
-            })
-            .unwrap_or(false)
-    } else {
-        resolved
-            .discovery
+    let (updates, mut failed) = update_groups(groups, options, true);
+    for update in &updates {
+        let entry = lock
             .skills
-            .iter()
-            .any(|skill| skill.name.eq_ignore_ascii_case(skill_name))
-    };
-    if !present {
-        return Err(format!(
-            "skill {skill_name} not found in the fetched source"
-        ));
+            .get_mut(&update.name)
+            .expect("update came from the lock");
+        entry.computed_hash = Some(update.hash.clone());
+        entry.skill_folder_hash = update.tree_hash.clone().unwrap_or_default();
+        entry.skill_path = update.path.clone();
+        entry.placements = update.placements.clone();
+        entry.updated_at = crate::cmd_add::iso_now();
     }
-
-    let mode = if copy {
-        skills_store::installer::InstallMode::Copy
-    } else {
-        common_default_mode(agents)
-    };
-    let cwd = common::current_dir();
-    let mut warnings: Vec<SkillsError> = Vec::new();
-    let mut failures: Vec<String> = Vec::new();
-    let mut any_success = false;
-    let skill_path = match resolved.blob_result.as_ref() {
-        Some(blob) => {
-            let skill = blob
-                .skills
-                .iter()
-                .find(|skill| skill.name.eq_ignore_ascii_case(skill_name));
-            match skill {
-                Some(skill) => {
-                    for agent in agents {
-                        let outcome = skills_store::installer::install_skill_snapshot(
-                            &skill.name,
-                            &skill.files,
-                            agent,
-                            &skills_store::installer::InstallOptions {
-                                global: if global {
-                                    skills_store::installer::Scope::Global
-                                } else {
-                                    skills_store::installer::Scope::Project
-                                },
-                                cwd: Some(cwd.clone()),
-                                mode: Some(mode),
-                                ..Default::default()
-                            },
-                            &mut warnings,
-                        );
-                        if outcome.success {
-                            any_success = true;
-                        } else if let Some(error) = outcome.error {
-                            failures.push(format!("{}: {error}", agent.display_name));
-                        }
-                    }
-                    skill.name.clone()
-                }
-                None => return Err("skill not found".to_string()),
-            }
+    if !updates.is_empty() {
+        if let Err(err) = locks::write_skill_lock(&lock) {
+            report_failure("global lockfile", &err);
+            failed += updates.len();
+            return (0, failed, found);
         }
-        None => {
-            let skill = resolved
-                .discovery
-                .skills
-                .iter()
-                .find(|skill| skill.name.eq_ignore_ascii_case(skill_name));
-            match skill {
-                Some(skill) => {
-                    for agent in agents {
-                        let outcome = skills_store::installer::install_skill_dir(
-                            &skill.path,
-                            agent,
-                            &skills_store::installer::InstallOptions {
-                                global: if global {
-                                    skills_store::installer::Scope::Global
-                                } else {
-                                    skills_store::installer::Scope::Project
-                                },
-                                cwd: Some(cwd.clone()),
-                                mode: Some(mode),
-                                ..Default::default()
-                            },
-                            &mut warnings,
-                        );
-                        if outcome.success {
-                            any_success = true;
-                        } else if let Some(error) = outcome.error {
-                            failures.push(format!("{}: {error}", agent.display_name));
-                        }
-                    }
-                    skill.name.clone()
-                }
-                None => return Err("skill not found".to_string()),
-            }
-        }
-    };
-    let _ = skill_path;
-    if !any_success && !failures.is_empty() {
-        return Err(failures.join("; "));
     }
-    Ok(())
-}
-
-fn common_default_mode(agents: &[&'static AgentConfig]) -> skills_store::installer::InstallMode {
-    skills_store::installer::default_install_mode(agents)
+    (updates.len(), failed, found)
 }
 
 fn update_project_skills(options: &UpdateCheckOptions) -> (usize, usize, usize) {
     let cwd = common::current_dir();
-    let local_lock = locks::read_local_lock(&cwd).unwrap_or_default();
-    let project_skills: Vec<(String, locks::LocalSkillLockEntry)> = local_lock
-        .skills
-        .iter()
-        .filter(|(name, entry)| {
-            matches_skill_filter(name, &options.skills)
-                && entry.source_type != "node_modules"
-                && entry.source_type != "local"
-        })
-        .map(|(name, entry)| (name.clone(), entry.clone()))
-        .collect();
-    let mut success_count = 0;
-    let mut fail_count = 0;
-
-    if project_skills.is_empty() && options.skills.is_empty() {
-        println!(
-            "{}No project skills to update.{}",
-            color::dim_gray(""),
-            color::reset("")
-        );
-        println!(
-            "{}Install project skills with{} {}skillz add <package>{}",
-            color::dim_gray(""),
-            color::reset(""),
-            color::text(""),
-            color::reset("")
-        );
-        return (0, 0, 0);
-    }
-
-    let updatable: Vec<&(String, locks::LocalSkillLockEntry)> = project_skills
-        .iter()
-        .filter(|(_, entry)| entry.skill_path.is_some())
-        .collect();
-    let legacy_count = project_skills.len() - updatable.len();
-
-    if updatable.is_empty() {
-        println!(
-            "{}No project skills can be updated in place.{}",
-            color::dim_gray(""),
-            color::reset("")
-        );
-        return (0, 0, project_skills.len());
-    }
-
-    // "Updating for:" banner.
-    let mut target_parts: Vec<String> = Vec::new();
-    let mut has_universal = false;
-    let mut agent_names: Vec<String> = Vec::new();
-    for agent in skills_store::registry::agents() {
-        if agent.is_universal() {
-            if !has_universal && cwd.join(".agents").exists() {
-                has_universal = true;
-            }
-        } else {
-            let agent_root = agent.skills_dir.split('/').next().unwrap_or("");
-            if cwd.join(agent_root).exists() {
-                agent_names.push(agent.display_name.to_string());
-            }
+    let mut lock = match locks::read_local_lock(&cwd) {
+        Ok(lock) => lock,
+        Err(err) => {
+            report_failure("project lockfile", &err);
+            return (0, 1, 0);
         }
-    }
-    if has_universal {
-        target_parts.push("Universal".to_string());
-    }
-    target_parts.extend(agent_names);
-    if !target_parts.is_empty() {
-        println!(
-            "{}Updating for: {}{}",
-            color::text(""),
-            target_parts.join(", "),
-            color::reset("")
-        );
-    }
-
-    println!(
-        "{}Checking {} skill(s)…{}",
-        color::text(""),
-        updatable.len(),
-        color::reset("")
-    );
-    println!();
-
-    let on_disk: std::collections::HashSet<String> =
-        installer::list_installed_skills(Some(false), &cwd, None)
-            .into_iter()
-            .map(|skill| skill.name)
-            .collect();
-    let agents = placement_agents(false);
-
-    // Group by source + ref.
-    type LocalGroup = (
-        String,
-        Option<String>,
-        Vec<(String, locks::LocalSkillLockEntry)>,
-    );
-    let mut groups: Vec<LocalGroup> = Vec::new();
-    for (name, entry) in &updatable {
-        let source = entry
-            .source_url
-            .clone()
-            .unwrap_or_else(|| entry.source.clone());
-        match groups
-            .iter_mut()
-            .find(|(source_key, ref_, _)| *source_key == source && *ref_ == entry.ref_)
-        {
-            Some((_, _, items)) => items.push((name.clone(), entry.clone())),
-            None => groups.push((
-                source,
-                entry.ref_.clone(),
-                vec![(name.clone(), entry.clone())],
-            )),
-        }
-    }
-
-    print_fetching(groups.len());
-    let mut up_to_date_count = 0;
-    for (source, _ref_, items) in &groups {
-        let first_entry = &items[0].1;
-        let Some(clone_source) = update_source::build_local_clone_source(first_entry) else {
-            fail_count += items.len();
-            println!(
-                "{}Cannot update {source}: skills-lock.json is missing sourceUrl for this generic Git source{}",
-                color::dim_gray("\u{2717}"),
-                color::reset("")
-            );
+    };
+    let mut groups = SourceGroups::new();
+    let mut found = 0;
+    let mut failed = 0;
+    for (name, entry) in &lock.skills {
+        if !matches_skill_filter(name, &options.skills) || !is_git(&entry.source_type) {
             continue;
-        };
-        println!(
-            "{}Checking skills from source: {}{}\x1b[K",
-            color::dim_gray(""),
-            source,
-            color::reset("")
-        );
-        let temp_dir = match crate::git::clone_repo(&clone_source, first_entry.ref_.as_deref()) {
-            Ok(temp) => temp,
-            Err(_) => {
-                fail_count += items.len();
-                println!(
-                    "{}Failed to check for deleted skills from {source}{}",
-                    color::dim_gray(""),
-                    color::reset("")
-                );
+        }
+        found += 1;
+        match update_source::local_source(entry) {
+            Ok(source) => groups
+                .entry((&entry.source_type, source, entry.ref_.as_deref()))
+                .or_default()
+                .push(TrackedSkill {
+                    name,
+                    path: entry.skill_path.as_deref(),
+                    hash: Some(&entry.computed_hash),
+                    tree_hash: None,
+                    mode: entry.install_mode.as_deref(),
+                    placements: &entry.placements,
+                    subagents: entry.subagents.as_deref().unwrap_or_default(),
+                }),
+            Err(err) => {
+                report_failure(name, &err);
+                failed += 1;
+            }
+        }
+    }
+    let (updates, group_failures) = update_groups(groups, options, false);
+    failed += group_failures;
+    for update in &updates {
+        let entry = lock
+            .skills
+            .get_mut(&update.name)
+            .expect("update came from the lock");
+        entry.computed_hash.clone_from(&update.hash);
+        entry.skill_path.clone_from(&update.path);
+        entry.placements.clone_from(&update.placements);
+    }
+    if !updates.is_empty() {
+        if let Err(err) = locks::write_local_lock(&lock, &cwd) {
+            report_failure("project lockfile", &err);
+            failed += updates.len();
+            return (0, failed, found);
+        }
+    }
+    (updates.len(), failed, found)
+}
+
+fn update_groups(
+    groups: SourceGroups<'_>,
+    options: &UpdateCheckOptions,
+    global: bool,
+) -> (Vec<UpdatedSkill>, usize) {
+    let cwd = common::current_dir();
+    let mut updates = Vec::new();
+    let mut failed = 0;
+    for ((kind, source, git_ref), items) in groups {
+        let resolved = match update_source::resolve(source, kind, git_ref) {
+            Ok(resolved) => resolved,
+            Err(err) => {
+                report_failure(source, &err);
+                failed += items.len();
                 continue;
             }
         };
-        let discovery = skills_store::skills::discover_skills(
-            &temp_dir,
-            None,
-            &skills_store::skills::DiscoverOptions {
-                full_depth: true,
-                include_duplicate_names: true,
-                ..Default::default()
-            },
-        );
-        match discovery {
-            Ok(discovered) => {
-                for (name, entry) in items {
-                    let matches: Vec<&skills_store::skills::Skill> = discovered
-                        .skills
-                        .iter()
-                        .filter(|skill| {
-                            skills_store::sanitize::normalize_skill_name(&skill.name)
-                                == skills_store::sanitize::normalize_skill_name(name)
-                        })
-                        .collect();
-                    if matches.is_empty() {
-                        continue;
-                    }
-                    if matches.len() > 1 {
-                        continue;
-                    }
-                    let current = matches[0];
-                    let computed_hash = locks::compute_folder_hash(&current.path).ok();
-                    let same_path = entry
-                        .skill_path
-                        .as_ref()
-                        .map(|locked| {
-                            format!("{}/SKILL.md", relative_path(&temp_dir, &current.path))
-                                == *locked
-                        })
-                        .unwrap_or(false);
-                    if same_path
-                        && computed_hash.as_deref() == Some(entry.computed_hash.as_str())
-                        && on_disk.contains(name)
-                    {
-                        up_to_date_count += 1;
-                        continue;
-                    }
-                    if options.report_outdated {
-                        report_outdated(options, name);
-                        continue;
-                    }
-                    println!(
-                        "{}Updating {}…{}",
-                        color::text(""),
-                        sanitize_metadata(name),
-                        color::reset("")
-                    );
-                    let copy = entry.install_mode.as_deref() == Some("copy");
-                    let parsed = source_parser::parse_source(source);
-                    let full_depth = update_source::should_use_full_depth_for_update(entry);
-                    match reinstall_skill(&parsed, name, &agents, false, copy, full_depth) {
-                        Ok(()) => {
-                            if let Ok(hash) = locks::compute_folder_hash(&current.path) {
-                                if let Ok(mut lock) = locks::read_local_lock(&cwd) {
-                                    if let Some(mut current_entry) = lock.skills.get(name).cloned()
-                                    {
-                                        current_entry.computed_hash = hash;
-                                        current_entry.skill_path = Some(format!(
-                                            "{}/SKILL.md",
-                                            relative_path(&temp_dir, &current.path)
-                                        ));
-                                        lock.skills.insert(name.clone(), current_entry);
-                                        let _ = locks::write_local_lock(&lock, &cwd);
-                                    }
-                                }
-                            }
-                            if report_install(name, true, &[], None) {
-                                success_count += 1;
-                            }
-                        }
-                        Err(error) => {
-                            if report_install(name, false, &[], Some(&error)) {
-                                success_count += 1;
-                            } else {
-                                fail_count += 1;
-                            }
-                        }
-                    }
+        let payloads = SkillPayload::from_resolved(&resolved);
+        let root = resolved.root_dir.as_deref();
+        for entry in items {
+            let result = (|| {
+                let payload = find_locked(&payloads, root, entry.name, entry.path)?;
+                let hash = payload.content_hash()?;
+                let path = payload.source_path(root);
+                let tree_hash = root
+                    .zip(path.as_deref())
+                    .and_then(|(root, path)| crate::git::get_git_tree_hash(root, path));
+                let placements = if entry.placements.is_empty() {
+                    infer_placements(entry.name, global, &cwd, entry.mode, entry.subagents)
+                } else {
+                    entry.placements.to_vec()
+                };
+                let current = match entry.hash {
+                    Some(old) => hash == old,
+                    None => entry.tree_hash.is_some() && entry.tree_hash == tree_hash.as_deref(),
+                };
+                if current
+                    && entry.path == path.as_deref()
+                    && !placements.is_empty()
+                    && placements.iter().all(|placement| {
+                        placement_path(entry.name, placement, global, &cwd)
+                            .is_some_and(|path| path.join("SKILL.md").is_file())
+                    })
+                {
+                    println!("{}: up to date", sanitize_metadata(entry.name));
+                    return Ok(None);
+                }
+                if options.report_outdated {
+                    report_outdated(options, entry.name);
+                    return Ok(None);
+                }
+                let placements =
+                    install_placements(payload, entry.name, &placements, global, &cwd)?;
+                println!("{}: updated", sanitize_metadata(entry.name));
+                Ok(Some(UpdatedSkill {
+                    name: entry.name.to_string(),
+                    hash,
+                    tree_hash,
+                    path,
+                    placements,
+                }))
+            })();
+            match result {
+                Ok(Some(update)) => updates.push(update),
+                Ok(None) => {}
+                Err(err) => {
+                    report_failure(entry.name, &err);
+                    failed += 1;
                 }
             }
-            Err(_) => {
-                fail_count += items.len();
-                println!(
-                    "{}Failed to check for deleted skills from {source}{}",
-                    color::dim_gray(""),
-                    color::reset("")
-                );
+        }
+    }
+    (updates, failed)
+}
+
+fn placement_path(
+    name: &str,
+    placement: &locks::SkillPlacement,
+    global: bool,
+    cwd: &Path,
+) -> Option<std::path::PathBuf> {
+    let agent = skills_store::registry::agent_by_id(&placement.agent)?;
+    Some(installer::get_install_path(
+        name,
+        agent,
+        global,
+        cwd,
+        placement.subagent.as_deref(),
+    ))
+}
+
+fn infer_placements(
+    name: &str,
+    global: bool,
+    cwd: &Path,
+    mode: Option<&str>,
+    subagents: &[String],
+) -> Vec<locks::SkillPlacement> {
+    use skills_store::registry::{self, DetectContext};
+    let ctx = DetectContext::from_env(cwd);
+    let supported = |agent: &&AgentConfig| !global || agent.global_skills_dir(&ctx).is_some();
+    let fallback = common::non_interactive_target_agents(cwd)
+        .into_iter()
+        .filter(supported)
+        .collect::<Vec<_>>();
+    let fallback_mode = mode.unwrap_or_else(|| installer::default_install_mode(&fallback).as_str());
+    let mut existing = Vec::new();
+    for agent in registry::agents().iter().filter(supported) {
+        let mut locations = vec![None];
+        if agent.name == "eve" && !global {
+            locations.extend(
+                subagents
+                    .iter()
+                    .filter(|s| !s.is_empty())
+                    .cloned()
+                    .map(Some),
+            );
+        }
+        for subagent in locations {
+            let path = installer::get_install_path(name, agent, global, cwd, subagent.as_deref());
+            if path.join("SKILL.md").is_file() {
+                let observed_mode = if path.is_symlink()
+                    || path == installer::get_canonical_path(name, global, cwd)
+                {
+                    installer::InstallMode::Symlink
+                } else {
+                    installer::InstallMode::Copy
+                };
+                existing.push(locks::SkillPlacement {
+                    agent: agent.name.into(),
+                    subagent,
+                    mode: mode.unwrap_or(observed_mode.as_str()).into(),
+                });
             }
         }
-        let _ = crate::git::cleanup_temp_dir(&temp_dir);
     }
+    if !existing.is_empty() {
+        return existing;
+    }
+    fallback
+        .into_iter()
+        .map(|agent| locks::SkillPlacement {
+            agent: agent.name.into(),
+            subagent: None,
+            mode: fallback_mode.into(),
+        })
+        .collect()
+}
 
-    if up_to_date_count > 0 {
-        println!(
-            "{}{} project skill(s) already up to date{}",
-            color::dim_gray(""),
-            up_to_date_count,
-            color::reset("")
-        );
+pub(crate) fn install_placements(
+    payload: &SkillPayload,
+    name: &str,
+    placements: &[locks::SkillPlacement],
+    global: bool,
+    cwd: &Path,
+) -> Result<Vec<locks::SkillPlacement>, SkillsError> {
+    let mut installed = Vec::new();
+    let mut failures = Vec::new();
+    for placement in placements {
+        let Some(agent) = skills_store::registry::agent_by_id(&placement.agent) else {
+            failures.push(format!("unknown agent {}", placement.agent));
+            continue;
+        };
+        let mode = if placement.mode == "copy" {
+            installer::InstallMode::Copy
+        } else {
+            installer::InstallMode::Symlink
+        };
+        let options = installer::InstallOptions {
+            global: if global {
+                installer::Scope::Global
+            } else {
+                installer::Scope::Project
+            },
+            cwd: Some(cwd.to_path_buf()),
+            mode: Some(mode),
+            eve_subagent: placement.subagent.clone(),
+            create_missing_agent_root: true,
+        };
+        let mut warnings = Vec::new();
+        let outcome = payload.install(name, agent, &options, &mut warnings);
+        for warning in warnings {
+            prompt::log_warn(&warning.plain());
+        }
+        if outcome.success
+            && placement_path(name, placement, global, cwd)
+                .is_some_and(|path| path.join("SKILL.md").is_file())
+        {
+            let mut actual = placement.clone();
+            actual.mode = if outcome.symlink_failed {
+                "copy"
+            } else {
+                mode.as_str()
+            }
+            .into();
+            installed.push(actual);
+        } else {
+            failures.push(format!(
+                "{}: {}",
+                placement.agent,
+                outcome.error.as_deref().unwrap_or("skill was not placed")
+            ));
+        }
     }
-    if legacy_count > 0 {
-        println!(
-            "{}{legacy_count} project skill(s) cannot be updated automatically (installed before skillPath tracking):{}",
-            color::dim_gray(""),
-            color::reset("")
-        );
+    if !failures.is_empty() || installed.is_empty() {
+        let reason = if failures.is_empty() {
+            "no install targets".to_string()
+        } else {
+            failures.join("; ")
+        };
+        return Err(SkillsError::new("SKILLS_INSTALL_FAILED", reason));
     }
-    (success_count, fail_count, project_skills.len())
+    Ok(installed)
 }

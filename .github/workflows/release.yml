@@ -31,7 +31,7 @@ jobs:
           fi
 
       - name: Test
-        run: cargo test --locked --all-targets
+        run: cargo test --locked --workspace --all-targets
 
       - name: Publish dry-run
         run: cargo publish --locked --dry-run

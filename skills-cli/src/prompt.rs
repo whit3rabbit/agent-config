@@ -42,8 +42,35 @@ fn stdout() -> std::io::Stdout {
     std::io::stdout()
 }
 
+static PROGRESS_TO_STDERR: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+pub(crate) struct StderrProgress(bool);
+
+impl StderrProgress {
+    pub(crate) fn enable(enabled: bool) -> Self {
+        Self(PROGRESS_TO_STDERR.swap(enabled, Ordering::SeqCst))
+    }
+}
+
+impl Drop for StderrProgress {
+    fn drop(&mut self) {
+        PROGRESS_TO_STDERR.store(self.0, Ordering::SeqCst);
+    }
+}
+
+pub(crate) fn line_break() {
+    write_str("\n");
+}
+
 fn write_str(s: &str) {
-    let mut out = stdout();
+    let mut stderr = std::io::stderr();
+    let mut stdout = stdout();
+    let out: &mut dyn Write = if PROGRESS_TO_STDERR.load(Ordering::SeqCst) {
+        &mut stderr
+    } else {
+        &mut stdout
+    };
     let _ = out.write_all(s.as_bytes());
     let _ = out.flush();
 }
@@ -387,6 +414,17 @@ struct SpinnerInner {
 
 const SPINNER_FRAMES: [&str; 4] = ["\u{25D2}", "\u{25D0}", "\u{25D3}", "\u{25D1}"]; // ◐◓◑◒
 
+impl Drop for Spinner {
+    fn drop(&mut self) {
+        self.inner.stop_flag.store(true, Ordering::SeqCst);
+        if let Ok(mut handle) = self.inner.handle.lock() {
+            if let Some(handle) = handle.take() {
+                let _ = handle.join();
+            }
+        }
+    }
+}
+
 impl Spinner {
     /// Create and `start()` a spinner with the given message.
     pub fn start(message: &str) -> Self {
@@ -394,7 +432,9 @@ impl Spinner {
         let stop_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let thread_msg = msg.clone();
         let thread_stop = stop_flag.clone();
-        let is_ci = std::env::var("CI").as_deref() == Ok("true");
+        let is_ci = !stdout().is_terminal()
+            || PROGRESS_TO_STDERR.load(Ordering::SeqCst)
+            || std::env::var("CI").as_deref() == Ok("true");
         let handle = std::thread::spawn(move || {
             if is_ci {
                 return;

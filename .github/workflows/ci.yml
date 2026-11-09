@@ -37,13 +37,13 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
 
   windows-cross-check:
     # Fast `cargo check` against the Windows target on a Linux runner.
     # Catches `cfg(windows)` compile errors and dead-code warnings before
     # the slower `windows-latest` matrix job spins up. `cargo check` does
-    # not link, so mingw-w64 is not required.
+    # not link the final binary. The workspace TLS dependency builds C code.
     name: windows cross-check
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -55,7 +55,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: windows-cross-check
-      - run: cargo check --locked --all-targets --target x86_64-pc-windows-gnu
+      - run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+      - run: cargo check --locked --workspace --all-targets --target x86_64-pc-windows-gnu
 
   test:
     name: test (${{ matrix.os }})
@@ -69,7 +70,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --locked --all-targets
+      - run: cargo test --locked --workspace --all-targets
 
   docs:
     name: docs and package dry-run
